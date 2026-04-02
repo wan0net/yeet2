@@ -30,6 +30,8 @@ export interface ProjectTaskRecord {
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason: string | null;
+  dispatchable?: boolean;
+  dispatchBlockedReason?: string | null;
   jobs: ProjectJobRecord[];
 }
 
@@ -44,6 +46,18 @@ export interface ProjectJobRecord {
   artifactSummary: string | null;
   startedAt: string | null;
   completedAt: string | null;
+}
+
+export interface ProjectBlockerRecord {
+  id: string;
+  taskId: string | null;
+  title: string;
+  context: string | null;
+  options: string[];
+  recommendation: string | null;
+  status: string;
+  createdAt: string | null;
+  resolvedAt: string | null;
 }
 
 export interface ProjectMissionRecord {
@@ -67,8 +81,12 @@ export interface ProjectRecord {
   constitutionStatus: ConstitutionStatus;
   constitution: ConstitutionSummary;
   missions: ProjectMissionRecord[];
+  dispatchableRoles?: string[];
+  nextDispatchableTaskId?: string;
+  nextDispatchableTaskRole?: string;
   activeMissionCount?: number;
   activeTaskCount?: number;
+  blockers: ProjectBlockerRecord[];
   blockerCount?: number;
 }
 
@@ -76,7 +94,7 @@ export interface ProjectRegistrationInput {
   name: string;
   repo_url: string;
   default_branch: string;
-  local_path: string;
+  local_path?: string;
 }
 
 type RawRecord = Record<string, unknown>;
@@ -268,6 +286,16 @@ function normalizeTaskRecord(value: unknown): ProjectTaskRecord | null {
     acceptanceCriteria: stringArrayValue(raw.acceptanceCriteria ?? raw.acceptance_criteria),
     attempts: numberValue(raw.attempts) ?? 0,
     blockerReason: stringValue(raw.blockerReason, raw.blocker_reason) || null,
+    dispatchable:
+      typeof raw.dispatchable === "boolean"
+        ? raw.dispatchable
+        : typeof raw.isDispatchable === "boolean"
+          ? raw.isDispatchable
+          : typeof raw.is_dispatchable === "boolean"
+            ? raw.is_dispatchable
+            : undefined,
+    dispatchBlockedReason:
+      stringValue(raw.dispatchBlockedReason, raw.dispatch_blocked_reason, raw.dispatchReason, raw.dispatch_reason) || null,
     jobs: Array.isArray(raw.jobs) ? raw.jobs.map(normalizeJobRecord).filter((entry): entry is ProjectJobRecord => entry !== null) : []
   };
 }
@@ -294,6 +322,31 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     artifactSummary: stringValue(raw.artifactSummary, raw.artifact_summary) || null,
     startedAt: stringValue(raw.startedAt, raw.started_at) || null,
     completedAt: stringValue(raw.completedAt, raw.completed_at) || null
+  };
+}
+
+function normalizeBlockerRecord(value: unknown): ProjectBlockerRecord | null {
+  const raw = asRecord(value);
+  const title = stringValue(raw.title);
+  const context = stringValue(raw.context);
+  const recommendation = stringValue(raw.recommendation);
+  const status = stringValue(raw.status) || "open";
+  const taskId = stringValue(raw.taskId, raw.task_id) || null;
+
+  if (!title && !context && !recommendation && !taskId) {
+    return null;
+  }
+
+  return {
+    id: stringValue(raw.id, raw.blockerId, raw.blocker_id) || `blocker-${Math.random().toString(36).slice(2, 8)}`,
+    taskId,
+    title: title || "Blocker",
+    context: context || null,
+    options: stringArrayValue(raw.options),
+    recommendation: recommendation || null,
+    status,
+    createdAt: stringValue(raw.createdAt, raw.created_at) || null,
+    resolvedAt: stringValue(raw.resolvedAt, raw.resolved_at) || null
   };
 }
 
@@ -338,6 +391,22 @@ function normalizeMissions(raw: RawRecord): ProjectMissionRecord[] {
   return candidates.map(normalizeMissionRecord).filter((entry): entry is ProjectMissionRecord => entry !== null);
 }
 
+function normalizeBlockers(raw: RawRecord): ProjectBlockerRecord[] {
+  const candidates = Array.isArray(raw.blockers)
+    ? raw.blockers
+    : Array.isArray(raw.projectBlockers)
+      ? raw.projectBlockers
+      : Array.isArray(raw.project_blockers)
+        ? raw.project_blockers
+        : Array.isArray(raw.openBlockers)
+          ? raw.openBlockers
+          : Array.isArray(raw.open_blockers)
+            ? raw.open_blockers
+            : [];
+
+  return candidates.map(normalizeBlockerRecord).filter((entry): entry is ProjectBlockerRecord => entry !== null);
+}
+
 export function formatConstitutionFiles(files: ConstitutionFileSummary): string {
   const entries = Object.values(files);
   const present = entries.filter(Boolean).length;
@@ -353,6 +422,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
   const id = stringValue(raw.id, raw.projectId, raw.project_id) || `project-${fallbackIndex}`;
   const missions = normalizeMissions(raw);
   const constitution = normalizeConstitutionSummary(raw);
+  const blockers = normalizeBlockers(raw);
 
   if (!name && !repoUrl && !localPath) {
     return null;
@@ -373,11 +443,15 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     ),
     constitution,
     missions,
+    dispatchableRoles: stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles),
+    nextDispatchableTaskId: stringValue(raw.nextDispatchableTaskId, raw.next_dispatchable_task_id) || undefined,
+    nextDispatchableTaskRole: stringValue(raw.nextDispatchableTaskRole, raw.next_dispatchable_task_role) || undefined,
     activeMissionCount: numberValue(raw.activeMissionCount, raw.active_mission_count, raw.missionCount, raw.mission_count, missions.length) ?? missions.length,
     activeTaskCount:
       numberValue(raw.activeTaskCount, raw.active_task_count, raw.taskCount, raw.task_count) ??
       missions.flatMap((mission) => mission.tasks).filter((task) => task.status !== "complete" && task.status !== "failed" && task.status !== "cancelled").length,
-    blockerCount: numberValue(raw.blockerCount, raw.blocker_count) ?? 0
+    blockers,
+    blockerCount: numberValue(raw.blockerCount, raw.blocker_count) ?? blockers.filter((blocker) => blocker.status === "open").length
   };
 }
 
@@ -415,7 +489,7 @@ export function normalizeProjectRegistration(payload: unknown): ProjectRegistrat
   const defaultBranch = stringValue(raw.default_branch, raw.defaultBranch);
   const localPath = stringValue(raw.local_path, raw.localPath);
 
-  if (!name || !repoUrl || !defaultBranch || !localPath) {
+  if (!name || !repoUrl || !defaultBranch) {
     return null;
   }
 
@@ -423,13 +497,13 @@ export function normalizeProjectRegistration(payload: unknown): ProjectRegistrat
     name,
     repo_url: repoUrl,
     default_branch: defaultBranch,
-    local_path: localPath
+    ...(localPath ? { local_path: localPath } : {})
   };
 }
 
 export function missingRegistrationFields(input: ProjectRegistrationInput | null): string[] {
   if (!input) {
-    return ["name", "repo_url", "default_branch", "local_path"];
+    return ["name", "repo_url", "default_branch"];
   }
 
   const missing: string[] = [];
@@ -437,7 +511,6 @@ export function missingRegistrationFields(input: ProjectRegistrationInput | null
   if (!input.name) missing.push("name");
   if (!input.repo_url) missing.push("repo_url");
   if (!input.default_branch) missing.push("default_branch");
-  if (!input.local_path) missing.push("local_path");
 
   return missing;
 }

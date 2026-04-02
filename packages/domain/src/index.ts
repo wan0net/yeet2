@@ -16,6 +16,7 @@ export type JobStatus = "queued" | "running" | "complete" | "failed" | "cancelle
 export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
 export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
 
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
@@ -67,9 +68,13 @@ export interface ProjectRegistrationResult {
 export interface ProjectSummary {
   project: Project;
   constitution: ConstitutionSummary;
+  dispatchableRoles?: DispatchableAgentRole[];
+  nextDispatchableTaskId?: string | null;
+  nextDispatchableTaskRole?: DispatchableAgentRole | null;
   activeMissionCount: number;
   activeTaskCount: number;
   blockerCount: number;
+  blockers?: ProjectBlockerSummary[];
 }
 
 export interface MissionSummary {
@@ -95,6 +100,8 @@ export interface TaskSummary {
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason?: string | null;
+  dispatchable?: boolean;
+  dispatchBlockedReason?: string | null;
   jobs?: JobSummary[];
 }
 
@@ -114,9 +121,13 @@ export interface JobSummary {
 export interface ProjectDetailSummary {
   project: Project;
   constitution: ConstitutionSummary;
+  dispatchableRoles?: DispatchableAgentRole[];
+  nextDispatchableTaskId?: string | null;
+  nextDispatchableTaskRole?: DispatchableAgentRole | null;
   activeMissionCount: number;
   activeTaskCount: number;
   blockerCount: number;
+  blockers?: ProjectBlockerSummary[];
   missions: MissionSummary[];
   tasks: TaskSummary[];
 }
@@ -125,6 +136,10 @@ export interface ProjectMissionTaskSummary {
   project: Project;
   constitution: ConstitutionSummary;
   mission: MissionSummary | null;
+  dispatchableRoles?: DispatchableAgentRole[];
+  nextDispatchableTaskId?: string | null;
+  nextDispatchableTaskRole?: DispatchableAgentRole | null;
+  blockers?: ProjectBlockerSummary[];
   tasks: TaskSummary[];
 }
 
@@ -215,8 +230,15 @@ export interface Blocker {
   title: string;
   context: string;
   options: string[];
-  recommendation: string;
+  recommendation?: string | null;
   status: BlockerStatus;
   createdAt: string;
   resolvedAt?: string | null;
+}
+
+export interface ProjectBlockerSummary extends Blocker {
+  missionId: string;
+  taskTitle: string;
+  taskStatus: TaskStatus;
+  taskAgentRole: AgentRole;
 }

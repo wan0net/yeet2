@@ -31,9 +31,12 @@ function upstreamUrl(path: string): string {
   return `${apiBaseUrl()}${path}`;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const projectId = searchParams.get("id")?.trim();
+
   try {
-    const response = await fetch(upstreamUrl("/projects"), {
+    const response = await fetch(upstreamUrl(projectId ? `/projects/${projectId}` : "/projects"), {
       cache: "no-store",
       headers: {
         Accept: "application/json"
@@ -42,19 +45,33 @@ export async function GET() {
     const payload = await readJsonResponse(response);
 
     if (!response.ok) {
+      const status = projectId && response.status === 404 ? 404 : 502;
       return NextResponse.json(
         {
           error: "upstream_error",
           status: response.status,
           detail: payload
         },
-        { status: 502 }
+        { status }
       );
     }
 
-    return NextResponse.json({
-      projects: normalizeProjectList(payload)
-    });
+    if (projectId) {
+      const project = normalizeProjectList(payload)[0] ?? normalizeProjectRecord(payload);
+
+      if (!project) {
+        return NextResponse.json(
+          {
+            error: "invalid_project_response"
+          },
+          { status: 502 }
+        );
+      }
+
+      return NextResponse.json({ project });
+    }
+
+    return NextResponse.json({ projects: normalizeProjectList(payload) });
   } catch (error) {
     return NextResponse.json(
       {

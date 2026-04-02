@@ -1,4 +1,10 @@
+import { execFile } from "node:child_process";
+import { mkdir, stat } from "node:fs/promises";
+import { basename, join, resolve } from "node:path";
+import { promisify } from "node:util";
+
 import type {
+  Blocker as DbBlocker,
   Constitution,
   Job as DbJob,
   Mission as DbMission,
@@ -12,9 +18,9 @@ import { createInitialPlan, loadPlanningContext, type PlanningDraft, type Planni
 
 export interface ProjectRegistrationInput {
   name: string;
-  repoUrl: string;
+  repoUrl?: string | null;
   defaultBranch: string;
-  localPath: string;
+  localPath?: string | null;
 }
 
 export type ProjectTaskStatus = DbTask["status"];
@@ -44,7 +50,25 @@ export interface ProjectTaskSummary {
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason: string | null;
+  dispatchable: boolean;
+  dispatchBlockedReason: string | null;
   jobs: ProjectJobSummary[];
+}
+
+export interface ProjectBlockerSummary {
+  id: string;
+  taskId: string;
+  missionId: string;
+  taskTitle: string;
+  taskStatus: ProjectTaskStatus;
+  taskAgentRole: string;
+  title: string;
+  context: string;
+  options: string[];
+  recommendation: string | null;
+  status: DbBlocker["status"];
+  createdAt: string;
+  resolvedAt: string | null;
 }
 
 export interface ProjectMissionSummary {
@@ -68,9 +92,13 @@ export interface ProjectSummary {
   constitutionStatus: ConstitutionInspection["status"];
   constitution: ConstitutionInspection;
   missions: ProjectMissionSummary[];
+  dispatchableRoles: string[];
+  nextDispatchableTaskId: string | null;
+  nextDispatchableTaskRole: string | null;
   activeMissionCount: number;
   activeTaskCount: number;
   blockerCount: number;
+  blockers: ProjectBlockerSummary[];
   createdAt: string;
   updatedAt: string;
 }
@@ -85,6 +113,7 @@ export class ProjectDispatchError extends Error {
     public readonly code:
       | "project_not_found"
       | "task_not_found"
+      | "no_dispatchable_task"
       | "invalid_task_role"
       | "task_not_dispatchable"
       | "executor_unavailable",
@@ -93,6 +122,28 @@ export class ProjectDispatchError extends Error {
   ) {
     super(message);
     this.name = "ProjectDispatchError";
+  }
+}
+
+export class ProjectBlockerError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "blocker_not_found",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectBlockerError";
+  }
+}
+
+export class ProjectRegistrationError extends Error {
+  constructor(
+    public readonly code: "clone_target_conflict" | "git_clone_failed" | "missing_repository_source",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectRegistrationError";
   }
 }
 
@@ -106,19 +157,269 @@ export interface ProjectDetailResponse {
 
 type ProjectWithRelations = DbProject & {
   constitution?: Constitution | null;
-  missions: Array<DbMission & { tasks: Array<DbTask & { jobs: DbJob[] }> }>;
+  missions: Array<DbMission & { tasks: Array<DbTask & { jobs: DbJob[]; blockers: DbBlocker[] }> }>;
 };
+
+type ProjectTaskWithRelations = ProjectWithRelations["missions"][number]["tasks"][number];
+
+interface ResolvedProjectRegistration {
+  localPath: string;
+  repoUrl: string | null;
+}
+
+const DISPATCHABLE_TASK_ROLES = ["implementer", "qa", "reviewer"] as const;
+const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
+const MAX_DISPATCH_ATTEMPTS = 2;
+const execFileAsync = promisify(execFile);
+
+type DispatchableTaskRole = (typeof DISPATCHABLE_TASK_ROLES)[number];
 
 function isCountedTaskStatus(status: string): boolean {
   return status !== "complete" && status !== "failed" && status !== "cancelled" && status !== "done";
 }
 
+function hasOpenTaskBlocker(task: Pick<ProjectTaskWithRelations, "blockers">): boolean {
+  return task.blockers.some((blocker) => blocker.status === "open");
+}
+
+function hasActionableTaskWork(task: Pick<ProjectTaskWithRelations, "agentRole" | "status" | "blockers">): boolean {
+  if (hasOpenTaskBlocker(task)) {
+    return true;
+  }
+
+  return isDispatchableTaskRole(task.agentRole) && isCountedTaskStatus(task.status);
+}
+
+function missionStatusFromTasks(mission: ProjectWithRelations["missions"][number]): ProjectMissionSummary["status"] {
+  const hasDispatchableTasks = mission.tasks.some((task) => isDispatchableTaskRole(task.agentRole));
+  if (!hasDispatchableTasks) {
+    return mission.status;
+  }
+
+  return mission.tasks.some((task) => hasActionableTaskWork(task)) ? mission.status : "complete";
+}
+
 function isDispatchableTaskStatus(status: ProjectTaskStatus): boolean {
-  return status === "pending" || status === "ready" || status === "failed";
+  return DISPATCHABLE_TASK_STATUSES.some((candidate) => candidate === status);
+}
+
+function isDispatchableTaskRole(role: string): role is DispatchableTaskRole {
+  return DISPATCHABLE_TASK_ROLES.some((candidate) => candidate === role);
+}
+
+function dispatchableRolesMessage(): string {
+  return DISPATCHABLE_TASK_ROLES.join(", ");
+}
+
+function buildInvalidTaskRoleMessage(role: string): string {
+  return `Task role "${role}" is not dispatchable yet. Currently dispatchable roles: ${dispatchableRolesMessage()}.`;
+}
+
+function buildTaskNotDispatchableMessage(taskId: string, status: ProjectTaskStatus): string {
+  return `Task ${taskId} is not dispatchable from status "${status}". Dispatchable statuses: ${DISPATCHABLE_TASK_STATUSES.join(", ")}.`;
+}
+
+function buildNoDispatchableTaskMessage(projectId: string): string {
+  return `Project ${projectId} has no dispatchable tasks right now.`;
+}
+
+function isTaskDispatchable(task: Pick<DbTask, "agentRole" | "status">): boolean {
+  return isDispatchableTaskRole(task.agentRole) && isDispatchableTaskStatus(task.status);
+}
+
+function dispatchBlockedReasonForTask(task: Pick<DbTask, "id" | "agentRole" | "status">): string | null {
+  if (!isDispatchableTaskRole(task.agentRole)) {
+    return buildInvalidTaskRoleMessage(task.agentRole);
+  }
+
+  if (!isDispatchableTaskStatus(task.status)) {
+    return buildTaskNotDispatchableMessage(task.id, task.status);
+  }
+
+  return null;
 }
 
 function executorBaseUrl(): string {
   return (process.env.YEET2_EXECUTOR_BASE_URL ?? process.env.EXECUTOR_BASE_URL ?? "http://127.0.0.1:8021").replace(/\/+$/, "");
+}
+
+function normalizeOptionalString(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function projectsBaseDir(): string {
+  return resolve(process.env.YEET2_PROJECTS_DIR ?? "/tmp/yeet2-projects");
+}
+
+function sanitizeDirectorySegment(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function cleanRepoPath(value: string): string {
+  return value.replace(/^\/+/, "").replace(/\/+$/, "").replace(/\.git$/i, "");
+}
+
+function normalizeRepositoryIdentifier(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.startsWith("file://")) {
+    try {
+      const parsed = new URL(normalized);
+      return `file:${resolve(parsed.pathname).replace(/\/+$/, "").replace(/\.git$/i, "")}`;
+    } catch {
+      return normalized;
+    }
+  }
+
+  if (normalized.includes("://")) {
+    try {
+      const parsed = new URL(normalized);
+      return `${parsed.hostname.toLowerCase()}/${cleanRepoPath(parsed.pathname)}`;
+    } catch {
+      return normalized;
+    }
+  }
+
+  const scpStyleMatch = normalized.match(/^(?:[^@/]+@)?([^:]+):(.+)$/);
+  if (scpStyleMatch && !/^[a-zA-Z]:[\\/]/.test(normalized)) {
+    const [, host, repoPath] = scpStyleMatch;
+    return `${host.toLowerCase()}/${cleanRepoPath(repoPath)}`;
+  }
+
+  if (normalized.startsWith("/") || normalized.startsWith(".")) {
+    return `file:${resolve(normalized).replace(/\/+$/, "").replace(/\.git$/i, "")}`;
+  }
+
+  return normalized.replace(/\/+$/, "");
+}
+
+function repoDirectorySeed(repoUrl: string): string {
+  const identifier = normalizeRepositoryIdentifier(repoUrl);
+  const repoPath = identifier.startsWith("file:") ? identifier.slice("file:".length) : identifier;
+  const segments = repoPath
+    .split(/[/:]+/)
+    .map((segment) => sanitizeDirectorySegment(segment))
+    .filter(Boolean);
+
+  return segments.join("-") || sanitizeDirectorySegment(basename(repoUrl.replace(/\/+$/, "")));
+}
+
+function deriveCloneDirectoryName(projectName: string, repoUrl: string): string {
+  const repoSeed = repoDirectorySeed(repoUrl);
+  if (repoSeed) {
+    return repoSeed;
+  }
+
+  return sanitizeDirectorySegment(projectName) || "project";
+}
+
+function repoUrlsMatch(left: string, right: string): boolean {
+  return normalizeRepositoryIdentifier(left) === normalizeRepositoryIdentifier(right);
+}
+
+async function readOriginRemoteUrl(repoPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repoPath, "remote", "get-url", "origin"]);
+    const remoteUrl = stdout.trim();
+    return remoteUrl || null;
+  } catch {
+    return null;
+  }
+}
+
+function gitFailureMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "Git command failed";
+  }
+
+  const withStderr = error as Error & { stderr?: string; stdout?: string; code?: string | number };
+  const details = [withStderr.stderr, withStderr.stdout, error.message]
+    .map((value) => value?.trim())
+    .find(Boolean);
+
+  if (withStderr.code === "ENOENT") {
+    return "Git is required for repoUrl registration, but the git CLI is not available.";
+  }
+
+  return details ?? "Git command failed";
+}
+
+async function cloneRepository(repoUrl: string, targetPath: string): Promise<void> {
+  try {
+    await execFileAsync("git", ["clone", "--origin", "origin", "--", repoUrl, targetPath]);
+  } catch (error) {
+    throw new ProjectRegistrationError(
+      "git_clone_failed",
+      `Unable to clone repository ${repoUrl} into ${targetPath}: ${gitFailureMessage(error)}`,
+      503
+    );
+  }
+}
+
+async function resolveProjectRegistration(input: ProjectRegistrationInput): Promise<ResolvedProjectRegistration> {
+  const repoUrl = normalizeOptionalString(input.repoUrl);
+  const localPath = normalizeOptionalString(input.localPath);
+
+  if (localPath) {
+    return {
+      localPath,
+      repoUrl
+    };
+  }
+
+  if (!repoUrl) {
+    throw new ProjectRegistrationError(
+      "missing_repository_source",
+      "Either localPath must be provided or repoUrl must be set so the API can clone the repository.",
+      400
+    );
+  }
+
+  const baseDir = projectsBaseDir();
+  const targetPath = join(baseDir, deriveCloneDirectoryName(input.name, repoUrl));
+  const targetStats = await stat(targetPath).catch(() => null);
+
+  await mkdir(baseDir, { recursive: true });
+
+  if (targetStats) {
+    if (!targetStats.isDirectory()) {
+      throw new ProjectRegistrationError(
+        "clone_target_conflict",
+        `Clone target already exists and is not a directory: ${targetPath}`,
+        409
+      );
+    }
+
+    const originUrl = await readOriginRemoteUrl(targetPath);
+    if (originUrl && repoUrlsMatch(originUrl, repoUrl)) {
+      return {
+        localPath: targetPath,
+        repoUrl
+      };
+    }
+
+    throw new ProjectRegistrationError(
+      "clone_target_conflict",
+      `Clone target already exists and does not match ${repoUrl}: ${targetPath}`,
+      409
+    );
+  }
+
+  await cloneRepository(repoUrl, targetPath);
+
+  return {
+    localPath: targetPath,
+    repoUrl
+  };
 }
 
 function asProjectInput(project: Pick<ProjectWithRelations, "id" | "name" | "repoUrl" | "defaultBranch" | "localPath">): PlanningProject {
@@ -146,6 +447,15 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
   };
 }
 
+function normalizeBlockerOptions(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : [];
+}
+
 function jobSortKey(job: DbJob): number {
   return job.completedAt?.getTime() ?? job.startedAt?.getTime() ?? 0;
 }
@@ -158,6 +468,7 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
         .filter(Boolean)
     : [];
   const jobs = [...task.jobs].sort((left, right) => jobSortKey(right) - jobSortKey(left)).map(toProjectJobSummary);
+  const dispatchable = isTaskDispatchable(task);
 
   return {
     id: task.id,
@@ -170,6 +481,8 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
     acceptanceCriteria,
     attempts: task.attempts,
     blockerReason: task.blockerReason ?? null,
+    dispatchable,
+    dispatchBlockedReason: dispatchable ? null : dispatchBlockedReasonForTask(task),
     jobs
   };
 }
@@ -178,18 +491,65 @@ function toProjectMissionSummary(mission: ProjectWithRelations["missions"][numbe
   const tasks = [...mission.tasks]
     .sort((left, right) => left.priority - right.priority)
     .map(toProjectTaskSummary);
+  const status = missionStatusFromTasks(mission);
 
   return {
     id: mission.id,
     projectId: mission.projectId,
     title: mission.title,
     objective: mission.objective,
-    status: mission.status,
+    status,
     createdBy: mission.createdBy ?? null,
     startedAt: mission.startedAt?.toISOString() ?? null,
     completedAt: mission.completedAt?.toISOString() ?? null,
     tasks
   };
+}
+
+function blockerStatusRank(status: DbBlocker["status"]): number {
+  if (status === "open") {
+    return 0;
+  }
+
+  if (status === "resolved") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function toProjectBlockerSummary(
+  blocker: DbBlocker,
+  task: ProjectWithRelations["missions"][number]["tasks"][number]
+): ProjectBlockerSummary {
+  return {
+    id: blocker.id,
+    taskId: blocker.taskId,
+    missionId: task.missionId,
+    taskTitle: task.title,
+    taskStatus: task.status,
+    taskAgentRole: task.agentRole,
+    title: blocker.title,
+    context: blocker.context,
+    options: normalizeBlockerOptions(blocker.options),
+    recommendation: blocker.recommendation ?? null,
+    status: blocker.status,
+    createdAt: blocker.createdAt.toISOString(),
+    resolvedAt: blocker.resolvedAt?.toISOString() ?? null
+  };
+}
+
+function collectProjectBlockers(project: ProjectWithRelations): ProjectBlockerSummary[] {
+  return project.missions
+    .flatMap((mission) => mission.tasks.flatMap((task) => task.blockers.map((blocker) => toProjectBlockerSummary(blocker, task))))
+    .sort((left, right) => {
+      const statusDelta = blockerStatusRank(left.status) - blockerStatusRank(right.status);
+      if (statusDelta !== 0) {
+        return statusDelta;
+      }
+
+      return new Date(right.resolvedAt ?? right.createdAt).getTime() - new Date(left.resolvedAt ?? left.createdAt).getTime();
+    });
 }
 
 function createEmptyInspection(projectPath: string): ConstitutionInspection {
@@ -210,12 +570,12 @@ function createEmptyInspection(projectPath: string): ConstitutionInspection {
   };
 }
 
-function countProjectTasks(missions: ProjectMissionSummary[]): number {
-  return missions.flatMap((mission) => mission.tasks).filter((task) => isCountedTaskStatus(task.status)).length;
+function countProjectTasks(missions: ProjectWithRelations["missions"]): number {
+  return missions.flatMap((mission) => mission.tasks).filter((task) => hasActionableTaskWork(task)).length;
 }
 
-function countProjectBlockers(missions: ProjectMissionSummary[]): number {
-  return missions.flatMap((mission) => mission.tasks).filter((task) => task.status === "blocked" || Boolean(task.blockerReason)).length;
+function countProjectBlockers(blockers: ProjectBlockerSummary[]): number {
+  return blockers.filter((blocker) => blocker.status === "open").length;
 }
 
 async function inspectProjectConstitution(project: Pick<ProjectWithRelations, "localPath">): Promise<ConstitutionInspection> {
@@ -230,6 +590,8 @@ function toProjectSummary(project: ProjectWithRelations, constitution: Constitut
   const missions = [...project.missions]
     .sort((left, right) => (right.startedAt?.getTime() ?? 0) - (left.startedAt?.getTime() ?? 0))
     .map(toProjectMissionSummary);
+  const blockers = collectProjectBlockers(project);
+  const nextDispatchableTask = missions.flatMap((mission) => mission.tasks).find((task) => task.dispatchable) ?? null;
 
   return {
     id: project.id,
@@ -240,9 +602,13 @@ function toProjectSummary(project: ProjectWithRelations, constitution: Constitut
     constitutionStatus: constitution.status,
     constitution,
     missions,
+    dispatchableRoles: [...DISPATCHABLE_TASK_ROLES],
+    nextDispatchableTaskId: nextDispatchableTask?.id ?? null,
+    nextDispatchableTaskRole: nextDispatchableTask?.agentRole ?? null,
     activeMissionCount: missions.filter((mission) => mission.status === "active" || mission.status === "planned").length,
-    activeTaskCount: countProjectTasks(missions),
-    blockerCount: countProjectBlockers(missions),
+    activeTaskCount: countProjectTasks(project.missions),
+    blockerCount: countProjectBlockers(blockers),
+    blockers,
     createdAt: project.createdAt.toISOString(),
     updatedAt: project.updatedAt.toISOString()
   };
@@ -262,7 +628,8 @@ async function loadProjectById(projectId: string): Promise<ProjectSummary | null
         include: {
           tasks: {
             include: {
-              jobs: true
+              jobs: true,
+              blockers: true
             }
           }
         },
@@ -291,7 +658,8 @@ async function loadProjects(): Promise<ProjectSummary[]> {
         include: {
           tasks: {
             include: {
-              jobs: true
+              jobs: true,
+              blockers: true
             }
           }
         },
@@ -348,24 +716,115 @@ function mapExecutorJobStatus(status: unknown): ProjectJobStatus {
   return "queued";
 }
 
-function taskStatusFromJobStatus(status: ProjectJobStatus, attempts: number): ProjectTaskStatus {
+function taskStatusFromJobStatus(status: ProjectJobStatus, attempts: number, role: string): ProjectTaskStatus {
   if (status === "queued" || status === "running") {
     return "running";
   }
 
-  if (status === "complete") {
+  if (status === "complete" && isDispatchableTaskRole(role)) {
     return "complete";
   }
 
-  return attempts >= 2 ? "blocked" : "failed";
+  return attempts >= MAX_DISPATCH_ATTEMPTS ? "blocked" : "failed";
 }
 
 function taskStatusFromDispatchFailure(attempts: number): ProjectTaskStatus {
-  return attempts >= 2 ? "blocked" : "failed";
+  return attempts >= MAX_DISPATCH_ATTEMPTS ? "blocked" : "failed";
 }
 
 function buildDispatchBlockerReason(message: string): string {
   return `Dispatch failed after repeated attempts: ${message}`;
+}
+
+function normalizeFailureMessage(message: string): string {
+  const normalized = message.trim().replace(/\s+/g, " ");
+  return normalized || "No failure details were provided.";
+}
+
+interface TaskBlockerDraft {
+  title: string;
+  context: string;
+  options: string[];
+  recommendation: string | null;
+}
+
+function buildBlockedTaskDraft(
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  reason: string,
+  details: { source: "dispatch_failure"; attempts: number } | { source: "executor_outcome"; attempts: number; jobStatus: ProjectJobStatus }
+): TaskBlockerDraft {
+  const normalizedReason = normalizeFailureMessage(reason);
+  const taskLabel = `Task "${task.title}" (${task.agentRole})`;
+  const attemptLabel = `attempt ${details.attempts}`;
+
+  if (details.source === "dispatch_failure") {
+    return {
+      title: `Dispatch blocker for ${task.title}`,
+      context: `${taskLabel} entered blocked status after ${attemptLabel} because the dispatcher could not hand work to the executor. Latest failure: ${normalizedReason}`,
+      options: [
+        "Check whether the executor service is reachable and correctly configured.",
+        "Confirm the repository path, base branch, and task metadata are still valid for dispatch.",
+        "Resolve the dispatch issue, then move the task back to a dispatchable state and retry."
+      ],
+      recommendation: "Restore executor availability or configuration, then re-dispatch the task."
+    };
+  }
+
+  const outcomeLabel = details.jobStatus === "cancelled" ? "cancelled" : "failed";
+  return {
+    title: `Executor ${outcomeLabel} for ${task.title}`,
+    context: `${taskLabel} entered blocked status after ${attemptLabel} because the executor reported job status "${details.jobStatus}". Latest failure: ${normalizedReason}`,
+    options: [
+      "Inspect the latest job log and any available executor artifacts for the task.",
+      "Fix the task, repository state, or runtime dependency that caused the executor outcome.",
+      "When the issue is understood, clear the blocker and return the task to a dispatchable state."
+    ],
+    recommendation:
+      details.jobStatus === "cancelled"
+        ? "Confirm why the executor cancelled the run, correct the trigger condition, and retry."
+        : "Review the failed run output, fix the underlying issue, and retry the task."
+  };
+}
+
+type BlockerMutationClient = Pick<typeof prisma, "blocker" | "task">;
+
+async function upsertOpenTaskBlocker(
+  tx: BlockerMutationClient,
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  draft: TaskBlockerDraft
+): Promise<void> {
+  const existing = await tx.blocker.findFirst({
+    where: {
+      taskId: task.id,
+      status: "open"
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  });
+
+  if (existing) {
+    await tx.blocker.update({
+      where: { id: existing.id },
+      data: {
+        title: draft.title,
+        context: draft.context,
+        options: draft.options,
+        recommendation: draft.recommendation
+      }
+    });
+    return;
+  }
+
+  await tx.blocker.create({
+    data: {
+      taskId: task.id,
+      title: draft.title,
+      context: draft.context,
+      options: draft.options,
+      recommendation: draft.recommendation
+    }
+  });
 }
 
 function normalizeAcceptanceCriteria(value: unknown): string[] {
@@ -422,6 +881,17 @@ function firstImplementerTask(project: ProjectWithRelations) {
     const task = mission.tasks
       .filter((candidate) => candidate.agentRole === "implementer")
       .sort((left, right) => left.priority - right.priority)[0];
+    if (task) {
+      return task;
+    }
+  }
+
+  return null;
+}
+
+function nextDispatchableTaskForProject(project: ProjectWithRelations) {
+  for (const mission of project.missions) {
+    const task = [...mission.tasks].sort((left, right) => left.priority - right.priority).find((candidate) => isTaskDispatchable(candidate));
     if (task) {
       return task;
     }
@@ -509,12 +979,25 @@ async function submitTaskToExecutor(
   };
 }
 
-async function updateTaskAfterDispatchFailure(taskId: string, attempts: number, message: string): Promise<void> {
-  await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      status: taskStatusFromDispatchFailure(attempts),
-      blockerReason: attempts >= 2 ? buildDispatchBlockerReason(message) : null
+async function updateTaskAfterDispatchFailure(
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  attempts: number,
+  message: string
+): Promise<void> {
+  const status = taskStatusFromDispatchFailure(attempts);
+  const blockerReason = status === "blocked" ? buildDispatchBlockerReason(message) : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        status,
+        blockerReason
+      }
+    });
+
+    if (status === "blocked" && blockerReason) {
+      await upsertOpenTaskBlocker(tx, task, buildBlockedTaskDraft(task, message, { source: "dispatch_failure", attempts }));
     }
   });
 }
@@ -526,7 +1009,7 @@ async function persistDispatchedJob(
   attempts: number
 ): Promise<ProjectJobSummary> {
   const jobStatus = mapExecutorJobStatus(executorJob.status);
-  const taskStatus = taskStatusFromJobStatus(jobStatus, attempts);
+  const taskStatus = taskStatusFromJobStatus(jobStatus, attempts, task.agentRole);
   const startedAt = parseDate(executorJob.started_at) ?? new Date();
   const completedAt = jobStatus === "queued" || jobStatus === "running" ? null : parseDate(executorJob.completed_at) ?? startedAt;
 
@@ -545,11 +1028,27 @@ async function persistDispatchedJob(
     }
   });
 
-  await prisma.task.update({
-    where: { id: task.id },
-    data: {
-      status: taskStatus,
-      blockerReason: taskStatus === "blocked" ? buildDispatchBlockerReason(`Executor reported job status ${jobStatus}`) : null
+  const blockerReason = taskStatus === "blocked" ? buildDispatchBlockerReason(`Executor reported job status ${jobStatus}`) : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        status: taskStatus,
+        blockerReason
+      }
+    });
+
+    if (taskStatus === "blocked" && blockerReason) {
+      await upsertOpenTaskBlocker(
+        tx,
+        task,
+        buildBlockedTaskDraft(task, `Executor reported job status ${jobStatus}`, {
+          source: "executor_outcome",
+          attempts,
+          jobStatus
+        })
+      );
     }
   });
 
@@ -560,12 +1059,12 @@ async function dispatchTaskFromProject(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number]
 ): Promise<DispatchTaskResult> {
-  if (task.agentRole !== "implementer") {
-    throw new ProjectDispatchError("invalid_task_role", "Only implementer tasks can be dispatched", 400);
+  if (!isDispatchableTaskRole(task.agentRole)) {
+    throw new ProjectDispatchError("invalid_task_role", buildInvalidTaskRoleMessage(task.agentRole), 400);
   }
 
   if (!isDispatchableTaskStatus(task.status)) {
-    throw new ProjectDispatchError("task_not_dispatchable", `Task ${task.id} is not dispatchable in its current state`, 409);
+    throw new ProjectDispatchError("task_not_dispatchable", buildTaskNotDispatchableMessage(task.id, task.status), 409);
   }
 
   const attempts = task.attempts + 1;
@@ -596,7 +1095,7 @@ async function dispatchTaskFromProject(
     }
 
     const message = error instanceof Error ? error.message : "Executor dispatch failed";
-    await updateTaskAfterDispatchFailure(task.id, attempts, message);
+    await updateTaskAfterDispatchFailure(task, attempts, message);
     throw new ProjectDispatchError("executor_unavailable", message, 503);
   }
 }
@@ -615,6 +1114,20 @@ export async function dispatchTask(projectId: string, taskId: string): Promise<D
   return dispatchTaskFromProject(project, task);
 }
 
+export async function advanceProject(projectId: string): Promise<DispatchTaskResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectDispatchError("project_not_found", "Project not found", 404);
+  }
+
+  const task = nextDispatchableTaskForProject(project);
+  if (!task) {
+    throw new ProjectDispatchError("no_dispatchable_task", buildNoDispatchableTaskMessage(projectId), 409);
+  }
+
+  return dispatchTaskFromProject(project, task);
+}
+
 export async function dispatchFirstImplementerTask(projectId: string): Promise<DispatchTaskResult> {
   const project = await getProjectWithRelations(projectId);
   if (!project) {
@@ -627,6 +1140,70 @@ export async function dispatchFirstImplementerTask(projectId: string): Promise<D
   }
 
   return dispatchTaskFromProject(project, task);
+}
+
+export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true }
+  });
+
+  if (!project) {
+    throw new ProjectBlockerError("project_not_found", "Project not found", 404);
+  }
+
+  const blocker = await prisma.blocker.findFirst({
+    where: {
+      id: blockerId,
+      task: {
+        mission: {
+          projectId
+        }
+      }
+    }
+  });
+
+  if (!blocker) {
+    throw new ProjectBlockerError("blocker_not_found", "Blocker not found", 404);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (blocker.status !== "resolved") {
+      await tx.blocker.update({
+        where: { id: blocker.id },
+        data: {
+          status: "resolved",
+          resolvedAt: blocker.resolvedAt ?? new Date()
+        }
+      });
+    }
+
+    const remainingOpenBlockers = await tx.blocker.count({
+      where: {
+        taskId: blocker.taskId,
+        status: "open",
+        id: {
+          not: blocker.id
+        }
+      }
+    });
+
+    if (remainingOpenBlockers === 0) {
+      await tx.task.update({
+        where: { id: blocker.taskId },
+        data: {
+          blockerReason: null
+        }
+      });
+    }
+  });
+
+  const updatedProject = await loadProjectById(projectId);
+  if (!updatedProject) {
+    throw new ProjectBlockerError("project_not_found", "Project not found", 404);
+  }
+
+  return { project: updatedProject };
 }
 
 async function persistPlannedMission(project: ProjectWithRelations, draft: PlanningDraft): Promise<void> {
@@ -689,7 +1266,8 @@ async function getProjectWithRelations(projectId: string): Promise<ProjectWithRe
         include: {
           tasks: {
             include: {
-              jobs: true
+              jobs: true,
+              blockers: true
             }
           }
         },
@@ -713,7 +1291,8 @@ export async function getRegisteredProject(projectId: string): Promise<ProjectDe
 }
 
 export async function registerProject(input: ProjectRegistrationInput): Promise<ProjectSummary> {
-  const inspection = await inspectConstitution(input.localPath);
+  const registration = await resolveProjectRegistration(input);
+  const inspection = await inspectConstitution(registration.localPath);
   const constitutionData = buildConstitutionData(inspection);
 
   const existing = await prisma.project.findFirst({
@@ -727,7 +1306,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         where: { id: existing.id },
         data: {
           name: input.name,
-          repoUrl: input.repoUrl,
+          repoUrl: registration.repoUrl ?? existing.repoUrl ?? null,
           defaultBranch: input.defaultBranch,
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
@@ -742,7 +1321,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
     : await prisma.project.create({
         data: {
           name: input.name,
-          repoUrl: input.repoUrl,
+          repoUrl: registration.repoUrl,
           defaultBranch: input.defaultBranch,
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
@@ -763,9 +1342,13 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
       constitutionStatus: inspection.status,
       constitution: inspection,
       missions: [],
+      dispatchableRoles: [...DISPATCHABLE_TASK_ROLES],
+      nextDispatchableTaskId: null,
+      nextDispatchableTaskRole: null,
       activeMissionCount: 0,
       activeTaskCount: 0,
       blockerCount: 0,
+      blockers: [],
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString()
     };
