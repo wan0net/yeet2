@@ -1,7 +1,7 @@
 import type { ProjectJobRecord, ProjectMissionRecord, ProjectRecord, ProjectTaskRecord } from "./projects";
 
 export interface FlattenedProjectJob {
-  project: Pick<ProjectRecord, "id" | "name" | "localPath">;
+  project: Pick<ProjectRecord, "id" | "name" | "localPath" | "repoUrl" | "defaultBranch">;
   mission: Pick<ProjectMissionRecord, "id" | "title"> | null;
   task: Pick<ProjectTaskRecord, "id" | "title" | "agentRole" | "status"> | null;
   job: ProjectJobRecord;
@@ -32,7 +32,9 @@ export function flattenProjectJobs(projects: ProjectRecord[]): FlattenedProjectJ
             project: {
               id: project.id,
               name: project.name,
-              localPath: project.localPath
+              localPath: project.localPath,
+              repoUrl: project.repoUrl,
+              defaultBranch: project.defaultBranch
             },
             mission: {
               id: mission.id,

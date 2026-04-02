@@ -21,7 +21,7 @@ import {
   groupTasksByState
 } from "../../../lib/project-detail";
 import { fetchProject } from "../../../lib/project-resource";
-import { emptyConstitutionFiles, formatConstitutionFiles } from "../../../lib/projects";
+import { emptyConstitutionFiles, formatConstitutionFiles, githubBranchUrl, parseGitHubRepoUrl } from "../../../lib/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +85,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const taskGroups = groupTasksByState(project);
   const currentMission = activeMission(project);
   const agentView = agentPresenceOverview(project);
+  const githubRepo = parseGitHubRepoUrl(project.repoUrl);
+  const githubDefaultBranchLink = githubRepo ? githubBranchUrl(project.repoUrl, project.defaultBranch) : null;
   const openBlockers = blockers.filter((blocker) => blocker.status.toLowerCase() === "open").length;
   const presentRequiredFiles = project.constitution.presentRequiredFiles ?? [];
   const missingRequiredFiles = project.constitution.missingRequiredFiles ?? [];
@@ -129,13 +131,27 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-3 text-sm text-slate-600">
             <div className="break-all">
-              <span className="font-medium text-slate-800">Repo:</span> {project.repoUrl || "—"}
+              <span className="font-medium text-slate-800">Repo:</span>{" "}
+              {githubRepo ? (
+                <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubRepo.webUrl} rel="noreferrer" target="_blank">
+                  {githubRepo.owner}/{githubRepo.repo}
+                </a>
+              ) : (
+                project.repoUrl || "—"
+              )}
             </div>
             <div className="break-all">
               <span className="font-medium text-slate-800">Local path:</span> {project.localPath || "—"}
             </div>
-            <div>
-              <span className="font-medium text-slate-800">Default branch:</span> {project.defaultBranch || "—"}
+            <div className="break-all">
+              <span className="font-medium text-slate-800">Default branch:</span>{" "}
+              {githubDefaultBranchLink ? (
+                <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubDefaultBranchLink} rel="noreferrer" target="_blank">
+                  {project.defaultBranch}
+                </a>
+              ) : (
+                project.defaultBranch || "—"
+              )}
             </div>
             <div>
               <span className="font-medium text-slate-800">Constitution summary:</span> {formatConstitutionFiles(files)}
@@ -275,7 +291,19 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     </div>
                     {latestJob ? (
                       <div className="mt-3 text-xs text-slate-500">
-                        Last signal {formatTimestamp(latestJob.startedAt ?? latestJob.completedAt) ?? "Unknown"} on {latestJob.branchName || "no branch"}
+                        Last signal {formatTimestamp(latestJob.startedAt ?? latestJob.completedAt) ?? "Unknown"} on{" "}
+                        {githubRepo && latestJob.branchName ? (
+                          <a
+                            className="font-medium text-slate-700 underline-offset-4 hover:underline"
+                            href={githubBranchUrl(project.repoUrl, latestJob.branchName) ?? githubRepo.webUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            {latestJob.branchName}
+                          </a>
+                        ) : (
+                          latestJob.branchName || "no branch"
+                        )}
                       </div>
                     ) : null}
                   </article>
@@ -407,7 +435,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                               </span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                              <span>Branch: <span className="font-medium text-slate-700">{latest.branchName || "—"}</span></span>
+                              <span>
+                                Branch:{" "}
+                                {githubRepo && latest.branchName ? (
+                                  <a
+                                    className="font-medium text-slate-700 underline-offset-4 hover:underline"
+                                    href={githubBranchUrl(project.repoUrl, latest.branchName) ?? githubRepo.webUrl}
+                                    rel="noreferrer"
+                                    target="_blank"
+                                  >
+                                    {latest.branchName}
+                                  </a>
+                                ) : (
+                                  <span className="font-medium text-slate-700">{latest.branchName || "—"}</span>
+                                )}
+                              </span>
                               <span>Started: <span className="font-medium text-slate-700">{formatTimestamp(latest.startedAt) ?? "Unknown"}</span></span>
                             </div>
                           </div>
@@ -455,12 +497,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     <div className="mt-1 break-all font-mono">{job.id}</div>
                   </div>
                 </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
-                    <div className="mt-2 break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</div>
-                    <div className="mt-2 text-xs text-slate-500">Branch {job.branchName || "—"}</div>
-                  </div>
+                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
+                        <div className="mt-2 break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</div>
+                        <div className="mt-2 text-xs text-slate-500">
+                          Branch{" "}
+                          {githubRepo && job.branchName ? (
+                            <a
+                              className="font-medium text-slate-700 underline-offset-4 hover:underline"
+                              href={githubBranchUrl(project.repoUrl, job.branchName) ?? githubRepo.webUrl}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {job.branchName}
+                            </a>
+                          ) : (
+                            job.branchName || "—"
+                          )}
+                        </div>
+                      </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>
                     <div className="mt-2 text-xs text-slate-600">Started {formatTimestamp(job.startedAt) ?? "Unknown"}</div>
@@ -513,6 +569,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                   {blocker.options.length > 0 ? (
                     <div className="mt-2 text-sm text-slate-600">
                       <span className="font-medium text-slate-800">Options:</span> {blocker.options.join(", ")}
+                    </div>
+                  ) : null}
+                  {blocker.githubIssueUrl ? (
+                    <div className="mt-3">
+                      <a
+                        className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-600 transition hover:bg-slate-100"
+                        href={blocker.githubIssueUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        GitHub issue
+                      </a>
                     </div>
                   ) : null}
                 </article>

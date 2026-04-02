@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectJobs } from "../../lib/jobs";
+import { githubBranchUrl, parseGitHubRepoUrl } from "../../lib/projects";
 import type { ProjectRecord } from "../../lib/projects";
 
 export const dynamic = "force-dynamic";
@@ -121,90 +122,112 @@ export default async function JobsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {jobs.map(({ job, project, mission, task }) => (
-              <article key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">{task?.title ?? mission?.title ?? job.id}</h2>
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${jobStatusTone(job.status)}`}>
-                        {job.status}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span>
-                        Project: <span className="font-medium text-slate-700">{project.name}</span>
-                      </span>
-                      {task?.agentRole ? (
-                        <span>
-                          Role: <span className="font-medium text-slate-700">{task.agentRole}</span>
-                        </span>
-                      ) : null}
-                      <span>
-                        Executor: <span className="font-medium text-slate-700">{job.executorType}</span>
-                      </span>
-                      <span>
-                        Branch: <span className="font-medium text-slate-700">{job.branchName || "Unknown"}</span>
-                      </span>
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
-                    <div className="font-medium text-slate-800">Job ID</div>
-                    <div className="mt-1 break-all font-mono">{job.id}</div>
-                  </div>
-                </div>
+            {jobs.map(({ job, project, mission, task }) => {
+              const githubRepo = parseGitHubRepoUrl(project.repoUrl);
+              const githubBranchLink = githubRepo ? githubBranchUrl(project.repoUrl, job.branchName) : null;
 
-                <div className="mt-3 grid gap-3 lg:grid-cols-[1.25fr_0.95fr_0.9fr]">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
-                    <dl className="mt-2 space-y-2 text-sm text-slate-700">
-                      <div>
-                        <dt className="font-medium text-slate-800">Workspace</dt>
-                        <dd className="break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</dd>
+              return (
+                <article key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold text-slate-900">{task?.title ?? mission?.title ?? job.id}</h2>
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${jobStatusTone(job.status)}`}>
+                          {job.status}
+                        </span>
                       </div>
-                      <div>
-                        <dt className="font-medium text-slate-800">Task</dt>
-                        <dd>{task?.title ?? "No task title recorded"}</dd>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span>
+                          Project: <span className="font-medium text-slate-700">{project.name}</span>
+                        </span>
+                        <span>
+                          Repo:{" "}
+                          {githubRepo ? (
+                            <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubRepo.webUrl} rel="noreferrer" target="_blank">
+                              {githubRepo.owner}/{githubRepo.repo}
+                            </a>
+                          ) : (
+                            <span className="font-medium text-slate-700">{project.repoUrl || "Unknown"}</span>
+                          )}
+                        </span>
+                        {task?.agentRole ? (
+                          <span>
+                            Role: <span className="font-medium text-slate-700">{task.agentRole}</span>
+                          </span>
+                        ) : null}
+                        <span>
+                          Executor: <span className="font-medium text-slate-700">{job.executorType}</span>
+                        </span>
+                        <span>
+                          Branch:{" "}
+                          {githubBranchLink ? (
+                            <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubBranchLink} rel="noreferrer" target="_blank">
+                              {job.branchName}
+                            </a>
+                          ) : (
+                            <span className="font-medium text-slate-700">{job.branchName || "Unknown"}</span>
+                          )}
+                        </span>
                       </div>
-                      <div>
-                        <dt className="font-medium text-slate-800">Mission</dt>
-                        <dd>{mission?.title ?? "No mission recorded"}</dd>
-                      </div>
-                    </dl>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
+                      <div className="font-medium text-slate-800">Job ID</div>
+                      <div className="mt-1 break-all font-mono">{job.id}</div>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>
-                    <dl className="mt-2 space-y-2 text-sm text-slate-700">
-                      <div>
-                        <dt className="font-medium text-slate-800">Started</dt>
-                        <dd>{formatTimestamp(job.startedAt)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-800">Completed</dt>
-                        <dd>{formatTimestamp(job.completedAt)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-800">Task status</dt>
-                        <dd>{task?.status ?? "Unknown"}</dd>
-                      </div>
-                    </dl>
+
+                  <div className="mt-3 grid gap-3 lg:grid-cols-[1.25fr_0.95fr_0.9fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
+                      <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                        <div>
+                          <dt className="font-medium text-slate-800">Workspace</dt>
+                          <dd className="break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Task</dt>
+                          <dd>{task?.title ?? "No task title recorded"}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Mission</dt>
+                          <dd>{mission?.title ?? "No mission recorded"}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>
+                      <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                        <div>
+                          <dt className="font-medium text-slate-800">Started</dt>
+                          <dd>{formatTimestamp(job.startedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Completed</dt>
+                          <dd>{formatTimestamp(job.completedAt)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Task status</dt>
+                          <dd>{task?.status ?? "Unknown"}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Outputs</div>
+                      <dl className="mt-2 space-y-2 text-sm text-slate-700">
+                        <div>
+                          <dt className="font-medium text-slate-800">Artifacts</dt>
+                          <dd>{job.artifactSummary ?? "No artifact summary recorded"}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Log</dt>
+                          <dd className="break-all font-mono text-xs text-slate-600">{summarizeLogPath(job.logPath)}</dd>
+                        </div>
+                      </dl>
+                    </div>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Outputs</div>
-                    <dl className="mt-2 space-y-2 text-sm text-slate-700">
-                      <div>
-                        <dt className="font-medium text-slate-800">Artifacts</dt>
-                        <dd>{job.artifactSummary ?? "No artifact summary recorded"}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium text-slate-800">Log</dt>
-                        <dd className="break-all font-mono text-xs text-slate-600">{summarizeLogPath(job.logPath)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </SectionCard>

@@ -98,6 +98,12 @@ export interface ProjectRegistrationInput {
   local_path?: string;
 }
 
+export interface GitHubRepoInfo {
+  owner: string;
+  repo: string;
+  webUrl: string;
+}
+
 type RawRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): RawRecord {
@@ -147,6 +153,52 @@ function stringArrayValue(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function stripGitSuffix(value: string): string {
+  return value.endsWith(".git") ? value.slice(0, -4) : value;
+}
+
+export function parseGitHubRepoUrl(value: string): GitHubRepoInfo | null {
+  const normalized = value.trim().replace(/\/+$/, "");
+  if (!normalized) {
+    return null;
+  }
+
+  const httpsMatch = normalized.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (httpsMatch) {
+    const owner = httpsMatch[1];
+    const repo = stripGitSuffix(httpsMatch[2]);
+    return {
+      owner,
+      repo,
+      webUrl: `https://github.com/${owner}/${repo}`
+    };
+  }
+
+  const sshMatch = normalized.match(/^(?:ssh:\/\/)?git@github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (sshMatch) {
+    const owner = sshMatch[1];
+    const repo = stripGitSuffix(sshMatch[2]);
+    return {
+      owner,
+      repo,
+      webUrl: `https://github.com/${owner}/${repo}`
+    };
+  }
+
+  return null;
+}
+
+export function githubBranchUrl(repoUrl: string, branchName: string): string | null {
+  const repo = parseGitHubRepoUrl(repoUrl);
+  const branch = branchName.trim();
+
+  if (!repo || !branch) {
+    return null;
+  }
+
+  return `${repo.webUrl}/tree/${encodeURIComponent(branch)}`;
 }
 
 function booleanValue(...values: unknown[]): boolean {
