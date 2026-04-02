@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { RepositoryPathError } from "../constitution";
 import {
   advanceProject,
+  createProjectBlockerGitHubIssue,
   dispatchTask,
   getRegisteredProject,
   listRegisteredProjects,
@@ -11,6 +12,7 @@ import {
   resolveProjectBlocker,
   ProjectBlockerError,
   ProjectDispatchError,
+  ProjectGitHubIssueError,
   ProjectRegistrationError,
   type ProjectRegistrationInput
 } from "../projects";
@@ -241,6 +243,34 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to resolve blocker"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/blockers/:blockerId/github-issue", async (request, reply) => {
+    const { projectId, blockerId } = request.params as { projectId?: string; blockerId?: string };
+    if (!projectId || !blockerId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and blockerId are required"
+      });
+    }
+
+    try {
+      const result = await createProjectBlockerGitHubIssue(projectId, blockerId);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectGitHubIssueError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to create GitHub issue"
       });
     }
   });

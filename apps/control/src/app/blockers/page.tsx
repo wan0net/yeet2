@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { headers } from "next/headers";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
+import { BlockerGitHubIssueAction } from "../projects/projects-client";
 import { flattenProjectBlockers, isOpenBlocker } from "../../lib/blockers";
 import type { ProjectRecord } from "../../lib/projects";
 
@@ -149,6 +150,8 @@ export default async function BlockersPage() {
                       </dl>
                     </div>
                   </div>
+
+                  <BlockerGitHubIssueAction blocker={blocker} projectId={projectId} />
                 </article>
               );
             })}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -68,6 +69,99 @@ function dispatchLabel(task: ProjectTaskRecord, isDispatching: boolean): string 
 
   const prefix = task.status === "failed" ? "Re-dispatch" : "Dispatch";
   return `${prefix} ${stageLabel(task.agentRole)}`;
+}
+
+interface BlockerGitHubIssueActionProps {
+  blocker: ProjectBlockerRecord;
+  projectId: string;
+  onProjectUpdate?: (project: ProjectRecord) => void;
+  onMessage?: (message: string) => void;
+}
+
+export function BlockerGitHubIssueAction({
+  blocker,
+  projectId,
+  onProjectUpdate,
+  onMessage
+}: BlockerGitHubIssueActionProps) {
+  const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isOpen = blocker.status.toLowerCase() === "open";
+
+  async function handleCreateGitHubIssue() {
+    setIsCreating(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/blockers/${blocker.id}/github-issue`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json"
+        }
+      });
+      const payload = (await response.json()) as {
+        project?: ProjectRecord;
+        error?: string;
+        detail?: unknown;
+      };
+
+      if (!response.ok) {
+        throw new Error(detailMessage(payload.detail, payload.error || "Unable to create GitHub issue"));
+      }
+
+      onMessage?.(`Filed issue for ${blocker.title}.`);
+
+      if (payload.project && onProjectUpdate) {
+        onProjectUpdate(payload.project);
+        return;
+      }
+
+      router.refresh();
+    } catch (createIssueError) {
+      setError(createIssueError instanceof Error ? createIssueError.message : "Unable to create GitHub issue");
+    } finally {
+      setIsCreating(false);
+    }
+  }
+
+  if (blocker.githubIssueUrl) {
+    return (
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <a
+          className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-900 transition hover:bg-sky-100"
+          href={blocker.githubIssueUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          View GitHub issue
+        </a>
+        <span className="text-xs text-slate-500">GitHub escalation already exists.</span>
+      </div>
+    );
+  }
+
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          className="rounded-full border border-sky-300 bg-white px-3 py-1.5 text-xs font-medium text-sky-900 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={isCreating}
+          onClick={() => void handleCreateGitHubIssue()}
+          type="button"
+        >
+          {isCreating ? "Creating issue..." : "Create GitHub issue"}
+        </button>
+        <span className="text-xs text-slate-500">Escalate this blocker to GitHub without leaving control.</span>
+      </div>
+
+      {error ? <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+    </>
+  );
 }
 
 export function ProjectsClient() {
@@ -571,6 +665,15 @@ export function ProjectsClient() {
                                   <span className="font-medium text-slate-800">Recommendation:</span> {blocker.recommendation}
                                 </div>
                               ) : null}
+
+                              <BlockerGitHubIssueAction
+                                blocker={blocker}
+                                onMessage={setMessage}
+                                onProjectUpdate={(updatedProject) =>
+                                  setProjects((current) => current.map((entry) => (entry.id === updatedProject.id ? updatedProject : entry)))
+                                }
+                                projectId={project.id}
+                              />
 
                               {isOpen ? (
                                 <div className="mt-3 flex flex-wrap items-center gap-3">

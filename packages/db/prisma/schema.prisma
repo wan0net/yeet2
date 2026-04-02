@@ -145,6 +145,8 @@ model Blocker {
   options        Json
   recommendation String?
   status         BlockerStatus @default(open)
+  githubIssueNumber Int?       @map("github_issue_number")
+  githubIssueUrl String?       @map("github_issue_url")
   createdAt      DateTime      @default(now()) @map("created_at")
   resolvedAt     DateTime?     @map("resolved_at")
   task           Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)

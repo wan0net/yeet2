@@ -232,6 +232,8 @@ export interface Blocker {
   options: string[];
   recommendation?: string | null;
   status: BlockerStatus;
+  githubIssueNumber?: number | null;
+  githubIssueUrl?: string | null;
   createdAt: string;
   resolvedAt?: string | null;
 }

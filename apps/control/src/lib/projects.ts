@@ -56,6 +56,7 @@ export interface ProjectBlockerRecord {
   options: string[];
   recommendation: string | null;
   status: string;
+  githubIssueUrl: string | null;
   createdAt: string | null;
   resolvedAt: string | null;
 }
@@ -327,6 +328,7 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
 
 function normalizeBlockerRecord(value: unknown): ProjectBlockerRecord | null {
   const raw = asRecord(value);
+  const githubIssue = asRecord(raw.githubIssue ?? raw.github_issue);
   const title = stringValue(raw.title);
   const context = stringValue(raw.context);
   const recommendation = stringValue(raw.recommendation);
@@ -345,6 +347,16 @@ function normalizeBlockerRecord(value: unknown): ProjectBlockerRecord | null {
     options: stringArrayValue(raw.options),
     recommendation: recommendation || null,
     status,
+    githubIssueUrl:
+      stringValue(
+        raw.githubIssueUrl,
+        raw.github_issue_url,
+        raw.issueUrl,
+        raw.issue_url,
+        githubIssue.url,
+        githubIssue.htmlUrl,
+        githubIssue.html_url
+      ) || null,
     createdAt: stringValue(raw.createdAt, raw.created_at) || null,
     resolvedAt: stringValue(raw.resolvedAt, raw.resolved_at) || null
   };

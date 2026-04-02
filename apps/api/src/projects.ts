@@ -13,6 +13,7 @@ import type {
 } from "@yeet2/db";
 
 import { prisma } from "./db";
+import { buildGitHubIssueBody, createGitHubIssue, parseGitHubRepositoryUrl, GitHubIssueError } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
 
@@ -67,6 +68,8 @@ export interface ProjectBlockerSummary {
   options: string[];
   recommendation: string | null;
   status: DbBlocker["status"];
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
   createdAt: string;
   resolvedAt: string | null;
 }
@@ -133,6 +136,17 @@ export class ProjectBlockerError extends Error {
   ) {
     super(message);
     this.name = "ProjectBlockerError";
+  }
+}
+
+export class ProjectGitHubIssueError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "blocker_not_found" | "invalid_repo_url" | "github_not_configured" | "github_issue_failed",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectGitHubIssueError";
   }
 }
 
@@ -534,6 +548,8 @@ function toProjectBlockerSummary(
     options: normalizeBlockerOptions(blocker.options),
     recommendation: blocker.recommendation ?? null,
     status: blocker.status,
+    githubIssueNumber: blocker.githubIssueNumber ?? null,
+    githubIssueUrl: blocker.githubIssueUrl ?? null,
     createdAt: blocker.createdAt.toISOString(),
     resolvedAt: blocker.resolvedAt?.toISOString() ?? null
   };
@@ -1201,6 +1217,119 @@ export async function resolveProjectBlocker(projectId: string, blockerId: string
   const updatedProject = await loadProjectById(projectId);
   if (!updatedProject) {
     throw new ProjectBlockerError("project_not_found", "Project not found", 404);
+  }
+
+  return { project: updatedProject };
+}
+
+function findProjectBlocker(
+  project: ProjectWithRelations,
+  blockerId: string
+): { blocker: DbBlocker; task: ProjectWithRelations["missions"][number]["tasks"][number]; mission: ProjectWithRelations["missions"][number] } | null {
+  for (const mission of project.missions) {
+    for (const task of mission.tasks) {
+      const blocker = task.blockers.find((candidate) => candidate.id === blockerId);
+      if (blocker) {
+        return { blocker, task, mission };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildGitHubIssueTitle(project: ProjectWithRelations, task: ProjectWithRelations["missions"][number]["tasks"][number], blocker: DbBlocker): string {
+  return `[yeet2] ${project.name}: ${blocker.title || task.title}`;
+}
+
+export async function createProjectBlockerGitHubIssue(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectGitHubIssueError("project_not_found", "Project not found", 404);
+  }
+
+  const located = findProjectBlocker(project, blockerId);
+  if (!located) {
+    throw new ProjectGitHubIssueError("blocker_not_found", "Blocker not found", 404);
+  }
+
+  const { blocker, task, mission } = located;
+  if (blocker.githubIssueNumber != null || blocker.githubIssueUrl) {
+    const refreshedProject = await loadProjectById(projectId);
+    if (!refreshedProject) {
+      throw new ProjectGitHubIssueError("project_not_found", "Project not found", 404);
+    }
+
+    return { project: refreshedProject };
+  }
+
+  if (!project.repoUrl) {
+    throw new ProjectGitHubIssueError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  const repository = parseGitHubRepositoryUrl(project.repoUrl);
+  if (!repository) {
+    throw new ProjectGitHubIssueError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  try {
+    const issue = await createGitHubIssue({
+      token: process.env.GITHUB_TOKEN,
+      repository,
+      title: buildGitHubIssueTitle(project, task, blocker),
+      body: buildGitHubIssueBody({
+        project: {
+          id: project.id,
+          name: project.name,
+          defaultBranch: project.defaultBranch,
+          localPath: project.localPath,
+          repoUrl: project.repoUrl
+        },
+        mission: {
+          id: mission.id,
+          title: mission.title
+        },
+        task: {
+          id: task.id,
+          title: task.title,
+          agentRole: task.agentRole
+        },
+        blocker: {
+          id: blocker.id,
+          title: blocker.title,
+          context: blocker.context,
+          options: normalizeBlockerOptions(blocker.options),
+          recommendation: blocker.recommendation ?? null
+        }
+      })
+    });
+
+    await prisma.blocker.update({
+      where: { id: blocker.id },
+      data: {
+        githubIssueNumber: issue.number,
+        githubIssueUrl: issue.htmlUrl
+      }
+    });
+  } catch (error) {
+    if (error instanceof GitHubIssueError) {
+      throw new ProjectGitHubIssueError(
+        error.code === "missing_token"
+          ? "github_not_configured"
+          : error.code === "invalid_repository_url"
+            ? "invalid_repo_url"
+            : "github_issue_failed",
+        error.message,
+        error.statusCode
+      );
+    }
+
+    throw new ProjectGitHubIssueError("github_issue_failed", error instanceof Error ? error.message : "Unable to create GitHub issue", 502);
+  }
+
+  const updatedProject = await loadProjectById(projectId);
+  if (!updatedProject) {
+    throw new ProjectGitHubIssueError("project_not_found", "Project not found", 404);
   }
 
   return { project: updatedProject };
