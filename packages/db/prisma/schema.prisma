@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ConstitutionStatus {
+  pending
+  parsed
+  stale
+  failed
+}
+
+enum ConstitutionParseStatus {
+  pending
+  parsed
+  stale
+  failed
+}
+
+enum ProjectStatus {
+  active
+  paused
+  archived
+}
+
+enum MissionStatus {
+  planned
+  active
+  complete
+  blocked
+}
+
+enum TaskStatus {
+  pending
+  ready
+  running
+  complete
+  failed
+  blocked
+}
+
+enum JobStatus {
+  queued
+  running
+  complete
+  failed
+  cancelled
+}
+
+enum BlockerStatus {
+  open
+  resolved
+}
+
+model Project {
+  id                 String              @id @default(cuid())
+  name               String
+  repoUrl            String?             @map("repo_url")
+  defaultBranch      String              @default("main") @map("default_branch")
+  localPath          String              @unique @map("local_path")
+  constitutionStatus ConstitutionStatus  @default(pending) @map("constitution_status")
+  status             ProjectStatus       @default(active)
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  constitution      Constitution?
+  missions           Mission[]
+
+  @@map("projects")
+}
+
+model Constitution {
+  id               String                  @id @default(cuid())
+  projectId        String                  @unique @map("project_id")
+  visionPath       String?                 @map("vision_path")
+  specPath         String?                 @map("spec_path")
+  roadmapPath      String?                 @map("roadmap_path")
+  architecturePath String?                 @map("architecture_path")
+  decisionsPath    String?                 @map("decisions_path")
+  qualityBarPath   String?                 @map("quality_bar_path")
+  parseStatus      ConstitutionParseStatus @default(pending) @map("parse_status")
+  lastIndexedAt    DateTime?               @map("last_indexed_at")
+  project          Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("constitutions")
+}
+
+model Mission {
+  id          String        @id @default(cuid())
+  projectId   String        @map("project_id")
+  title       String
+  objective   String
+  status      MissionStatus @default(planned)
+  createdBy   String?       @map("created_by")
+  startedAt   DateTime?     @map("started_at")
+  completedAt DateTime?     @map("completed_at")
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks       Task[]
+
+  @@map("missions")
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  missionId          String     @map("mission_id")
+  title              String
+  description        String
+  agentRole          String     @map("agent_role")
+  status             TaskStatus @default(pending)
+  priority           Int        @default(0)
+  acceptanceCriteria Json       @map("acceptance_criteria")
+  attempts           Int        @default(0)
+  blockerReason      String?    @map("blocker_reason")
+  mission            Mission    @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  jobs               Job[]
+  blockers           Blocker[]
+
+  @@map("tasks")
+}
+
+model Job {
+  id              String    @id @default(cuid())
+  taskId          String    @map("task_id")
+  executorType    String    @map("executor_type")
+  workspacePath   String    @map("workspace_path")
+  branchName      String    @map("branch_name")
+  status          JobStatus @default(queued)
+  logPath         String?   @map("log_path")
+  artifactSummary String?   @map("artifact_summary")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("jobs")
+}
+
+model Blocker {
+  id             String        @id @default(cuid())
+  taskId         String        @map("task_id")
+  title          String
+  context        String
+  options        Json
+  recommendation String?
+  status         BlockerStatus @default(open)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  resolvedAt     DateTime?     @map("resolved_at")
+  task           Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("blockers")
+}

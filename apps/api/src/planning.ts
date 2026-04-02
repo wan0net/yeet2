@@ -1,0 +1,303 @@
+import { readFile } from "node:fs/promises";
+
+import type { ConstitutionInspection, ConstitutionFileKey } from "./constitution";
+
+export type PlanSource = "brain" | "fallback";
+
+export interface PlanningProject {
+  id: string;
+  name: string;
+  repoUrl: string;
+  defaultBranch: string;
+  localPath: string;
+}
+
+export interface PlanningMissionDraft {
+  title: string;
+  objective: string;
+  status: "active";
+  createdBy: PlanSource;
+}
+
+export interface PlanningTaskDraft {
+  title: string;
+  description: string;
+  agentRole: "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+  status: "ready";
+  priority: number;
+  acceptanceCriteria: string[];
+  attempts: number;
+  blockerReason: null;
+}
+
+export interface PlanningDraft {
+  source: PlanSource;
+  mission: PlanningMissionDraft;
+  tasks: PlanningTaskDraft[];
+}
+
+export interface PlanningContext {
+  project: PlanningProject;
+  constitution: ConstitutionInspection;
+  documents: Partial<Record<ConstitutionFileKey, string | null>>;
+}
+
+interface BrainPlanningResponse {
+  mission?: Partial<PlanningMissionDraft> | null;
+  tasks?: Array<Partial<PlanningTaskDraft> | null> | null;
+  source?: string | null;
+  plan?: {
+    mission?: Partial<PlanningMissionDraft> | null;
+    tasks?: Array<Partial<PlanningTaskDraft> | null> | null;
+    source?: string | null;
+  } | null;
+  result?: {
+    mission?: Partial<PlanningMissionDraft> | null;
+    tasks?: Array<Partial<PlanningTaskDraft> | null> | null;
+    source?: string | null;
+  } | null;
+}
+
+function brainBaseUrl(): string {
+  return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
+}
+
+function cleanText(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
+function firstMeaningfulLine(text: string | null | undefined, fallback: string): string {
+  const trimmed = cleanText(text);
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const lines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const heading = lines.find((line) => line.startsWith("#"));
+  if (heading) {
+    return heading.replace(/^#+\s*/, "").trim() || fallback;
+  }
+
+  return lines[0] || fallback;
+}
+
+async function readDocument(path: string, exists: boolean): Promise<string | null> {
+  if (!exists) {
+    return null;
+  }
+
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+export async function loadPlanningContext(project: PlanningProject, constitution: ConstitutionInspection): Promise<PlanningContext> {
+  const entries = await Promise.all(
+    (Object.keys(constitution.files) as ConstitutionFileKey[]).map(async (key) => {
+      const file = constitution.files[key];
+      return [key, await readDocument(file.absolutePath, file.exists)] as const;
+    })
+  );
+
+  return {
+    project,
+    constitution,
+    documents: Object.fromEntries(entries) as Partial<Record<ConstitutionFileKey, string | null>>
+  };
+}
+
+function buildFallbackDraft(context: PlanningContext): PlanningDraft {
+  const visionHeadline = firstMeaningfulLine(context.documents.vision, "Project vision");
+  const specHeadline = firstMeaningfulLine(context.documents.spec, "Project specification");
+  const roadmapHeadline = firstMeaningfulLine(context.documents.roadmap, "First roadmap slice");
+  const architectureHeadline = firstMeaningfulLine(context.documents.architecture, "Architecture review");
+  const projectName = context.project.name || "the project";
+
+  return {
+    source: "fallback",
+    mission: {
+      title: `Launch the first constitutional slice for ${projectName}`,
+      objective: `Turn the constitution into a first implementation pass grounded in ${visionHeadline}, ${specHeadline}, and ${roadmapHeadline}.`,
+      status: "active",
+      createdBy: "fallback"
+    },
+    tasks: [
+      {
+        title: "Validate the constitution and scope",
+        description: `Read the project constitution for ${projectName} and confirm the initial delivery target.`,
+        agentRole: "architect",
+        status: "ready",
+        priority: 1,
+        acceptanceCriteria: [
+          "The VISION, SPEC, and ROADMAP files are present and understood.",
+          "The first implementation slice is clearly bounded.",
+          "Any ambiguity is called out before coding starts."
+        ],
+        attempts: 0,
+        blockerReason: null
+      },
+      {
+        title: `Implement the first roadmap slice: ${roadmapHeadline}`,
+        description: `Carry out the smallest useful change implied by the roadmap and spec.`,
+        agentRole: "implementer",
+        status: "ready",
+        priority: 2,
+        acceptanceCriteria: [
+          "The implementation aligns with the roadmap direction.",
+          "The change is isolated and reviewable.",
+          "A concise summary of the diff is produced."
+        ],
+        attempts: 0,
+        blockerReason: null
+      },
+      {
+        title: `Run validation for ${roadmapHeadline}`,
+        description: "Execute tests or other verification that demonstrates the slice is safe.",
+        agentRole: "qa",
+        status: "ready",
+        priority: 3,
+        acceptanceCriteria: [
+          "The change has a verification path.",
+          "Any failing checks are surfaced clearly.",
+          "The result is recorded for review."
+        ],
+        attempts: 0,
+        blockerReason: null
+      },
+      {
+        title: `Review the architecture around ${architectureHeadline}`,
+        description: "Check the result against the constitution and identify any follow-up work.",
+        agentRole: "reviewer",
+        status: "ready",
+        priority: 4,
+        acceptanceCriteria: [
+          "The output is checked against the constitution.",
+          "Maintainability risks are identified.",
+          "Any blocker or follow-up is captured."
+        ],
+        attempts: 0,
+        blockerReason: null
+      }
+    ]
+  };
+}
+
+function normalizeMissionDraft(value: unknown, fallback: PlanningMissionDraft): PlanningMissionDraft {
+  if (typeof value !== "object" || value === null) {
+    return fallback;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const title = cleanText(typeof raw.title === "string" ? raw.title : undefined) || fallback.title;
+  const objective = cleanText(typeof raw.objective === "string" ? raw.objective : undefined) || fallback.objective;
+  const status = raw.status === "active" ? "active" : fallback.status;
+  const createdBy = raw.createdBy === "brain" ? "brain" : raw.createdBy === "fallback" ? "fallback" : fallback.createdBy;
+
+  return {
+    title,
+    objective,
+    status,
+    createdBy
+  };
+}
+
+function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningTaskDraft | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const raw = value as Record<string, unknown>;
+  const title = cleanText(typeof raw.title === "string" ? raw.title : undefined);
+  const description = cleanText(typeof raw.description === "string" ? raw.description : undefined);
+  const agentRole = typeof raw.agentRole === "string" ? raw.agentRole : "";
+
+  if (!title || !description || !agentRole) {
+    return null;
+  }
+
+  const acceptanceCriteria = Array.isArray(raw.acceptanceCriteria)
+    ? raw.acceptanceCriteria.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+    : [];
+
+  return {
+    title,
+    description,
+    agentRole: agentRole as PlanningTaskDraft["agentRole"],
+    status: raw.status === "ready" ? "ready" : "ready",
+    priority: typeof raw.priority === "number" && Number.isFinite(raw.priority) ? raw.priority : fallbackPriority,
+    acceptanceCriteria,
+    attempts: typeof raw.attempts === "number" && Number.isFinite(raw.attempts) ? raw.attempts : 0,
+    blockerReason: null
+  };
+}
+
+function extractBrainDraft(payload: unknown, fallback: PlanningDraft): PlanningDraft {
+  if (typeof payload !== "object" || payload === null) {
+    return fallback;
+  }
+
+  const raw = payload as Record<string, unknown>;
+  const fromPlan = typeof raw.plan === "object" && raw.plan !== null ? (raw.plan as Record<string, unknown>) : null;
+  const fromResult = typeof raw.result === "object" && raw.result !== null ? (raw.result as Record<string, unknown>) : null;
+  const draftSource = raw.source ?? fromPlan?.source ?? fromResult?.source;
+
+  const missionValue = raw.mission ?? fromPlan?.mission ?? fromResult?.mission;
+  const taskValues = raw.tasks ?? fromPlan?.tasks ?? fromResult?.tasks;
+  const mission = normalizeMissionDraft(missionValue, fallback.mission);
+  const tasks = Array.isArray(taskValues)
+    ? taskValues
+        .map((value, index) => normalizeTaskDraft(value, index + 1))
+        .filter((task): task is PlanningTaskDraft => task !== null)
+    : fallback.tasks;
+
+  if (!tasks.length) {
+    return fallback;
+  }
+
+  return {
+    source: draftSource === "brain" ? "brain" : fallback.source,
+    mission,
+    tasks
+  };
+}
+
+async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
+  try {
+    const response = await fetch(`${brainBaseUrl()}/orchestration/plan`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify(context),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json().catch(() => null)) as unknown;
+    const fallback = buildFallbackDraft(context);
+    return extractBrainDraft(payload, fallback);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function createInitialPlan(context: PlanningContext): Promise<PlanningDraft> {
+  const fallback = buildFallbackDraft(context);
+  const brainDraft = await callBrainPlanner(context);
+  return brainDraft ?? fallback;
+}

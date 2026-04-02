@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "../../",
+    "composite": true,
+    "paths": {
+      "@yeet2/constitution": ["../../packages/constitution/src/index.ts"],
+      "@yeet2/db": ["../../packages/db/src/index.ts"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "../../packages/constitution/src/**/*.ts"]
+}
