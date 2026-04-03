@@ -20,6 +20,20 @@ interface RoleModelCatalogResponse {
   message?: string;
 }
 
+function createRoleDraft(roleKey: string, count: number): ProjectRoleDefinition {
+  const baseLabel = roleKey === "qa" ? "QA" : roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
+  return {
+    id: `draft-${roleKey}-${count}-${Date.now()}`,
+    roleKey,
+    sortOrder: count,
+    label: count > 1 ? `${baseLabel} ${count}` : baseLabel,
+    enabled: true,
+    model: null,
+    goal: "",
+    backstory: ""
+  };
+}
+
 function cloneRoles(roleDefinitions: ProjectRoleDefinition[]): ProjectRoleDefinition[] {
   return roleDefinitions.map((role) => ({ ...role }));
 }
@@ -131,6 +145,52 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
     );
   }
 
+  function duplicateRole(index: number) {
+    setDraftRoles((current) => {
+      const source = current[index];
+      if (!source) {
+        return current;
+      }
+
+      const sameRoleCount = current.filter((role) => role.roleKey === source.roleKey).length + 1;
+      const duplicate: ProjectRoleDefinition = {
+        ...source,
+        id: `draft-${source.roleKey}-${sameRoleCount}-${Date.now()}`,
+        label: `${source.label} ${sameRoleCount}`.trim(),
+        sortOrder: current.length
+      };
+
+      return [...current, duplicate].map((role, currentIndex) => ({
+        ...role,
+        sortOrder: currentIndex
+      }));
+    });
+  }
+
+  function removeRole(index: number) {
+    setDraftRoles((current) =>
+      current
+        .filter((_, currentIndex) => currentIndex !== index)
+        .map((role, currentIndex) => ({
+          ...role,
+          sortOrder: currentIndex
+        }))
+    );
+  }
+
+  function addRole(roleKey: ProjectRoleDefinition["roleKey"]) {
+    setDraftRoles((current) => {
+      const sameRoleCount = current.filter((role) => role.roleKey === roleKey).length + 1;
+      return [
+        ...current,
+        {
+          ...createRoleDraft(roleKey, sameRoleCount),
+          sortOrder: current.length
+        }
+      ];
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSaving(true);
@@ -165,26 +225,55 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
     <SectionCard title="Project roles">
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-          View and edit the role definitions used for {projectName}. Save will proxy through the control API route and will stay editable if the backend route is not available yet.
+          View and edit the role definitions used for {projectName}. You can add multiple staff members for the same role so different models can operate in the same lane.
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {(["planner", "architect", "implementer", "qa", "reviewer", "visual"] as const).map((roleKey) => (
+            <button
+              key={roleKey}
+              className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+              onClick={() => addRole(roleKey)}
+              type="button"
+            >
+              Add {roleKey === "qa" ? "QA" : roleKey}
+            </button>
+          ))}
         </div>
 
         <div className="grid gap-3 lg:grid-cols-2">
           {draftRoles.map((role, index) => (
-            <article key={role.roleKey || role.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <article key={role.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Role key</div>
                   <div className="mt-1 break-all font-mono text-sm text-slate-800">{role.roleKey || role.id}</div>
                 </div>
-                <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                  <input
-                    checked={role.enabled}
-                    className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
-                    onChange={(event) => updateRole(index, { enabled: event.currentTarget.checked })}
-                    type="checkbox"
-                  />
-                  Enabled
-                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                    onClick={() => duplicateRole(index)}
+                    type="button"
+                  >
+                    Duplicate
+                  </button>
+                  <button
+                    className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                    onClick={() => removeRole(index)}
+                    type="button"
+                  >
+                    Remove
+                  </button>
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                    <input
+                      checked={role.enabled}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-400"
+                      onChange={(event) => updateRole(index, { enabled: event.currentTarget.checked })}
+                      type="checkbox"
+                    />
+                    Enabled
+                  </label>
+                </div>
               </div>
 
               <div className="mt-3 space-y-3">

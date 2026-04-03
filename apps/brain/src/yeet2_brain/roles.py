@@ -144,12 +144,10 @@ def normalize_planning_role_definitions(value: object) -> list[PlanningRoleDefin
         return []
 
     result: list[PlanningRoleDefinition] = []
-    seen_keys: set[str] = set()
     for index, item in enumerate(value):
         definition = normalize_planning_role_definition(item, index)
-        if definition is None or definition.key in seen_keys:
+        if definition is None:
             continue
-        seen_keys.add(definition.key)
         result.append(definition)
 
     return result

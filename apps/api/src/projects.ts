@@ -2823,21 +2823,13 @@ function validateProjectRoleDefinitionSet(definitions: ProjectRoleDefinitionInpu
   const expectedKeys = new Set(PROJECT_ROLE_DEFAULTS.map((definition) => definition.roleKey));
   const seenKeys = new Set<ProjectRoleKey>();
 
-  if (definitions.length !== expectedKeys.size) {
-    throw new ProjectRoleDefinitionError(
-      "invalid_role_definition",
-      "roleDefinitions must include all six spec roles: planner, architect, implementer, qa, reviewer, and visual.",
-      400
-    );
-  }
-
   for (const definition of definitions) {
-    if (seenKeys.has(definition.roleKey)) {
-      throw new ProjectRoleDefinitionError("invalid_role_definition", `Duplicate roleKey "${definition.roleKey}" is not allowed.`, 400);
-    }
-
     if (!expectedKeys.has(definition.roleKey)) {
       throw new ProjectRoleDefinitionError("invalid_role_definition", `Unknown roleKey "${definition.roleKey}" is not allowed.`, 400);
+    }
+
+    if (!definition.label.trim() || !definition.goal.trim() || !definition.backstory.trim()) {
+      throw new ProjectRoleDefinitionError("invalid_role_definition", `Role definition "${definition.roleKey}" must include label, goal, and backstory.`, 400);
     }
 
     seenKeys.add(definition.roleKey);
@@ -2870,42 +2862,21 @@ export async function replaceProjectRoleDefinitions(
   validateProjectRoleDefinitionSet(definitions);
 
   await prisma.$transaction(async (tx) => {
-    for (const definition of definitions) {
-      await tx.projectRoleDefinition.upsert({
-        where: {
-          projectId_roleKey: {
-            projectId,
-            roleKey: definition.roleKey
-          }
-        },
-        create: {
-          projectId,
-          roleKey: definition.roleKey,
-          label: definition.label,
-          goal: definition.goal,
-          backstory: definition.backstory,
-          model: definition.model || null,
-          enabled: definition.enabled,
-          sortOrder: definition.sortOrder
-        },
-        update: {
-          label: definition.label,
-          goal: definition.goal,
-          backstory: definition.backstory,
-          model: definition.model || null,
-          enabled: definition.enabled,
-          sortOrder: definition.sortOrder
-        }
-      });
-    }
-
     await tx.projectRoleDefinition.deleteMany({
-      where: {
+      where: { projectId }
+    });
+
+    await tx.projectRoleDefinition.createMany({
+      data: definitions.map((definition, index) => ({
         projectId,
-        roleKey: {
-          notIn: definitions.map((definition) => definition.roleKey)
-        }
-      }
+        roleKey: definition.roleKey,
+        label: definition.label,
+        goal: definition.goal,
+        backstory: definition.backstory,
+        model: definition.model || null,
+        enabled: definition.enabled,
+        sortOrder: definition.sortOrder ?? index
+      }))
     });
   });
 

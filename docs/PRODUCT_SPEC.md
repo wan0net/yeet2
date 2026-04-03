@@ -496,6 +496,20 @@ Fields:
 
 Implement these first-class roles for MVP.
 
+Projects are not limited to exactly one staff member per role.
+
+yeet2 should support multiple configured staff members for the same functional role, such as multiple planners, multiple implementers, or multiple reviewers.
+
+This is important for:
+
+- assigning different models to the same type of work
+- comparing or rotating outputs across multiple agents in the same lane
+- scaling a role horizontally when a project needs more throughput
+
+The control UI and Brain configuration model should therefore treat role definitions as a list of staff members, not a fixed singleton map keyed only by role type.
+
+Each configured staff member should still declare a primary role, but there may be more than one staff member with that same primary role.
+
 ### Planner
 
 Responsibilities:

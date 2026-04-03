@@ -60,8 +60,8 @@ function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): strin
   }
 }
 
-function roleConfiguredModel(project: LoadedProject, roleKey: string): string | null {
-  const definition = project.roleDefinitions.find((entry) => entry.roleKey === roleKey);
+function roleConfiguredModel(project: LoadedProject, definitionId: string): string | null {
+  const definition = project.roleDefinitions.find((entry) => entry.id === definitionId);
   const model = definition?.model?.trim();
   return model && model.length > 0 ? model : null;
 }
@@ -368,10 +368,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 const currentTask = role.currentTask?.task ?? null;
                 const nextTask = role.nextTask?.task ?? null;
                 const latestJobLink = latestJob ? jobGitHubCompareUrl(latestJob, project.repoUrl, latestJob.branchName) ?? githubRepo?.webUrl ?? null : null;
-                const configuredModel = roleConfiguredModel(project, role.roleKey);
+                const configuredModel = roleConfiguredModel(project, role.id);
 
                 return (
-                  <article key={role.roleKey} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
+                  <article key={role.id} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <span className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${role.visual.accent}`}>
@@ -454,7 +454,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <div className="mt-4 space-y-3">
                 {agentView.roles.map((role, index) => {
                   return (
-                    <div key={role.roleKey} className="flex items-center gap-3">
+                    <div key={role.id} className="flex items-center gap-3">
                       <div className="flex w-7 flex-col items-center">
                         <span className={`h-3 w-3 rounded-full ${role.visual.dot}`} />
                         {index < agentView.roles.length - 1 ? <span className="mt-1 h-8 w-px bg-slate-200" /> : null}
@@ -470,7 +470,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                           {(role.currentTask?.task.title || role.nextTask?.task.title || "No assignment staged yet")}
                         </div>
                         <div className="mt-2 truncate text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                          {roleConfiguredModel(project, role.roleKey) || "brain default model"}
+                          {roleConfiguredModel(project, role.id) || "brain default model"}
                         </div>
                       </div>
                     </div>

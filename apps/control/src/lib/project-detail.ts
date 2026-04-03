@@ -288,6 +288,7 @@ export function groupTasksByState(project: ProjectRecord): Array<{
 }
 
 export interface AgentPresenceRoleSnapshot {
+  id: string;
   roleKey: string;
   label: string;
   visual: AgentPresenceRoleVisuals;
@@ -454,6 +455,7 @@ export function agentPresenceOverview(project: ProjectRecord): AgentPresenceOver
     }
 
     return {
+      id: definition.id,
       roleKey,
       label,
       visual,
