@@ -184,6 +184,8 @@ A web UI and API for:
 
 It should also include a project-level agent presence view that gives the operator a playful, at-a-glance sense of where specialist agents are and what they are doing. The MVP does not need 3D; a lightweight 2D board, map, timeline, or panel treatment is acceptable if it makes agent state easy to read.
 
+The intended visual direction for yeet2 Control is full alignment with the `link42.app` theme system, typography, spacing, and header language. Functional progress is allowed to continue ahead of complete visual convergence, but the target state is not merely inspiration from link42; it is deliberate UI alignment.
+
 ### 2. yeet2 Brain
 
 The orchestration layer responsible for:

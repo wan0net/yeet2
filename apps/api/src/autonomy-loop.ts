@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import {
   advanceProject,
   createProjectPullRequest,
+  getRegisteredProject,
   listRegisteredProjects,
   mergeProjectPullRequest,
   planProject,
@@ -310,7 +311,7 @@ function shouldRecordAutonomyDecisionLog(
   );
 }
 
-class AutonomyLoopManager {
+export class AutonomyLoopManager {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private stopping = false;
@@ -350,6 +351,20 @@ class AutonomyLoopManager {
     if (sweep) {
       await sweep.catch(() => undefined);
     }
+  }
+
+  async triggerProject(projectId: string): Promise<AutonomyLoopTelemetry> {
+    if (this.currentSweep) {
+      await this.currentSweep.catch(() => undefined);
+    }
+
+    const loaded = await getRegisteredProject(projectId);
+    if (!loaded.project) {
+      throw new Error("Project not found");
+    }
+
+    await this.processProject(loaded.project);
+    return getAutonomyLoopTelemetry(projectId) ?? buildTelemetry(loaded.project, new Date(), "skip", "idle", "Project run completed");
   }
 
   private scheduleNextSweep(): void {

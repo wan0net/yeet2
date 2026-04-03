@@ -9,6 +9,7 @@ import type {
 } from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
+import type { AutonomyLoopManager } from "../autonomy-loop";
 import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
 import {
   advanceProject,
@@ -281,7 +282,10 @@ function parseProjectApprovalBody(body: unknown): { input: { action: ProjectAppr
   };
 }
 
-export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
+export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLoopManager }> = async (
+  app: FastifyInstance,
+  options
+) => {
   app.get("/projects", async () => {
     return listRegisteredProjects();
   });
@@ -358,6 +362,39 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to update project autonomy"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/run", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    try {
+      const telemetry = await options.loopManager.triggerProject(projectId);
+      const project = await getRegisteredProject(projectId);
+      return reply.code(200).send({
+        project: project.project,
+        telemetry
+      });
+    } catch (error) {
+      if (error instanceof ProjectAutonomyError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      const message = error instanceof Error ? error.message : "Unable to trigger project run";
+      app.log.error(error);
+      return reply.code(message === "Project not found" ? 404 : 500).send({
+        error: message === "Project not found" ? "project_not_found" : "internal_error",
+        message
       });
     }
   });

@@ -16,12 +16,12 @@ app.get("/health", async () => {
   };
 });
 
-await app.register(registerProjectRoutes);
-await app.register(registerWorkerRoutes);
-
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "0.0.0.0";
 const loopManager = createAutonomyLoopManager(app.log);
+
+await app.register(registerProjectRoutes, { loopManager });
+await app.register(registerWorkerRoutes);
 
 app.addHook("onClose", async () => {
   await loopManager.stop();

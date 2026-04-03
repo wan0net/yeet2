@@ -67,7 +67,21 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
     setBranchCleanupMode(autonomy.branchCleanupMode);
   }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode, autonomy.mergeApprovalMode, autonomy.branchCleanupMode]);
 
-  async function persistAutonomy(nextMode: ProjectAutonomyMode = mode) {
+  async function triggerProjectRun() {
+    const response = await fetch(`/api/projects/${projectId}/run`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json"
+      }
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string; detail?: unknown; message?: string } | null;
+
+    if (!response.ok) {
+      throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to trigger a project run"));
+    }
+  }
+
+  async function persistAutonomy(nextMode: ProjectAutonomyMode = mode, runImmediately = false) {
     setIsSaving(true);
     setError(null);
     setMessage(null);
@@ -94,8 +108,12 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to update autonomy mode"));
       }
 
+      if (runImmediately) {
+        await triggerProjectRun();
+      }
+
       setMode(nextMode);
-      setMessage(`Updated autonomy settings for ${projectName}.`);
+      setMessage(runImmediately ? `Updated autonomy settings for ${projectName} and triggered a run.` : `Updated autonomy settings for ${projectName}.`);
       router.refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to update autonomy mode");
@@ -133,7 +151,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
                 <button
                   className="rounded-full border border-emerald-300 bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={isSaving || autonomy.mode === "autonomous"}
-                  onClick={() => void persistAutonomy("autonomous")}
+                  onClick={() => void persistAutonomy("autonomous", true)}
                   type="button"
                 >
                   {isSaving && mode === "autonomous" ? "Starting..." : "Start AI"}
@@ -153,6 +171,14 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
                   type="button"
                 >
                   Supervised mode
+                </button>
+                <button
+                  className="rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2.5 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving}
+                  onClick={() => void persistAutonomy(mode, true)}
+                  type="button"
+                >
+                  Run now
                 </button>
               </div>
             </div>
