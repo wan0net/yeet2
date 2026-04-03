@@ -16,6 +16,7 @@
     </div>
     <div class="token-row">
       <a class="btn" href="/projects">Open projects</a>
+      <a class="btn secondary" href="/projects/new">Add project</a>
       <a class="btn secondary" href="/jobs">Inspect jobs</a>
       <a class="btn secondary" href="/approvals">Review approvals</a>
     </div>

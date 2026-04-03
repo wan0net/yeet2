@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { ActionData, PageData } from "./$types";
+  import type { PageData } from "./$types";
   import { formatConstitutionFiles } from "$lib/projects";
   import { activeMission } from "$lib/project-detail";
 
-  let { data, form }: { data: PageData; form: ActionData } = $props();
+  let { data }: { data: PageData } = $props();
 </script>
 
 <section class="page-header">
@@ -11,46 +11,25 @@
     <span class="eyebrow">Project registry</span>
     <div>
       <h1>Projects</h1>
-      <p>Attach repositories, inspect constitutions, and move into active missions from one place.</p>
+      <p>Browse active work, inspect constitutions, and jump into the project that needs attention next.</p>
     </div>
   </div>
-</section>
-
-<section class="card">
-  <div class="card-header">Register project</div>
-  <div class="card-body">
-    <form class="split-grid" method="POST">
-      <label>
-        Name
-        <input name="name" placeholder="forgeyard" />
-      </label>
-      <label>
-        Repo URL
-        <input name="repo_url" placeholder="https://github.com/wan0net/yeet2.git" />
-      </label>
-      <label>
-        Default branch
-        <input name="default_branch" placeholder="main" value="main" />
-      </label>
-      <label>
-        Local path
-        <input name="local_path" placeholder="/srv/forgeyard (optional)" />
-      </label>
-      <div class="token-row" style="grid-column: 1 / -1;">
-        <button formaction="?/register" type="submit">Register project</button>
-        {#if form?.registerError}
-          <span class="pill danger">{form.registerError}</span>
-        {/if}
-      </div>
-    </form>
-  </div>
+  <a class="btn" href="/projects/new">Add project</a>
 </section>
 
 <section class="card">
   <div class="card-header">Attached projects</div>
   <div class="card-body">
     {#if data.projects.length === 0}
-      <div class="empty-state">No projects registered yet.</div>
+      <div class="empty-state">
+        <div class="stack">
+          <strong>No projects registered yet.</strong>
+          <span>Start by attaching a repository on the dedicated project setup page.</span>
+          <div>
+            <a class="btn" href="/projects/new">Create your first project</a>
+          </div>
+        </div>
+      </div>
     {:else}
       <div class="stack">
         {#each data.projects as project}
