@@ -6,6 +6,7 @@ import { SectionCard, StatusBadge } from "@yeet2/ui";
 import { formatTimestamp, jobStatusTone, missionRecentJobs, missionResultSummaries, stageLabel } from "../../../lib/project-detail";
 import { fetchMissionDetail } from "../../../lib/project-resource";
 import { planningProvenanceLabel, planningProvenanceTone } from "../../../lib/projects";
+import { JobLogViewer } from "../../jobs/job-log-viewer";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,7 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                         <span>Status: <span className="font-medium text-slate-700">{task.status}</span></span>
                         <span>Assigned role: <span className="font-medium text-slate-700">{stageLabel(task.agentRole)}</span></span>
+                        {task.assignedRoleDefinitionLabel ? <span>Staff: <span className="font-medium text-slate-700">{task.assignedRoleDefinitionLabel}</span></span> : null}
                         <span>Priority {task.priority}</span>
                         <span>Attempts {task.attempts}</span>
                       </div>
@@ -145,6 +147,7 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                         <span>Started: <span className="font-medium text-slate-700">{formatTimestamp(latestJob.startedAt) ?? "Unknown"}</span></span>
                         <span>Completed: <span className="font-medium text-slate-700">{formatTimestamp(latestJob.completedAt) ?? "Not completed"}</span></span>
                         <span>Branch: <span className="font-medium text-slate-700">{latestJob.branchName || "—"}</span></span>
+                        {latestJob.assignedRoleDefinitionModel ? <span>Model: <span className="font-medium text-slate-700">{latestJob.assignedRoleDefinitionModel}</span></span> : null}
                       </div>
                     </div>
                   ) : null}
@@ -174,6 +177,8 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                     </div>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>Assigned role: <span className="font-medium text-slate-700">{stageLabel(task.agentRole)}</span></span>
+                      {job.assignedRoleDefinitionLabel ? <span>Staff: <span className="font-medium text-slate-700">{job.assignedRoleDefinitionLabel}</span></span> : null}
+                      {job.assignedRoleDefinitionModel ? <span>Model: <span className="font-medium text-slate-700">{job.assignedRoleDefinitionModel}</span></span> : null}
                       <span>Executor: <span className="font-medium text-slate-700">{job.executorType}</span></span>
                       <span>Branch: <span className="font-medium text-slate-700">{job.branchName || "—"}</span></span>
                     </div>
@@ -197,6 +202,9 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Outputs</div>
                     <div className="mt-2 text-xs text-slate-600">{job.artifactSummary ?? "No artifact summary recorded"}</div>
                     {job.logPath ? <div className="mt-1 break-all font-mono text-xs text-slate-600">{job.logPath}</div> : null}
+                    <div className="mt-3">
+                      <JobLogViewer jobId={job.id} projectId={project.id} />
+                    </div>
                   </div>
                 </div>
               </article>

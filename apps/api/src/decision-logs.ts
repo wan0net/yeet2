@@ -1,4 +1,4 @@
-import type { ProjectDecisionLogSummary, DecisionLogKind } from "@yeet2/domain";
+import type { ProjectDecisionLogSummary, DecisionLogKind, OperatorGuidanceSummary } from "@yeet2/domain";
 
 import { prisma } from "./db";
 
@@ -58,4 +58,46 @@ export async function loadRecentDecisionLogs(projectId: string, take = 5): Promi
   });
 
   return logs.map(toDecisionLogSummary);
+}
+
+function toOperatorGuidanceSummary(log: DbDecisionLog): OperatorGuidanceSummary | null {
+  if (log.kind !== "message" || log.actor.trim().toLowerCase() !== "operator") {
+    return null;
+  }
+
+  const detail = typeof log.detail === "object" && log.detail !== null ? (log.detail as Record<string, unknown>) : {};
+  const source = typeof detail.source === "string" ? detail.source.trim().toLowerCase() : "";
+  if (source && source !== "operator") {
+    return null;
+  }
+
+  const content = log.summary.trim();
+  if (!content) {
+    return null;
+  }
+
+  return {
+    id: log.id,
+    actor: log.actor,
+    content,
+    mentions: Array.isArray(detail.mentions)
+      ? detail.mentions.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)
+      : [],
+    replyToId: typeof detail.replyToId === "string" ? detail.replyToId.trim() || null : null,
+    createdAt: log.createdAt.toISOString()
+  };
+}
+
+export async function loadRecentOperatorGuidance(projectId: string, take = 6): Promise<OperatorGuidanceSummary[]> {
+  const logs = await prisma.decisionLog.findMany({
+    where: {
+      projectId,
+      kind: "message",
+      actor: "operator"
+    },
+    orderBy: { createdAt: "desc" },
+    take
+  });
+
+  return logs.map(toOperatorGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null);
 }

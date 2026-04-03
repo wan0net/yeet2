@@ -47,6 +47,7 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
   const [replyToId, setReplyToId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submissionNote, setSubmissionNote] = useState<string | null>(null);
 
   const replyTarget = useMemo(
     () => entries.find((entry) => entry.id === replyToId) ?? null,
@@ -61,6 +62,7 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
 
     setIsSubmitting(true);
     setError(null);
+    setSubmissionNote(null);
 
     try {
       const response = await fetch(`/api/projects/${projectId}/messages`, {
@@ -74,7 +76,13 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
           replyToId
         })
       });
-      const payload = (await response.json().catch(() => null)) as { detail?: unknown; message?: string; error?: string } | null;
+      const payload = (await response.json().catch(() => null)) as {
+        detail?: unknown;
+        message?: string;
+        error?: string;
+        runTriggered?: boolean;
+        triggerError?: string | null;
+      } | null;
 
       if (!response.ok) {
         const message =
@@ -90,6 +98,13 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
 
       setContent("");
       setReplyToId(null);
+      if (payload?.triggerError) {
+        setSubmissionNote(`Message posted, but the project run could not be triggered yet: ${payload.triggerError}`);
+      } else if (payload?.runTriggered) {
+        setSubmissionNote("Message posted and the project loop was triggered immediately.");
+      } else {
+        setSubmissionNote("Message posted.");
+      }
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to post message");
@@ -121,7 +136,9 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
           value={content}
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-slate-500">Use `@name` mentions to call out a teammate or reply inline to a workflow message.</div>
+          <div className="text-xs text-slate-500">
+            Use `@name` mentions to call out a teammate or reply inline to a workflow message. In supervised or autonomous mode, posting here immediately nudges the project loop.
+          </div>
           <button
             className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             disabled={isSubmitting || !content.trim()}
@@ -131,6 +148,7 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
           </button>
         </div>
         {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div> : null}
+        {submissionNote ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{submissionNote}</div> : null}
       </form>
 
       <div className="space-y-3">
@@ -144,6 +162,10 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
             const replyTargetEntry = replyToIdValue ? entries.find((candidate) => candidate.id === replyToIdValue) ?? null : null;
             const contentToShow = entry.summary ?? entry.title;
             const actor = entry.actor ?? "system";
+            const guidanceCount = typeof entry.detail?.guidanceCount === "number" ? entry.detail.guidanceCount : 0;
+            const guidancePreview = Array.isArray(entry.detail?.guidancePreview)
+              ? entry.detail.guidancePreview.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+              : [];
             return (
               <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -185,6 +207,19 @@ export function ProjectTeamChat({ projectId, entries }: ProjectTeamChatProps) {
                     )
                   )}
                 </div>
+                {guidanceCount > 0 ? (
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-900">
+                    <div className="font-medium">Used operator guidance</div>
+                    <div className="mt-1">{guidanceCount} guidance message{guidanceCount === 1 ? "" : "s"} informed this step.</div>
+                    {guidancePreview.length > 0 ? (
+                      <div className="mt-2 space-y-1">
+                        {guidancePreview.slice(0, 3).map((preview, index) => (
+                          <div key={`${entry.id}-guidance-${index}`}>- {preview}</div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </article>
             );
           })

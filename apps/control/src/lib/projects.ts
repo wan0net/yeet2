@@ -42,6 +42,9 @@ export interface ProjectJobRecord {
   taskId: string;
   workerId: string | null;
   executorType: string;
+  assignedRoleDefinitionId: string | null;
+  assignedRoleDefinitionLabel: string | null;
+  assignedRoleDefinitionModel: string | null;
   workspacePath: string;
   branchName: string;
   status: string;
@@ -133,6 +136,15 @@ export interface ProjectDecisionLogRecord {
   referenceUrl: string | null;
 }
 
+export interface OperatorGuidanceRecord {
+  id: string;
+  actor: string;
+  content: string;
+  mentions: string[];
+  replyToId: string | null;
+  createdAt: string | null;
+}
+
 export interface ProjectMissionRecord {
   id: string;
   projectId: string;
@@ -161,6 +173,7 @@ export interface ProjectRecord {
   roleDefinitions: ProjectRoleDefinition[];
   missions: ProjectMissionRecord[];
   decisionLogs: ProjectDecisionLogRecord[];
+  operatorGuidance: OperatorGuidanceRecord[];
   dispatchableRoles?: string[];
   nextDispatchableTaskId?: string;
   nextDispatchableTaskRole?: string;
@@ -1044,6 +1057,9 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     taskId: stringValue(raw.taskId, raw.task_id),
     workerId: stringValue(raw.workerId, raw.worker_id, raw.executorWorkerId, raw.executor_worker_id) || null,
     executorType: stringValue(raw.executorType, raw.executor_type) || "unknown",
+    assignedRoleDefinitionId: stringValue(raw.assignedRoleDefinitionId, raw.assigned_role_definition_id) || null,
+    assignedRoleDefinitionLabel: stringValue(raw.assignedRoleDefinitionLabel, raw.assigned_role_definition_label) || null,
+    assignedRoleDefinitionModel: stringValue(raw.assignedRoleDefinitionModel, raw.assigned_role_definition_model) || null,
     workspacePath,
     branchName,
     status: status || "unknown",
@@ -1240,6 +1256,38 @@ function normalizeDecisionLogs(raw: RawRecord): ProjectDecisionLogRecord[] {
     .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
 }
 
+function normalizeOperatorGuidanceRecord(value: unknown): OperatorGuidanceRecord | null {
+  const raw = asRecord(value);
+  const id = stringValue(raw.id);
+  const content = stringValue(raw.content, raw.summary, raw.message);
+
+  if (!id && !content) {
+    return null;
+  }
+
+  return {
+    id: id || `guidance-${Math.random().toString(36).slice(2, 8)}`,
+    actor: stringValue(raw.actor) || "operator",
+    content,
+    mentions: stringArrayValue(raw.mentions),
+    replyToId: stringOrNull(raw.replyToId ?? raw.reply_to_id),
+    createdAt: stringValue(raw.createdAt, raw.created_at) || null
+  };
+}
+
+function normalizeOperatorGuidance(raw: RawRecord): OperatorGuidanceRecord[] {
+  const candidates = Array.isArray(raw.operatorGuidance)
+    ? raw.operatorGuidance
+    : Array.isArray(raw.operator_guidance)
+      ? raw.operator_guidance
+      : [];
+
+  return candidates
+    .map(normalizeOperatorGuidanceRecord)
+    .filter((entry): entry is OperatorGuidanceRecord => entry !== null)
+    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+}
+
 function normalizeBlockers(raw: RawRecord): ProjectBlockerRecord[] {
   const candidates = Array.isArray(raw.blockers)
     ? raw.blockers
@@ -1302,6 +1350,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     roleDefinitions: normalizeProjectRoleDefinitions(raw),
     missions,
     decisionLogs: normalizeDecisionLogs(raw),
+    operatorGuidance: normalizeOperatorGuidance(raw),
     dispatchableRoles: stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles),
     nextDispatchableTaskId: stringValue(raw.nextDispatchableTaskId, raw.next_dispatchable_task_id) || undefined,
     nextDispatchableTaskRole: stringValue(raw.nextDispatchableTaskRole, raw.next_dispatchable_task_role) || undefined,

@@ -45,6 +45,7 @@ import { controlBaseUrl, fetchProjectRoleModels } from "../../../lib/project-res
 import { ProjectAutonomyPanel } from "./project-autonomy-panel";
 import { ProjectRolesEditor } from "./project-roles-editor";
 import { ProjectTeamChat } from "./project-team-chat";
+import { JobLogViewer } from "../../jobs/job-log-viewer";
 
 type LoadedProject = NonNullable<Awaited<ReturnType<typeof fetchProject>>>;
 
@@ -230,6 +231,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <ProjectRolesEditor projectId={project.id} projectName={project.name} roleDefinitions={project.roleDefinitions} />
 
       <ProjectAutonomyPanel projectId={project.id} projectName={project.name} autonomy={project.autonomy} />
+
+      <SectionCard title="Active operator guidance">
+        {project.operatorGuidance.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+            No active operator guidance yet. Operator messages stay in Postgres and the newest ones now feed planning and executor task context.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {project.operatorGuidance.map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-violet-200 bg-violet-50 px-4 py-4 text-sm text-violet-900">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-medium">{entry.actor}</div>
+                  <div className="text-xs text-violet-700">{formatTimestamp(entry.createdAt) ?? "Unknown time"}</div>
+                </div>
+                <div className="mt-2 leading-6">{entry.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
 
       <SectionCard title="Cost analysis">
         {enabledRoleCostRows.length === 0 ? (
@@ -695,6 +716,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Outputs</div>
                     <div className="mt-2 text-xs text-slate-600">{job.artifactSummary ?? "No artifact summary recorded"}</div>
                     {job.logPath ? <div className="mt-1 break-all font-mono text-xs text-slate-600">{job.logPath}</div> : null}
+                    <div className="mt-3">
+                      <JobLogViewer jobId={job.id} projectId={project.id} />
+                    </div>
                   </div>
                 </div>
               </article>

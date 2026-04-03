@@ -339,6 +339,31 @@ def _continuation_summary(planning_input: PlanningInput) -> str:
     return " ".join(parts)
 
 
+def _operator_guidance(planning_input: PlanningInput) -> list[dict[str, Any]]:
+    raw_guidance = planning_input.raw_payload.get("operator_guidance")
+    if not isinstance(raw_guidance, list):
+        return []
+
+    guidance: list[dict[str, Any]] = []
+    for item in raw_guidance:
+        if isinstance(item, Mapping):
+            guidance.append(dict(item))
+    return guidance
+
+
+def _operator_guidance_summary(planning_input: PlanningInput) -> str:
+    guidance = _operator_guidance(planning_input)
+    if not guidance:
+        return ""
+
+    latest = guidance[0]
+    actor = _clean_text(latest.get("actor")) or "operator"
+    content = _clean_text(latest.get("content"))
+    if not content:
+        return ""
+    return f"Latest operator guidance from {actor}: {content}"
+
+
 def _summarize_text(text: str) -> str:
     text = " ".join(text.split())
     if not text:
@@ -534,23 +559,24 @@ def _fallback_task(project_name: str, note: str = "") -> PlannedTask:
 
 def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: list[str]) -> PlanningResult:
     continuation_summary = _continuation_summary(planning_input)
+    guidance_summary = _operator_guidance_summary(planning_input)
     mission = _compose_mission(
         planning_input.project_id,
         planning_input.project_name,
         summary,
         themes,
         planning_input.requested_by,
-        continuation_summary=continuation_summary,
+        continuation_summary=" ".join(bit for bit in (continuation_summary, guidance_summary) if bit),
     )
 
     primary_theme = themes[0] if themes else None
     secondary_theme = themes[1] if len(themes) > 1 else None
 
     tasks = [
-        _primary_task(planning_input.project_name, primary_theme),
-        _implementation_task(planning_input.project_name, secondary_theme or primary_theme),
-        _verification_task(planning_input.project_name, primary_theme),
-        _fallback_task(planning_input.project_name),
+        _primary_task(planning_input.project_name, primary_theme, guidance_summary),
+        _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
+        _verification_task(planning_input.project_name, primary_theme, guidance_summary),
+        _fallback_task(planning_input.project_name, guidance_summary),
     ]
 
     return PlanningResult(
@@ -576,6 +602,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     constitution_themes = themes or [project_name]
     role_definitions = _effective_role_definitions(planning_input)
     continuation_summary = _continuation_summary(planning_input)
+    guidance_summary = _operator_guidance_summary(planning_input)
     mission_history = _mission_history(planning_input)
 
     def allow_delegation_for(role_key: str) -> bool:
@@ -603,6 +630,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         "summary": constitution_summary,
         "themes": constitution_themes,
         "continuation_summary": continuation_summary,
+        "operator_guidance": _operator_guidance(planning_input),
         "mission_history": mission_history,
         "role_definitions": [asdict(definition) for definition in role_definitions],
         "constitution": {
@@ -659,21 +687,36 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         planning_input.requested_by,
         title=title_text or None,
         objective=objective_text or None,
-        continuation_summary=continuation_summary,
+        continuation_summary=" ".join(bit for bit in (continuation_summary, guidance_summary) if bit),
     )
 
     primary_theme = themes_text[0] if themes_text else None
     secondary_theme = themes_text[1] if len(themes_text) > 1 else None
 
     tasks_result = [
-        _primary_task(planning_input.project_name, primary_theme, _note_for_role_key(notes, "planner") or _note_for(notes, Role.PLANNER)),
+        _primary_task(
+            planning_input.project_name,
+            primary_theme,
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "planner") or _note_for(notes, Role.PLANNER)) if bit),
+        ),
         _implementation_task(
             planning_input.project_name,
             secondary_theme or primary_theme,
-            _note_for_role_key(notes, "implementer") or _note_for(notes, Role.IMPLEMENTER),
+            " ".join(
+                bit
+                for bit in (guidance_summary, _note_for_role_key(notes, "implementer") or _note_for(notes, Role.IMPLEMENTER))
+                if bit
+            ),
         ),
-        _verification_task(planning_input.project_name, primary_theme, _note_for_role_key(notes, "qa") or _note_for(notes, Role.QA)),
-        _fallback_task(planning_input.project_name, _note_for_role_key(notes, "reviewer") or _note_for(notes, Role.REVIEWER)),
+        _verification_task(
+            planning_input.project_name,
+            primary_theme,
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "qa") or _note_for(notes, Role.QA)) if bit),
+        ),
+        _fallback_task(
+            planning_input.project_name,
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "reviewer") or _note_for(notes, Role.REVIEWER)) if bit),
+        ),
     ]
 
     if note := _note_for_role_key(notes, "architect") or _note_for(notes, Role.ARCHITECT):

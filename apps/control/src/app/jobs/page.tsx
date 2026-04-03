@@ -17,6 +17,7 @@ import {
 } from "../../lib/projects";
 import type { ProjectRecord } from "../../lib/projects";
 import { controlBaseUrl } from "../../lib/project-resource";
+import { JobLogViewer } from "./job-log-viewer";
 
 export const dynamic = "force-dynamic";
 
@@ -186,6 +187,16 @@ export default async function JobsPage() {
                             Role: <span className="font-medium text-slate-700">{task.agentRole}</span>
                           </span>
                         ) : null}
+                        {job.assignedRoleDefinitionLabel ? (
+                          <span>
+                            Staff: <span className="font-medium text-slate-700">{job.assignedRoleDefinitionLabel}</span>
+                          </span>
+                        ) : null}
+                        {job.assignedRoleDefinitionModel ? (
+                          <span>
+                            Model: <span className="font-medium text-slate-700">{job.assignedRoleDefinitionModel}</span>
+                          </span>
+                        ) : null}
                         <span>
                           Executor: <span className="font-medium text-slate-700">{job.executorType}</span>
                         </span>
@@ -311,6 +322,9 @@ export default async function JobsPage() {
                           </div>
                         ) : null}
                       </dl>
+                      <div className="mt-3">
+                        <JobLogViewer jobId={job.id} projectId={project.id} />
+                      </div>
                     </div>
                   </div>
                 </article>

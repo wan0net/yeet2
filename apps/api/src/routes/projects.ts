@@ -10,11 +10,13 @@ import type {
 
 import { RepositoryPathError } from "../constitution";
 import type { AutonomyLoopManager } from "../autonomy-loop";
-import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
+import { prisma } from "../db";
+import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
 import {
   advanceProject,
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
+  readProjectJobLog,
   applyProjectBlockerApproval,
   dispatchTask,
   getRegisteredProject,
@@ -29,6 +31,7 @@ import {
   ProjectRegistrationError,
   ProjectAutonomyError,
   ProjectRoleDefinitionError,
+  ProjectJobLogError,
   ProjectPullRequestError,
   createProjectMessage,
   replaceProjectRoleDefinitions,
@@ -343,9 +346,21 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(200).send({ models });
     } catch (error) {
       if (error instanceof OpenRouterModelCatalogError) {
-        return reply.code(error.statusCode).send({
-          error: error.code,
-          message: error.message
+        const configuredModels = await prisma.projectRoleDefinition.findMany({
+          where: {
+            model: {
+              not: null
+            }
+          },
+          select: {
+            model: true
+          }
+        });
+
+        return reply.code(200).send({
+          models: buildFallbackModelCatalog(configuredModels.map((entry) => entry.model ?? "").filter(Boolean)),
+          degraded: true,
+          warning: error.message
         });
       }
 
@@ -572,6 +587,34 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
     }
   });
 
+  app.get("/projects/:projectId/jobs/:jobId/log", async (request, reply) => {
+    const { projectId, jobId } = request.params as { projectId?: string; jobId?: string };
+    if (!projectId || !jobId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and jobId are required"
+      });
+    }
+
+    try {
+      const log = await readProjectJobLog(projectId, jobId);
+      return reply.code(200).send({ log });
+    } catch (error) {
+      if (error instanceof ProjectJobLogError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to load the job log"
+      });
+    }
+  });
+
   app.post("/projects/:projectId/advance", async (request, reply) => {
     const { projectId } = request.params as { projectId?: string };
     if (!projectId) {
@@ -747,7 +790,27 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const message = await createProjectMessage(projectId, parsedBody.input);
-      return reply.code(201).send({ message });
+      const project = await getRegisteredProject(projectId);
+      const shouldTriggerRun = Boolean(project.project && project.project.autonomyMode !== "manual");
+
+      let telemetry: Awaited<ReturnType<AutonomyLoopManager["triggerProject"]>> | null = null;
+      let triggerError: string | null = null;
+
+      if (shouldTriggerRun) {
+        try {
+          telemetry = await options.loopManager.triggerProject(projectId);
+        } catch (error) {
+          triggerError = error instanceof Error ? error.message : "Unable to trigger project run";
+          app.log.error({ error, projectId }, "Unable to trigger project run after operator message");
+        }
+      }
+
+      return reply.code(201).send({
+        message,
+        runTriggered: shouldTriggerRun,
+        telemetry,
+        triggerError
+      });
     } catch (error) {
       if (error instanceof ProjectRegistrationError || error instanceof ProjectRoleDefinitionError) {
         return reply.code(error.statusCode).send({

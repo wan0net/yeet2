@@ -271,11 +271,29 @@ def _build_task_file(workspace_path: Path, payload: dict[str, Any]) -> Path:
     lines = [
         f"Task ID: {payload['task_id']}",
         f"Title: {payload['task_title']}",
+        f"Assigned Staff: {cleanText(payload.get('assigned_role_definition_label')) or 'Unassigned'}",
+        f"Assigned Model: {cleanText(payload.get('llm_model')) or 'Executor default'}",
         "",
         "Description:",
         str(payload["task_description"]).strip(),
         "",
     ]
+    metadata = payload.get("metadata")
+    if isinstance(metadata, dict):
+        operator_guidance = metadata.get("operator_guidance")
+        if isinstance(operator_guidance, list):
+            guidance_lines = []
+            for entry in operator_guidance[:4]:
+                if not isinstance(entry, dict):
+                    continue
+                actor = cleanText(entry.get("actor")) or "operator"
+                content = cleanText(entry.get("content"))
+                if content:
+                    guidance_lines.append(f"- {actor}: {content}")
+            if guidance_lines:
+                lines.extend(["Operator Guidance:"])
+                lines.extend(guidance_lines)
+                lines.append("")
     criteria = payload.get("acceptance_criteria")
     if isinstance(criteria, list) and criteria:
         lines.append("Acceptance Criteria:")
@@ -525,6 +543,12 @@ class OpenHandsAdapter:
             task_file = _build_task_file(workspace_path, record.payload)
             record.payload["task_file"] = str(task_file)
             _append_log(log_path, f"task_file: {task_file}")
+            assigned_staff = cleanText(record.payload.get("metadata", {}).get("assigned_role_definition_label") if isinstance(record.payload.get("metadata"), dict) else "")
+            assigned_model = cleanText(record.payload.get("llm_model"))
+            if assigned_staff:
+                _append_log(log_path, f"assigned_staff: {assigned_staff}")
+            if assigned_model:
+                _append_log(log_path, f"assigned_model: {assigned_model}")
 
             mode = (os.getenv("YEET2_EXECUTOR_MODE") or "openhands").strip().lower()
             record.payload["execution_mode"] = mode
@@ -631,6 +655,11 @@ class OpenHandsAdapter:
 
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        llm_model_override = cleanText(record.payload.get("llm_model"))
+        if llm_model_override:
+            env["LLM_MODEL"] = llm_model_override
+            env["OPENAI_MODEL_NAME"] = llm_model_override
+            env["MODEL"] = llm_model_override
 
         launch_command = command
         config_path: Path | None = None

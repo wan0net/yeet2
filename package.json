@@ -1,6 +1,7 @@
 {
   "name": "yeet2",
   "private": true,
+  "license": "BSD-3-Clause",
   "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "pnpm -r --parallel --if-present dev",

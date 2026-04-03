@@ -12,6 +12,14 @@ export interface OpenRouterModelCatalogItem {
   requestCostUsd: number | null;
 }
 
+const STATIC_FALLBACK_MODELS = [
+  "openrouter/openai/gpt-4.1-mini",
+  "openrouter/openai/gpt-4.1",
+  "openrouter/anthropic/claude-sonnet-4",
+  "openrouter/anthropic/claude-opus-4",
+  "openrouter/google/gemini-2.5-pro"
+] as const;
+
 export class OpenRouterModelCatalogError extends Error {
   constructor(
     public readonly code: "not_configured" | "upstream_error" | "invalid_response",
@@ -217,4 +225,29 @@ export async function fetchOpenRouterModelCatalog(): Promise<OpenRouterModelCata
 
     return left.id.localeCompare(right.id, undefined, { sensitivity: "base" });
   });
+}
+
+export function buildFallbackModelCatalog(modelIds: string[]): OpenRouterModelCatalogItem[] {
+  const uniqueIds = [...new Set([...STATIC_FALLBACK_MODELS, ...modelIds.map((value) => value.trim()).filter(Boolean)])];
+
+  return uniqueIds
+    .map((id) => {
+      const provider = id.includes("/") ? id.split("/", 1)[0]?.trim() || null : null;
+      const name = id.split("/").at(-1)?.trim() || id;
+
+      return {
+        id,
+        name,
+        contextLength: null,
+        description: "Fallback model entry",
+        provider,
+        modality: null,
+        inputModalities: [],
+        outputModalities: [],
+        promptCostPerMillionUsd: null,
+        completionCostPerMillionUsd: null,
+        requestCostUsd: null
+      } satisfies OpenRouterModelCatalogItem;
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }));
 }

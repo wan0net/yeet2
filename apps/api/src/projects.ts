@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -12,6 +12,7 @@ import type {
   Task as DbTask
 } from "@yeet2/db";
 import type {
+  OperatorGuidanceSummary,
   PlanningProvenance,
   ProjectApprovalAction,
   ProjectDecisionLogSummary,
@@ -25,7 +26,7 @@ import type {
 } from "@yeet2/domain";
 
 import { prisma } from "./db";
-import { loadRecentDecisionLogs, recordDecisionLog } from "./decision-logs";
+import { loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
 import {
   buildGitHubCompareUrl,
   buildGitHubPullRequestBody,
@@ -58,6 +59,9 @@ export interface ProjectJobSummary {
   taskId: string;
   executorType: string;
   workerId: string | null;
+  assignedRoleDefinitionId: string | null;
+  assignedRoleDefinitionLabel: string | null;
+  assignedRoleDefinitionModel: string | null;
   workspacePath: string;
   branchName: string;
   githubCompareUrl: string | null;
@@ -163,6 +167,7 @@ export interface ProjectSummary {
   constitutionStatus: ConstitutionInspection["status"];
   constitution: ConstitutionInspection;
   decisionLogs: ProjectDecisionLogSummary[];
+  operatorGuidance: OperatorGuidanceSummary[];
   missions: ProjectMissionSummary[];
   dispatchableRoles: string[];
   nextDispatchableTaskId: string | null;
@@ -191,6 +196,13 @@ export interface ProjectApprovalResult {
   project: ProjectSummary;
   action: ProjectApprovalAction;
   job?: ProjectJobSummary;
+}
+
+export interface ProjectJobLogResult {
+  jobId: string;
+  logPath: string | null;
+  content: string;
+  truncated: boolean;
 }
 
 export interface ProjectRoleDefinitionInput {
@@ -278,6 +290,17 @@ export class ProjectPullRequestError extends Error {
   ) {
     super(message);
     this.name = "ProjectPullRequestError";
+  }
+}
+
+export class ProjectJobLogError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "job_not_found" | "log_not_found" | "log_read_failed",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectJobLogError";
   }
 }
 
@@ -860,6 +883,9 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     taskId: job.taskId,
     executorType: job.executorType,
     workerId,
+    assignedRoleDefinitionId: (job as DbJob & { assignedRoleDefinitionId?: string | null }).assignedRoleDefinitionId ?? null,
+    assignedRoleDefinitionLabel: (job as DbJob & { assignedRoleDefinitionLabel?: string | null }).assignedRoleDefinitionLabel ?? null,
+    assignedRoleDefinitionModel: (job as DbJob & { assignedRoleDefinitionModel?: string | null }).assignedRoleDefinitionModel ?? null,
     workspacePath: job.workspacePath,
     branchName: job.branchName,
     githubCompareUrl: job.githubCompareUrl ?? null,
@@ -1088,7 +1114,8 @@ function toProjectSummary(
   project: ProjectWithRelations,
   constitution: ConstitutionInspection,
   roleDefinitions: ProjectRoleDefinitionRecord[],
-  decisionLogs: ProjectDecisionLogSummary[]
+  decisionLogs: ProjectDecisionLogSummary[],
+  operatorGuidance: OperatorGuidanceSummary[]
 ): ProjectSummary {
   const missions = [...project.missions]
     .sort((left, right) => (right.startedAt?.getTime() ?? 0) - (left.startedAt?.getTime() ?? 0))
@@ -1106,6 +1133,7 @@ function toProjectSummary(
     githubRepoUrl: project.githubRepoUrl ?? null,
     roleDefinitions: sortedRoleDefinitions.map(toProjectRoleDefinitionSummary),
     decisionLogs,
+    operatorGuidance,
     ...toAutonomySummary(project),
     defaultBranch: project.defaultBranch,
     localPath: project.localPath,
@@ -1127,8 +1155,11 @@ function toProjectSummary(
 async function hydrateProject(project: ProjectWithRelations): Promise<ProjectSummary> {
   const constitution = await inspectProjectConstitution(project);
   const roleDefinitions = await ensureProjectRoleDefinitions(project.id, project.roleDefinitions);
-  const decisionLogs = await loadRecentDecisionLogs(project.id, 20);
-  return toProjectSummary(project, constitution, roleDefinitions, decisionLogs);
+  const [decisionLogs, operatorGuidance] = await Promise.all([
+    loadRecentDecisionLogs(project.id, 20),
+    loadRecentOperatorGuidance(project.id, 6)
+  ]);
+  return toProjectSummary(project, constitution, roleDefinitions, decisionLogs, operatorGuidance);
 }
 
 async function loadProjectById(projectId: string): Promise<ProjectSummary | null> {
@@ -1640,6 +1671,7 @@ interface ExecutorDispatchPayload {
   priority?: number;
   attempts?: number;
   metadata?: Record<string, unknown>;
+  llm_model?: string;
 }
 
 function dispatchableTaskForProject(project: ProjectWithRelations, taskId: string) {
@@ -1677,10 +1709,99 @@ function nextDispatchableTaskForProject(project: ProjectWithRelations) {
   return null;
 }
 
+function assignedRoleDefinitionForTask(
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number]
+): ProjectRoleDefinitionRecord | null {
+  const assignedId = (task as DbTask & { assignedRoleDefinitionId?: string | null }).assignedRoleDefinitionId ?? null;
+  if (assignedId) {
+    const byId = project.roleDefinitions.find((definition) => definition.id === assignedId) ?? null;
+    if (byId) {
+      return byId;
+    }
+  }
+
+  const assignedLabel = (task as DbTask & { assignedRoleDefinitionLabel?: string | null }).assignedRoleDefinitionLabel ?? null;
+  if (assignedLabel) {
+    const normalized = assignedLabel.trim().toLowerCase();
+    const byLabel = project.roleDefinitions.find((definition) => definition.label.trim().toLowerCase() === normalized) ?? null;
+    if (byLabel) {
+      return byLabel;
+    }
+  }
+
+  return null;
+}
+
+function planningActorName(project: ProjectWithRelations, fallback: string): string {
+  const planner = project.roleDefinitions
+    .filter((definition) => definition.roleKey === "planner" && definition.enabled)
+    .sort((left, right) => left.sortOrder - right.sortOrder)[0];
+  return planner?.label ?? fallback;
+}
+
+function slugifyMention(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function guidanceAliasesForTask(
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  assignedRoleDefinition: ProjectRoleDefinitionRecord | null
+): Set<string> {
+  const aliases = new Set<string>();
+  aliases.add(slugifyMention(task.agentRole));
+
+  if (assignedRoleDefinition) {
+    aliases.add(slugifyMention(assignedRoleDefinition.label));
+    aliases.add(slugifyMention(assignedRoleDefinition.roleKey));
+  }
+
+  return aliases;
+}
+
+function guidanceForTask(
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  assignedRoleDefinition: ProjectRoleDefinitionRecord | null,
+  entries: OperatorGuidanceSummary[]
+): OperatorGuidanceSummary[] {
+  const aliases = guidanceAliasesForTask(task, assignedRoleDefinition);
+  return entries.filter((entry) => entry.mentions.length === 0 || entry.mentions.some((mention) => aliases.has(slugifyMention(mention))));
+}
+
+function guidanceForPlanning(project: ProjectWithRelations, entries: OperatorGuidanceSummary[]): OperatorGuidanceSummary[] {
+  const aliases = new Set<string>(["planner"]);
+
+  for (const definition of project.roleDefinitions) {
+    if (definition.roleKey !== "planner" || !definition.enabled) {
+      continue;
+    }
+
+    aliases.add(slugifyMention(definition.roleKey));
+    aliases.add(slugifyMention(definition.label));
+  }
+
+  return entries.filter((entry) => entry.mentions.length === 0 || entry.mentions.some((mention) => aliases.has(slugifyMention(mention))));
+}
+
+function guidanceLogDetail(entries: OperatorGuidanceSummary[]): {
+  guidanceCount: number;
+  guidanceIds: string[];
+  guidancePreview: string[];
+} {
+  return {
+    guidanceCount: entries.length,
+    guidanceIds: entries.map((entry) => entry.id),
+    guidancePreview: entries.map((entry) => entry.content).slice(0, 3)
+  };
+}
+
 async function submitTaskToExecutor(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number]
 ): Promise<ExecutorJobRecord> {
+  const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
+  const assignedRoleModel = assignedRoleDefinition?.model?.trim() || null;
+  const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentOperatorGuidance(project.id, 6)).slice(0, 4);
   const response = await fetch(`${executorBaseUrl()}/jobs`, {
     method: "POST",
     headers: {
@@ -1698,12 +1819,24 @@ async function submitTaskToExecutor(
       agent_role: task.agentRole,
       priority: task.priority,
       attempts: task.attempts + 1,
+      ...(assignedRoleModel ? { llm_model: assignedRoleModel } : {}),
       metadata: {
         project_id: project.id,
         project_name: project.name,
         mission_id: task.missionId,
         task_id: task.id,
         agent_role: task.agentRole,
+        assigned_role_definition_id: assignedRoleDefinition?.id ?? null,
+        assigned_role_definition_label: assignedRoleDefinition?.label ?? null,
+        assigned_role_definition_model: assignedRoleModel,
+        operator_guidance: operatorGuidance.map((entry) => ({
+          id: entry.id,
+          actor: entry.actor,
+          content: entry.content,
+          mentions: entry.mentions,
+          reply_to_id: entry.replyToId ?? null,
+          created_at: entry.createdAt
+        })),
         priority: task.priority,
         attempts: task.attempts + 1
       }
@@ -1794,6 +1927,8 @@ async function persistDispatchedJob(
   const completedAt = jobStatus === "queued" || jobStatus === "running" ? null : parseDate(executorJob.completed_at) ?? startedAt;
   const githubCompareUrl = resolveProjectGitHubCompareUrl(project, executorJob.branch_name);
   const workerId = typeof executorJob.worker_id === "string" && executorJob.worker_id.trim() ? executorJob.worker_id.trim() : null;
+  const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
+  const operatorGuidance = await loadRecentOperatorGuidance(project.id, 4);
 
   const createdJob = await prisma.job.create({
     data: {
@@ -1801,6 +1936,9 @@ async function persistDispatchedJob(
       taskId: task.id,
       executorType: executorJob.executor_type,
       workerId,
+      assignedRoleDefinitionId: assignedRoleDefinition?.id ?? null,
+      assignedRoleDefinitionLabel: assignedRoleDefinition?.label ?? null,
+      assignedRoleDefinitionModel: assignedRoleDefinition?.model ?? null,
       workspacePath: executorJob.workspace_path,
       branchName: executorJob.branch_name,
       githubCompareUrl,
@@ -1811,6 +1949,11 @@ async function persistDispatchedJob(
       completedAt
     } as any
   });
+  const createdJobWithAssignment = createdJob as typeof createdJob & {
+    assignedRoleDefinitionId?: string | null;
+    assignedRoleDefinitionLabel?: string | null;
+    assignedRoleDefinitionModel?: string | null;
+  };
 
   const blockerReason = taskStatus === "blocked" ? buildDispatchBlockerReason(`Executor reported job status ${jobStatus}`) : null;
 
@@ -1842,12 +1985,16 @@ async function persistDispatchedJob(
     taskId: task.id,
     jobId: createdJob.id,
     kind: "dispatch",
-    actor: executorJob.executor_type,
-    summary: `Dispatched task "${task.title}" to job ${createdJob.id}`,
+    actor: assignedRoleDefinition?.label ?? task.agentRole,
+    summary: `Dispatched task "${task.title}" to job ${createdJob.id}${assignedRoleDefinition?.label ? ` as ${assignedRoleDefinition.label}` : ""}`,
     detail: {
       jobStatus,
       branchName: executorJob.branch_name,
-      attempts
+      attempts,
+      ...guidanceLogDetail(operatorGuidance),
+      assignedRoleDefinitionId: createdJobWithAssignment.assignedRoleDefinitionId ?? null,
+      assignedRoleDefinitionLabel: createdJobWithAssignment.assignedRoleDefinitionLabel ?? null,
+      assignedRoleDefinitionModel: createdJobWithAssignment.assignedRoleDefinitionModel ?? null
     }
   });
 
@@ -2357,6 +2504,43 @@ export async function refreshProjectPullRequestState(projectId: string, jobId: s
   return refreshProjectJobPullRequestState(project, match.task, match.job);
 }
 
+export async function readProjectJobLog(projectId: string, jobId: string): Promise<ProjectJobLogResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectJobLogError("project_not_found", "Project not found", 404);
+  }
+
+  const match = findProjectJob(project, jobId);
+  if (!match) {
+    throw new ProjectJobLogError("job_not_found", "Job not found", 404);
+  }
+
+  const logPath = match.job.logPath?.trim() || null;
+  if (!logPath) {
+    throw new ProjectJobLogError("log_not_found", "Job does not have a log path recorded yet", 404);
+  }
+
+  try {
+    const raw = await readFile(logPath, "utf8");
+    const maxChars = 24_000;
+    const truncated = raw.length > maxChars;
+    const content = truncated ? raw.slice(-maxChars) : raw;
+
+    return {
+      jobId,
+      logPath,
+      content,
+      truncated
+    };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | undefined)?.code === "ENOENT") {
+      throw new ProjectJobLogError("log_not_found", "Job log file does not exist on disk", 404);
+    }
+
+    throw new ProjectJobLogError("log_read_failed", error instanceof Error ? error.message : "Unable to read job log", 500);
+  }
+}
+
 export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -2704,6 +2888,7 @@ export async function createProjectBlockerGitHubIssue(projectId: string, blocker
 }
 
 async function persistPlannedMission(project: ProjectWithRelations, draft: PlanningDraft): Promise<void> {
+  const operatorGuidance = guidanceForPlanning(project, await loadRecentOperatorGuidance(project.id, 6));
   const missionTitle = draft.mission.title.trim() || "Initial mission";
   const missionObjective = draft.mission.objective.trim() || "Translate the constitution into an actionable project plan.";
   const createdBy = draft.mission.createdBy;
@@ -2754,12 +2939,13 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
         projectId: project.id,
         missionId: createdMission.id,
         kind: "planning",
-        actor: draft.mission.planningProvenance,
+        actor: planningActorName(project, draft.mission.planningProvenance),
         summary: `Queued backlog mission "${createdMission.title}"`,
         detail: {
           taskCount: draft.tasks.length,
           objective: missionObjective,
-          mode: "backlog_top_up"
+          mode: "backlog_top_up",
+          ...guidanceLogDetail(operatorGuidance)
         }
       });
     }
@@ -2787,11 +2973,12 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
       projectId: project.id,
       missionId: existingMission.id,
       kind: "planning",
-      actor: draft.mission.planningProvenance,
+      actor: planningActorName(project, draft.mission.planningProvenance),
       summary: `Seeded planned tasks for mission "${existingMission.title}"`,
       detail: {
         taskCount: draft.tasks.length,
-        mode: "follow_on"
+        mode: "follow_on",
+        ...guidanceLogDetail(operatorGuidance)
       }
     });
     return;
@@ -2829,12 +3016,13 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
     projectId: project.id,
     missionId: createdMission.id,
     kind: "planning",
-    actor: draft.mission.planningProvenance,
+    actor: planningActorName(project, draft.mission.planningProvenance),
     summary: `Planned mission "${createdMission.title}"`,
     detail: {
       taskCount: draft.tasks.length,
       objective: missionObjective,
-      mode: "bootstrap"
+      mode: "bootstrap",
+      ...guidanceLogDetail(operatorGuidance)
     }
   });
 }
@@ -2943,6 +3131,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         updatedAt: project.updatedAt.toISOString()
       })),
       decisionLogs: [],
+      operatorGuidance: [],
       ...toAutonomySummary(project),
       defaultBranch: project.defaultBranch,
       localPath: project.localPath,
@@ -3135,7 +3324,8 @@ export async function planProject(projectId: string): Promise<ProjectSummary | n
   }
 
   const inspection = await inspectProjectConstitution(project);
-  const planningContext = await loadPlanningContext(asProjectInput(project), inspection);
+  const operatorGuidance = guidanceForPlanning(project, await loadRecentOperatorGuidance(project.id, 6));
+  const planningContext = await loadPlanningContext(asProjectInput(project), inspection, operatorGuidance);
   const context = await createInitialPlan(planningContext);
 
   await persistPlannedMission(project, context);

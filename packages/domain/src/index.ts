@@ -29,6 +29,15 @@ export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message";
 
+export interface OperatorGuidanceSummary {
+  id: string;
+  actor: string;
+  content: string;
+  mentions: string[];
+  replyToId?: string | null;
+  createdAt: string;
+}
+
 export interface WorkerLeaseSummary {
   projectId?: string | null;
   projectName?: string | null;
@@ -126,6 +135,7 @@ export interface ProjectSummary {
   constitution: ConstitutionSummary;
   roleDefinitions?: ProjectRoleDefinition[];
   decisionLogs: ProjectDecisionLogSummary[];
+  operatorGuidance?: OperatorGuidanceSummary[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;
@@ -171,6 +181,9 @@ export interface JobSummary {
   taskId: string;
   executorType: string;
   workerId?: string | null;
+  assignedRoleDefinitionId?: string | null;
+  assignedRoleDefinitionLabel?: string | null;
+  assignedRoleDefinitionModel?: string | null;
   workspacePath: string;
   branchName: string;
   githubCompareUrl?: string | null;

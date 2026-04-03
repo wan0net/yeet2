@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { PlanningProvenance, ProjectRoleDefinition } from "@yeet2/domain";
+import type { OperatorGuidanceSummary, PlanningProvenance, ProjectRoleDefinition } from "@yeet2/domain";
 import type { ConstitutionInspection, ConstitutionFileKey } from "./constitution";
 
 type BrainRequestedBy = Exclude<PlanningProvenance, "fallback">;
@@ -75,6 +75,7 @@ export interface PlanningContext {
   project: PlanningProject;
   constitution: ConstitutionInspection;
   documents: Partial<Record<ConstitutionFileKey, string | null>>;
+  operatorGuidance: OperatorGuidanceSummary[];
 }
 
 interface BrainPlanningResponse {
@@ -138,6 +139,14 @@ interface BrainPlanningRequest {
     model: string | null;
     enabled: boolean;
     sort_order: number;
+  }>;
+  operator_guidance: Array<{
+    id: string;
+    actor: string;
+    content: string;
+    mentions: string[];
+    reply_to_id: string | null;
+    created_at: string;
   }>;
 }
 
@@ -320,6 +329,14 @@ function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainR
       model: definition.model ?? null,
       enabled: definition.enabled,
       sort_order: definition.sortOrder
+    })),
+    operator_guidance: context.operatorGuidance.map((entry) => ({
+      id: entry.id,
+      actor: entry.actor,
+      content: entry.content,
+      mentions: entry.mentions,
+      reply_to_id: entry.replyToId ?? null,
+      created_at: entry.createdAt
     }))
   };
 }
@@ -336,7 +353,11 @@ async function readDocument(path: string, exists: boolean): Promise<string | nul
   }
 }
 
-export async function loadPlanningContext(project: PlanningProject, constitution: ConstitutionInspection): Promise<PlanningContext> {
+export async function loadPlanningContext(
+  project: PlanningProject,
+  constitution: ConstitutionInspection,
+  operatorGuidance: OperatorGuidanceSummary[] = []
+): Promise<PlanningContext> {
   const entries = await Promise.all(
     (Object.keys(constitution.files) as ConstitutionFileKey[]).map(async (key) => {
       const file = constitution.files[key];
@@ -347,7 +368,8 @@ export async function loadPlanningContext(project: PlanningProject, constitution
   return {
     project,
     constitution,
-    documents: Object.fromEntries(entries) as Partial<Record<ConstitutionFileKey, string | null>>
+    documents: Object.fromEntries(entries) as Partial<Record<ConstitutionFileKey, string | null>>,
+    operatorGuidance
   };
 }
 
@@ -357,12 +379,14 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
   const roadmapHeadline = firstMeaningfulLine(context.documents.roadmap, "First roadmap slice");
   const architectureHeadline = firstMeaningfulLine(context.documents.architecture, "Architecture review");
   const projectName = context.project.name || "the project";
+  const latestGuidance = context.operatorGuidance[0]?.content ?? "";
+  const guidanceSuffix = latestGuidance ? ` Latest operator guidance: ${latestGuidance}` : "";
 
   return {
     source: "fallback",
     mission: {
       title: `Launch the first constitutional slice for ${projectName}`,
-      objective: `Turn the constitution into a first implementation pass grounded in ${visionHeadline}, ${specHeadline}, and ${roadmapHeadline}.`,
+      objective: `Turn the constitution into a first implementation pass grounded in ${visionHeadline}, ${specHeadline}, and ${roadmapHeadline}.${guidanceSuffix}`,
       status: "active",
       createdBy: "fallback",
       planningProvenance: "fallback"
@@ -370,7 +394,7 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
     tasks: [
       {
         title: "Validate the constitution and scope",
-        description: `Read the project constitution for ${projectName} and confirm the initial delivery target.`,
+        description: `Read the project constitution for ${projectName} and confirm the initial delivery target.${guidanceSuffix}`,
         agentRole: "architect",
         status: "ready",
         priority: 1,
@@ -384,7 +408,7 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
       },
       {
         title: `Implement the first roadmap slice: ${roadmapHeadline}`,
-        description: `Carry out the smallest useful change implied by the roadmap and spec.`,
+        description: `Carry out the smallest useful change implied by the roadmap and spec.${guidanceSuffix}`,
         agentRole: "implementer",
         status: "ready",
         priority: 2,
@@ -398,7 +422,7 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
       },
       {
         title: `Run validation for ${roadmapHeadline}`,
-        description: "Execute tests or other verification that demonstrates the slice is safe.",
+        description: `Execute tests or other verification that demonstrates the slice is safe.${guidanceSuffix}`,
         agentRole: "qa",
         status: "ready",
         priority: 3,
@@ -412,7 +436,7 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
       },
       {
         title: `Review the architecture around ${architectureHeadline}`,
-        description: "Check the result against the constitution and identify any follow-up work.",
+        description: `Check the result against the constitution and identify any follow-up work.${guidanceSuffix}`,
         agentRole: "reviewer",
         status: "ready",
         priority: 4,
