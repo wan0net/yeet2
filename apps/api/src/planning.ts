@@ -58,12 +58,61 @@ interface BrainPlanningResponse {
   } | null;
 }
 
+interface BrainPlanningRequestSection {
+  title: string;
+  text: string;
+}
+
+interface BrainPlanningRequest {
+  project_id: string;
+  project_name: string;
+  requested_by: string;
+  constitution: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
+  constitution_files: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
+}
+
 function brainBaseUrl(): string {
   return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
 }
 
 function cleanText(value: string | null | undefined): string {
   return (value ?? "").trim();
+}
+
+function normalizePlanSource(value: unknown, fallback: PlanSource): PlanSource {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "fallback") {
+    return "fallback";
+  }
+
+  if (normalized === "brain" || normalized === "system" || normalized === "api") {
+    return "brain";
+  }
+
+  return fallback;
+}
+
+function normalizeAgentRole(value: unknown): PlanningTaskDraft["agentRole"] | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "planner":
+    case "architect":
+    case "implementer":
+    case "qa":
+    case "reviewer":
+    case "visual":
+      return normalized;
+    default:
+      return null;
+  }
 }
 
 function firstMeaningfulLine(text: string | null | undefined, fallback: string): string {
@@ -83,6 +132,39 @@ function firstMeaningfulLine(text: string | null | undefined, fallback: string):
   }
 
   return lines[0] || fallback;
+}
+
+function buildBrainPlanningRequest(context: PlanningContext): BrainPlanningRequest {
+  const requestedBy = "api";
+  const sections = (Object.keys(context.constitution.files) as ConstitutionFileKey[]).reduce(
+    (acc, key) => {
+      const file = context.constitution.files[key];
+      const text = cleanText(context.documents[key]);
+
+      acc.constitution[key] = {
+        title: key,
+        text
+      };
+      acc.constitution_files[key] = {
+        title: file.path,
+        text
+      };
+
+      return acc;
+    },
+    {
+      constitution: {} as Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>,
+      constitution_files: {} as Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>
+    }
+  );
+
+  return {
+    project_id: context.project.id,
+    project_name: context.project.name,
+    requested_by: requestedBy,
+    constitution: sections.constitution,
+    constitution_files: sections.constitution_files
+  };
 }
 
 async function readDocument(path: string, exists: boolean): Promise<string | null> {
@@ -197,7 +279,7 @@ function normalizeMissionDraft(value: unknown, fallback: PlanningMissionDraft): 
   const title = cleanText(typeof raw.title === "string" ? raw.title : undefined) || fallback.title;
   const objective = cleanText(typeof raw.objective === "string" ? raw.objective : undefined) || fallback.objective;
   const status = raw.status === "active" ? "active" : fallback.status;
-  const createdBy = raw.createdBy === "brain" ? "brain" : raw.createdBy === "fallback" ? "fallback" : fallback.createdBy;
+  const createdBy = normalizePlanSource(raw.createdBy, fallback.createdBy);
 
   return {
     title,
@@ -215,7 +297,7 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
   const raw = value as Record<string, unknown>;
   const title = cleanText(typeof raw.title === "string" ? raw.title : undefined);
   const description = cleanText(typeof raw.description === "string" ? raw.description : undefined);
-  const agentRole = typeof raw.agentRole === "string" ? raw.agentRole : "";
+  const agentRole = normalizeAgentRole(raw.agentRole);
 
   if (!title || !description || !agentRole) {
     return null;
@@ -228,7 +310,7 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
   return {
     title,
     description,
-    agentRole: agentRole as PlanningTaskDraft["agentRole"],
+    agentRole,
     status: raw.status === "ready" ? "ready" : "ready",
     priority: typeof raw.priority === "number" && Number.isFinite(raw.priority) ? raw.priority : fallbackPriority,
     acceptanceCriteria,
@@ -278,7 +360,7 @@ async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft
         "Content-Type": "application/json",
         Accept: "application/json"
       },
-      body: JSON.stringify(context),
+      body: JSON.stringify(buildBrainPlanningRequest(context)),
       signal: controller.signal
     });
 

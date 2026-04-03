@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -89,6 +90,35 @@ def _extract_constitution(payload: dict[str, object]) -> dict[str, ConstitutionS
     }
 
 
+def _serialize_mission(mission: object) -> dict[str, object]:
+    data = asdict(mission)
+    return {
+        "id": data.get("id"),
+        "projectId": data.get("project_id"),
+        "title": data.get("title"),
+        "objective": data.get("objective"),
+        "status": data.get("status"),
+        "createdBy": data.get("created_by"),
+        "startedAt": data.get("started_at"),
+        "completedAt": data.get("completed_at"),
+    }
+
+
+def _serialize_task(task: object) -> dict[str, object]:
+    data = asdict(task)
+    return {
+        "id": data.get("id"),
+        "title": data.get("title"),
+        "description": data.get("description"),
+        "agentRole": data.get("agent_role"),
+        "status": data.get("status"),
+        "priority": data.get("priority"),
+        "acceptanceCriteria": data.get("acceptance_criteria"),
+        "attempts": data.get("attempts"),
+        "blockerReason": data.get("blocker_reason"),
+    }
+
+
 class BrainApp:
     def __init__(self) -> None:
         self.store = RunStore()
@@ -116,7 +146,7 @@ class BrainApp:
                     if run is None:
                         self._send_json(HTTPStatus.NOT_FOUND, {"error": "run_not_found"})
                         return
-                    self._send_json(HTTPStatus.OK, run.__dict__)
+                    self._send_json(HTTPStatus.OK, asdict(run))
                     return
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
 
@@ -149,9 +179,9 @@ class BrainApp:
                 self._send_json(
                     HTTPStatus.OK,
                     {
-                        "run": run.__dict__,
-                        "mission": run.result["mission"],
-                        "tasks": run.result["tasks"],
+                        "run": asdict(run),
+                        "mission": _serialize_mission(planning_result.mission),
+                        "tasks": [_serialize_task(task) for task in planning_result.tasks],
                         "themes": run.result["themes"],
                         "summary": run.result["summary"],
                     },
