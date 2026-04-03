@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from "fastify";
 
 import {
   advanceProject,
+  createProjectPullRequest,
   listRegisteredProjects,
   planProject,
   recordProjectAutonomyRun,
@@ -14,8 +15,8 @@ export interface AutonomyLoopTelemetry {
   projectId: string;
   mode: AutonomyLoopMode;
   lastRunAt: string;
-  lastAction: "plan" | "advance" | "skip" | "error";
-  lastOutcome: "planned" | "advanced" | "skipped" | "idle" | "error";
+  lastAction: "plan" | "advance" | "pull_request" | "skip" | "error";
+  lastOutcome: "planned" | "advanced" | "created_pr" | "pr_skipped" | "skipped" | "idle" | "error";
   lastMissionId: string | null;
   lastTaskId: string | null;
   nextDispatchableTaskId: string | null;
@@ -94,6 +95,75 @@ function needsInitialPlanning(project: ProjectSummary): boolean {
 
 function latestMissionId(project: ProjectSummary): string | null {
   return project.missions[0]?.id ?? null;
+}
+
+function parseTimestamp(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function findLatestCompletedImplementerJob(project: ProjectSummary): {
+  missionId: string;
+  missionTitle: string;
+  taskId: string;
+  taskTitle: string;
+  taskStatus: string;
+  jobId: string;
+  jobBranchName: string;
+  jobHasPullRequest: boolean;
+  reviewerComplete: boolean;
+  completedAt: string | null;
+} | null {
+  const candidates = project.missions.flatMap((mission) => {
+    const reviewerComplete = mission.tasks.some((task) => task.agentRole === "reviewer" && task.status === "complete");
+    return mission.tasks.flatMap((task) => {
+      if (task.agentRole !== "implementer") {
+        return [];
+      }
+
+      return task.jobs
+        .filter((job) => job.status === "complete")
+        .map((job) => ({
+          missionId: mission.id,
+          missionTitle: mission.title,
+          taskId: task.id,
+          taskTitle: task.title,
+          taskStatus: task.status,
+          jobId: job.id,
+          jobBranchName: job.branchName,
+          jobHasPullRequest: job.githubPrNumber !== null || job.githubPrUrl !== null || job.githubPrTitle !== null,
+          reviewerComplete,
+          completedAt: job.completedAt
+        }));
+    });
+  });
+
+  candidates.sort((left, right) => parseTimestamp(right.completedAt) - parseTimestamp(left.completedAt));
+  return candidates[0] ?? null;
+}
+
+function isPullRequestPolicySatisfied(project: ProjectSummary, candidate: ReturnType<typeof findLatestCompletedImplementerJob>): string | null {
+  if (!candidate) {
+    return "No completed implementer job is available for pull request automation.";
+  }
+
+  if (candidate.jobHasPullRequest) {
+    return "The latest completed implementer job already has a pull request.";
+  }
+
+  if (project.pullRequestMode === "manual") {
+    return "Pull request automation is disabled by policy.";
+  }
+
+  if (project.pullRequestMode === "after_reviewer" && !candidate.reviewerComplete) {
+    return `Reviewer work for mission ${candidate.missionTitle} is not complete yet.`;
+  }
+
+  return null;
 }
 
 function buildTelemetry(
@@ -242,13 +312,51 @@ class AutonomyLoopManager {
     }
 
     if (!currentProject.nextDispatchableTaskId) {
-      await this.persistTelemetry(currentProject, "skip", "idle", "No dispatchable task was available");
+      const candidate = findLatestCompletedImplementerJob(currentProject);
+      const policyMessage = isPullRequestPolicySatisfied(currentProject, candidate);
+      if (policyMessage) {
+        await this.persistTelemetry(currentProject, "skip", candidate ? "pr_skipped" : "idle", policyMessage);
+        return;
+      }
+
+      if (!candidate) {
+        return;
+      }
+
+      try {
+        const created = await createProjectPullRequest(currentProject.id, candidate.jobId);
+        await this.persistTelemetry(created.project, "pull_request", "created_pr", `Created pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Pull request creation failed";
+        this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request creation failed");
+        await this.persistTelemetry(currentProject, "pull_request", "error", message);
+      }
       return;
     }
 
     try {
       const dispatched = await advanceProject(project.id);
       await this.persistTelemetry(dispatched.project, "advance", "advanced", `Dispatched task ${dispatched.job.taskId}`);
+
+      const candidate = findLatestCompletedImplementerJob(dispatched.project);
+      const policyMessage = isPullRequestPolicySatisfied(dispatched.project, candidate);
+      if (!policyMessage && candidate) {
+        try {
+          const created = await createProjectPullRequest(dispatched.project.id, candidate.jobId);
+          await this.persistTelemetry(
+            created.project,
+            "pull_request",
+            "created_pr",
+            `Created pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Pull request creation failed";
+          this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request creation failed");
+          await this.persistTelemetry(dispatched.project, "pull_request", "error", message);
+        }
+      } else if (policyMessage && !dispatched.project.nextDispatchableTaskId) {
+        await this.persistTelemetry(dispatched.project, "skip", candidate ? "pr_skipped" : "idle", policyMessage);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dispatch failed";
       this.logger.error({ error, projectId: project.id }, "Autonomy loop dispatch failed");

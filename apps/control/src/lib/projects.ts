@@ -55,9 +55,13 @@ export interface ProjectJobRecord {
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
 
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous" | "unknown";
+export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer" | "unknown";
+export type ProjectPullRequestDraftMode = "draft" | "ready" | "unknown";
 
 export interface ProjectAutonomyState {
   mode: ProjectAutonomyMode;
+  pullRequestMode: ProjectPullRequestMode;
+  pullRequestDraftMode: ProjectPullRequestDraftMode;
   lastRunStatus: string | null;
   lastRunMessage: string | null;
   lastRunAt: string | null;
@@ -218,6 +222,37 @@ function normalizeAutonomyMode(value: unknown): ProjectAutonomyMode {
   }
 }
 
+function normalizePullRequestMode(value: unknown): ProjectPullRequestMode {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "manual":
+    case "after_implementer":
+      return normalized;
+    case "after-reviewer":
+    case "after_reviewer":
+      return "after_reviewer";
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function normalizePullRequestDraftMode(value: unknown): ProjectPullRequestDraftMode {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "draft":
+    case "ready":
+      return normalized;
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
 function autonomySource(raw: RawRecord): RawRecord {
   return asRecord(raw.autonomy ?? raw.autonomyState ?? raw.autonomy_state ?? raw.loop ?? raw.loopState ?? raw.loop_state);
 }
@@ -234,6 +269,26 @@ function normalizeAutonomyState(raw: RawRecord): ProjectAutonomyState {
         autonomy.mode ??
         autonomy.autonomyMode ??
         autonomy.autonomy_mode
+    ),
+    pullRequestMode: normalizePullRequestMode(
+      raw.pullRequestMode ??
+        raw.pull_request_mode ??
+        raw.prMode ??
+        raw.pr_mode ??
+        autonomy.pullRequestMode ??
+        autonomy.pull_request_mode ??
+        autonomy.prMode ??
+        autonomy.pr_mode
+    ),
+    pullRequestDraftMode: normalizePullRequestDraftMode(
+      raw.pullRequestDraftMode ??
+        raw.pull_request_draft_mode ??
+        raw.prDraftMode ??
+        raw.pr_draft_mode ??
+        autonomy.pullRequestDraftMode ??
+        autonomy.pull_request_draft_mode ??
+        autonomy.prDraftMode ??
+        autonomy.pr_draft_mode
     ),
     lastRunStatus: stringValue(
       raw.lastRunStatus,
@@ -982,6 +1037,54 @@ export function autonomyModeTone(value: ProjectAutonomyMode | string | null | un
     case "supervised":
       return "border-amber-200 bg-amber-50 text-amber-800";
     case "autonomous":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function pullRequestModeLabel(value: ProjectPullRequestMode | string | null | undefined): string {
+  switch (normalizePullRequestMode(value)) {
+    case "manual":
+      return "Manual";
+    case "after_implementer":
+      return "After implementer";
+    case "after_reviewer":
+      return "After reviewer";
+    default:
+      return "Unknown";
+  }
+}
+
+export function pullRequestModeTone(value: ProjectPullRequestMode | string | null | undefined): string {
+  switch (normalizePullRequestMode(value)) {
+    case "manual":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    case "after_implementer":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "after_reviewer":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function pullRequestDraftModeLabel(value: ProjectPullRequestDraftMode | string | null | undefined): string {
+  switch (normalizePullRequestDraftMode(value)) {
+    case "draft":
+      return "Draft";
+    case "ready":
+      return "Ready";
+    default:
+      return "Unknown";
+  }
+}
+
+export function pullRequestDraftModeTone(value: ProjectPullRequestDraftMode | string | null | undefined): string {
+  switch (normalizePullRequestDraftMode(value)) {
+    case "draft":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "ready":
       return "border-emerald-200 bg-emerald-50 text-emerald-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";

@@ -33,6 +33,17 @@ enum ProjectAutonomyMode {
   autonomous
 }
 
+enum ProjectPullRequestMode {
+  manual
+  after_implementer
+  after_reviewer
+}
+
+enum ProjectPullRequestDraftMode {
+  draft
+  ready
+}
+
 enum ProjectRoleKey {
   planner
   architect
@@ -81,6 +92,8 @@ model Project {
   defaultBranch      String              @default("main") @map("default_branch")
   localPath          String              @unique @map("local_path")
   autonomyMode       ProjectAutonomyMode @default(manual) @map("autonomy_mode")
+  pullRequestMode    ProjectPullRequestMode @default(manual) @map("pull_request_mode")
+  pullRequestDraftMode ProjectPullRequestDraftMode @default(draft) @map("pull_request_draft_mode")
   lastAutonomyRunAt  DateTime?           @map("last_autonomy_run_at")
   lastAutonomyStatus String?             @map("last_autonomy_status")
   lastAutonomyMessage String?            @map("last_autonomy_message")

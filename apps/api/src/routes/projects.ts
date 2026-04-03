@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import type { ProjectAutonomyMode, ProjectRoleKey } from "@yeet2/domain";
+import type { ProjectAutonomyMode, ProjectPullRequestDraftMode, ProjectPullRequestMode, ProjectRoleKey } from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
 import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
@@ -148,7 +148,16 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
   };
 }
 
-function parseProjectAutonomyBody(body: unknown): { input: { autonomyMode: ProjectAutonomyMode } | null; error: string | null } {
+function parseProjectAutonomyBody(body: unknown): {
+  input:
+    | {
+        autonomyMode: ProjectAutonomyMode;
+        pullRequestMode?: ProjectPullRequestMode;
+        pullRequestDraftMode?: ProjectPullRequestDraftMode;
+      }
+    | null;
+  error: string | null;
+} {
   if (typeof body !== "object" || body === null) {
     return {
       input: null,
@@ -173,9 +182,31 @@ function parseProjectAutonomyBody(body: unknown): { input: { autonomyMode: Proje
     };
   }
 
+  const rawPullRequestMode = candidate.pullRequestMode ?? candidate.pull_request_mode;
+  const pullRequestMode =
+    typeof rawPullRequestMode === "string" ? rawPullRequestMode.trim().toLowerCase() : "";
+  if (pullRequestMode && pullRequestMode !== "manual" && pullRequestMode !== "after_implementer" && pullRequestMode !== "after_reviewer") {
+    return {
+      input: null,
+      error: "pullRequestMode must be manual, after_implementer, or after_reviewer"
+    };
+  }
+
+  const rawPullRequestDraftMode = candidate.pullRequestDraftMode ?? candidate.pull_request_draft_mode;
+  const pullRequestDraftMode =
+    typeof rawPullRequestDraftMode === "string" ? rawPullRequestDraftMode.trim().toLowerCase() : "";
+  if (pullRequestDraftMode && pullRequestDraftMode !== "draft" && pullRequestDraftMode !== "ready") {
+    return {
+      input: null,
+      error: "pullRequestDraftMode must be draft or ready"
+    };
+  }
+
   return {
     input: {
-      autonomyMode
+      autonomyMode,
+      ...(pullRequestMode ? { pullRequestMode: pullRequestMode as ProjectPullRequestMode } : {}),
+      ...(pullRequestDraftMode ? { pullRequestDraftMode: pullRequestDraftMode as ProjectPullRequestDraftMode } : {})
     },
     error: null
   };
@@ -244,7 +275,7 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
     }
 
     try {
-      const project = await updateProjectAutonomy(projectId, parsedBody.input.autonomyMode);
+      const project = await updateProjectAutonomy(projectId, parsedBody.input);
       return reply.code(200).send({ project });
     } catch (error) {
       if (error instanceof ProjectAutonomyError) {

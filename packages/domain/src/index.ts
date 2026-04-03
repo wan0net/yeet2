@@ -19,6 +19,8 @@ export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "review
 export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
 export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
+export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
+export type ProjectPullRequestDraftMode = "draft" | "ready";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -52,6 +54,8 @@ export interface Project {
   githubRepoUrl?: string | null;
   roleDefinitions?: ProjectRoleDefinition[];
   autonomyMode?: ProjectAutonomyMode | null;
+  pullRequestMode?: ProjectPullRequestMode | null;
+  pullRequestDraftMode?: ProjectPullRequestDraftMode | null;
   lastAutonomyRunAt?: string | null;
   lastAutonomyStatus?: string | null;
   lastAutonomyMessage?: string | null;

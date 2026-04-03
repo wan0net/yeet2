@@ -6,7 +6,18 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import { formatTimestamp } from "../../../lib/project-detail";
-import { autonomyModeLabel, autonomyModeTone, type ProjectAutonomyMode, type ProjectAutonomyState } from "../../../lib/projects";
+import {
+  autonomyModeLabel,
+  autonomyModeTone,
+  pullRequestDraftModeLabel,
+  pullRequestDraftModeTone,
+  pullRequestModeLabel,
+  pullRequestModeTone,
+  type ProjectAutonomyMode,
+  type ProjectAutonomyState,
+  type ProjectPullRequestDraftMode,
+  type ProjectPullRequestMode
+} from "../../../lib/projects";
 
 interface ProjectAutonomyPanelProps {
   projectId: string;
@@ -34,13 +45,17 @@ function detailMessage(detail: unknown, fallback: string): string {
 export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: ProjectAutonomyPanelProps) {
   const router = useRouter();
   const [mode, setMode] = useState<ProjectAutonomyMode>(autonomy.mode);
+  const [pullRequestMode, setPullRequestMode] = useState<ProjectPullRequestMode>(autonomy.pullRequestMode);
+  const [pullRequestDraftMode, setPullRequestDraftMode] = useState<ProjectPullRequestDraftMode>(autonomy.pullRequestDraftMode);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setMode(autonomy.mode);
-  }, [autonomy.mode]);
+    setPullRequestMode(autonomy.pullRequestMode);
+    setPullRequestDraftMode(autonomy.pullRequestDraftMode);
+  }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,7 +72,9 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         },
         body: JSON.stringify({
           mode,
-          autonomyMode: mode
+          autonomyMode: mode,
+          pullRequestMode,
+          pullRequestDraftMode
         })
       });
       const payload = (await response.json().catch(() => null)) as { error?: string; detail?: unknown; message?: string } | null;
@@ -66,7 +83,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to update autonomy mode"));
       }
 
-      setMessage(`Updated autonomy mode for ${projectName}.`);
+      setMessage(`Updated autonomy settings for ${projectName}.`);
       router.refresh();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to update autonomy mode");
@@ -81,31 +98,64 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Control how {projectName} runs its planning loop and review cycle. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own.
+              Control how {projectName} runs its planning loop and PR automation. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, and they can start as draft or ready.
             </div>
-            <label className="block space-y-1">
-              <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Autonomy mode</span>
-              <select
-                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-                onChange={(event) => setMode(event.currentTarget.value as ProjectAutonomyMode)}
-                value={mode}
-              >
-                <option value="unknown">Unknown</option>
-                <option value="manual">Manual</option>
-                <option value="supervised">Supervised</option>
-                <option value="autonomous">Autonomous</option>
-              </select>
-            </label>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Autonomy mode</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  onChange={(event) => setMode(event.currentTarget.value as ProjectAutonomyMode)}
+                  value={mode}
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="manual">Manual</option>
+                  <option value="supervised">Supervised</option>
+                  <option value="autonomous">Autonomous</option>
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">PR timing</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  onChange={(event) => setPullRequestMode(event.currentTarget.value as ProjectPullRequestMode)}
+                  value={pullRequestMode}
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="manual">Manual</option>
+                  <option value="after_implementer">After implementer</option>
+                  <option value="after_reviewer">After reviewer</option>
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">PR draft state</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  onChange={(event) => setPullRequestDraftMode(event.currentTarget.value as ProjectPullRequestDraftMode)}
+                  value={pullRequestDraftMode}
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="draft">Draft</option>
+                  <option value="ready">Ready</option>
+                </select>
+              </label>
+            </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
                 className="rounded-full border border-slate-300 bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSaving}
                 type="submit"
               >
-                {isSaving ? "Saving..." : "Save mode"}
+                {isSaving ? "Saving..." : "Save settings"}
               </button>
               <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${autonomyModeTone(autonomy.mode)}`}>
                 Current: {autonomyModeLabel(autonomy.mode)}
+              </span>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${pullRequestModeTone(autonomy.pullRequestMode)}`}>
+                PR timing: {pullRequestModeLabel(autonomy.pullRequestMode)}
+              </span>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${pullRequestDraftModeTone(autonomy.pullRequestDraftMode)}`}>
+                PR draft: {pullRequestDraftModeLabel(autonomy.pullRequestDraftMode)}
               </span>
             </div>
           </div>

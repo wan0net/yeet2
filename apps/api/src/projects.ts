@@ -11,7 +11,13 @@ import type {
   Project as DbProject,
   Task as DbTask
 } from "@yeet2/db";
-import type { PlanningProvenance, ProjectAutonomyMode, ProjectRoleKey } from "@yeet2/domain";
+import type {
+  PlanningProvenance,
+  ProjectAutonomyMode,
+  ProjectPullRequestDraftMode,
+  ProjectPullRequestMode,
+  ProjectRoleKey
+} from "@yeet2/domain";
 
 import { prisma } from "./db";
 import {
@@ -124,6 +130,8 @@ export interface ProjectSummary {
   githubRepoUrl: string | null;
   roleDefinitions: ProjectRoleDefinitionSummary[];
   autonomyMode: ProjectAutonomyMode;
+  pullRequestMode: ProjectPullRequestMode;
+  pullRequestDraftMode: ProjectPullRequestDraftMode;
   lastAutonomyRunAt: string | null;
   lastAutonomyStatus: string | null;
   lastAutonomyMessage: string | null;
@@ -168,6 +176,8 @@ export interface ProjectRoleDefinitionInput {
 
 export interface ProjectAutonomyUpdateInput {
   autonomyMode: ProjectAutonomyMode;
+  pullRequestMode?: ProjectPullRequestMode;
+  pullRequestDraftMode?: ProjectPullRequestDraftMode;
 }
 
 export interface ProjectAutonomyRunUpdateInput {
@@ -679,9 +689,23 @@ function normalizeProjectAutonomyMode(value: unknown): ProjectAutonomyMode | nul
   return null;
 }
 
-function toAutonomySummary(project: Pick<ProjectWithRelations, "autonomyMode" | "lastAutonomyRunAt" | "lastAutonomyStatus" | "lastAutonomyMessage" | "lastAutonomyActor" | "nextAutonomyRunAt">) {
+function toAutonomySummary(
+  project: Pick<
+    ProjectWithRelations,
+    | "autonomyMode"
+    | "pullRequestMode"
+    | "pullRequestDraftMode"
+    | "lastAutonomyRunAt"
+    | "lastAutonomyStatus"
+    | "lastAutonomyMessage"
+    | "lastAutonomyActor"
+    | "nextAutonomyRunAt"
+  >
+) {
   return {
     autonomyMode: project.autonomyMode ?? "manual",
+    pullRequestMode: project.pullRequestMode ?? "manual",
+    pullRequestDraftMode: project.pullRequestDraftMode ?? "draft",
     lastAutonomyRunAt: project.lastAutonomyRunAt?.toISOString() ?? null,
     lastAutonomyStatus: project.lastAutonomyStatus ?? null,
     lastAutonomyMessage: project.lastAutonomyMessage ?? null,
@@ -1497,7 +1521,8 @@ async function createProjectJobPullRequest(
         }
       }),
       headBranch: branchName,
-      baseBranch: project.defaultBranch
+      baseBranch: project.defaultBranch,
+      isDraft: project.pullRequestDraftMode !== "ready"
     });
   } catch (error) {
     if (error instanceof GitHubPullRequestError) {
@@ -2092,7 +2117,7 @@ export async function replaceProjectRoleDefinitions(
 
 export async function updateProjectAutonomy(
   projectId: string,
-  autonomyMode: ProjectAutonomyMode
+  update: ProjectAutonomyUpdateInput
 ): Promise<ProjectSummary> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -2106,7 +2131,9 @@ export async function updateProjectAutonomy(
   await prisma.project.update({
     where: { id: projectId },
     data: {
-      autonomyMode
+      ...(update.autonomyMode ? { autonomyMode: update.autonomyMode } : {}),
+      ...(update.pullRequestMode ? { pullRequestMode: update.pullRequestMode } : {}),
+      ...(update.pullRequestDraftMode ? { pullRequestDraftMode: update.pullRequestDraftMode } : {})
     }
   });
 

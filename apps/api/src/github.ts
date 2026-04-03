@@ -24,6 +24,7 @@ export interface GitHubPullRequestInput {
   body: string;
   headBranch: string;
   baseBranch: string;
+  isDraft?: boolean;
 }
 
 export interface GitHubPullRequestResult {
@@ -240,6 +241,7 @@ export async function createGitHubPullRequest(input: GitHubPullRequestInput): Pr
       body: input.body,
       head: input.headBranch,
       base: input.baseBranch,
+      draft: input.isDraft ?? false,
       maintainer_can_modify: true
     })
   });
