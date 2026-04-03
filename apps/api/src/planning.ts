@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { PlanningProvenance } from "@yeet2/domain";
+import type { PlanningProvenance, ProjectRoleDefinition } from "@yeet2/domain";
 import type { ConstitutionInspection, ConstitutionFileKey } from "./constitution";
 
 type BrainRequestedBy = Exclude<PlanningProvenance, "fallback">;
@@ -11,6 +11,7 @@ export interface PlanningProject {
   repoUrl: string;
   defaultBranch: string;
   localPath: string;
+  roleDefinitions: ProjectRoleDefinition[];
 }
 
 export interface PlanningMissionDraft {
@@ -71,6 +72,14 @@ interface BrainPlanningRequest {
   requested_by: string;
   constitution: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
   constitution_files: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
+  role_definitions: Array<{
+    key: string;
+    label: string;
+    goal: string;
+    backstory: string;
+    enabled: boolean;
+    sort_order: number;
+  }>;
 }
 
 type PlanningBackend = "brain" | "crewai" | "deterministic";
@@ -215,7 +224,15 @@ function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainR
     project_name: context.project.name,
     requested_by: requestedBy,
     constitution: sections.constitution,
-    constitution_files: sections.constitution_files
+    constitution_files: sections.constitution_files,
+    role_definitions: context.project.roleDefinitions.map((definition) => ({
+      key: definition.roleKey,
+      label: definition.label,
+      goal: definition.goal,
+      backstory: definition.backstory,
+      enabled: definition.enabled,
+      sort_order: definition.sortOrder
+    }))
   };
 }
 

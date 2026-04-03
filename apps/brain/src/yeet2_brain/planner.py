@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import json
 import os
 import re
@@ -10,7 +10,11 @@ from enum import StrEnum
 from typing import Any, Mapping
 from uuid import uuid4
 
-from .roles import Role
+from .roles import (
+    PlanningRoleDefinition,
+    Role,
+    default_planning_role_definitions,
+)
 
 try:
     from crewai import Agent, Crew, LLM, Process, Task
@@ -85,6 +89,7 @@ class PlanningInput:
     project_name: str
     requested_by: str
     constitution: dict[str, ConstitutionSection]
+    role_definitions: list[PlanningRoleDefinition] = field(default_factory=list)
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
 
@@ -186,6 +191,26 @@ def _crewai_llm() -> object | None:
     return LLM(model=model_name, temperature=0.2)
 
 
+def _normalize_role_key(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip().lower()
+    return normalized or None
+
+
+def _sort_role_definitions(role_definitions: list[PlanningRoleDefinition]) -> list[PlanningRoleDefinition]:
+    return sorted(role_definitions, key=lambda definition: (definition.sort_order, definition.label.lower(), definition.key))
+
+
+def _effective_role_definitions(planning_input: PlanningInput) -> list[PlanningRoleDefinition]:
+    role_definitions = planning_input.role_definitions or default_planning_role_definitions(planning_input.project_name)
+    enabled = [definition for definition in _sort_role_definitions(role_definitions) if definition.enabled]
+    if not enabled:
+        raise ValueError("No enabled planning role definitions were provided")
+    return enabled
+
+
 def _to_text_list(value: object) -> list[str]:
     if isinstance(value, str):
         parts = [part.strip() for part in re.split(r"[,\n;]+", value) if part.strip()]
@@ -270,6 +295,11 @@ def _note_for(notes: Mapping[str, str], role: Role) -> str:
         if note:
             return note
     return ""
+
+
+def _note_for_role_key(notes: Mapping[str, str], role_key: str) -> str:
+    normalized = role_key.strip().lower()
+    return notes.get(normalized, "")
 
 
 def _summarize_text(text: str) -> str:
@@ -500,42 +530,21 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     project_name = planning_input.project_name
     constitution_summary = summary or f"Plan the first durable slice for {project_name}."
     constitution_themes = themes or [project_name]
+    role_definitions = _effective_role_definitions(planning_input)
 
-    planner_agent = Agent(
-        role=Role.PLANNER.value,
-        goal=f"Turn the constitution for {project_name} into a crisp planning brief.",
-        backstory="You ground the team in project intent and define the first durable slice.",
-        allow_delegation=True,
-        **llm_kwargs,
-    )
-    architect_agent = Agent(
-        role=Role.ARCHITECT.value,
-        goal=f"Refine the planning brief for {project_name} into concrete structural boundaries.",
-        backstory="You identify the shape of the system and the dependencies that matter first.",
-        allow_delegation=True,
-        **llm_kwargs,
-    )
-    implementer_agent = Agent(
-        role=Role.IMPLEMENTER.value,
-        goal=f"Convert the plan for {project_name} into the smallest shippable implementation slice.",
-        backstory="You focus on direct, executable steps that move the project forward.",
-        allow_delegation=False,
-        **llm_kwargs,
-    )
-    qa_agent = Agent(
-        role=Role.QA.value,
-        goal=f"Add verification and acceptance coverage for the first {project_name} slice.",
-        backstory="You look for missing checks, edge cases, and review gates.",
-        allow_delegation=False,
-        **llm_kwargs,
-    )
-    reviewer_agent = Agent(
-        role=Role.REVIEWER.value,
-        goal=f"Produce an operator-ready planning envelope for {project_name}.",
-        backstory="You make sure the final plan is readable, grounded, and ready for handoff.",
-        allow_delegation=False,
-        **llm_kwargs,
-    )
+    def allow_delegation_for(role_key: str) -> bool:
+        return role_key in {"planner", "architect"}
+
+    agents = [
+        Agent(
+            role=definition.label,
+            goal=definition.goal,
+            backstory=definition.backstory,
+            allow_delegation=allow_delegation_for(definition.key),
+            **llm_kwargs,
+        )
+        for definition in role_definitions
+    ]
 
     input_payload = {
         "project_name": project_name,
@@ -543,6 +552,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         "requested_by": planning_input.requested_by,
         "summary": constitution_summary,
         "themes": constitution_themes,
+        "role_definitions": [asdict(definition) for definition in role_definitions],
         "constitution": {
             key: section.text
             for key, section in planning_input.constitution.items()
@@ -553,48 +563,18 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     tasks = [
         Task(
             description=(
-                f"Read the constitution for {project_name}. Produce a concise planning brief with "
-                "summary, themes, mission_title, mission_objective, and role_notes. Return only valid JSON."
+                f"Read the constitution for {project_name}. As the {definition.label} role, "
+                f"focus on {definition.goal}. Return only valid JSON with summary, themes, "
+                "mission_title, mission_objective, and role_notes."
             ),
             expected_output="Valid JSON with summary, themes, mission_title, mission_objective, and role_notes.",
-            agent=planner_agent,
-        ),
-        Task(
-            description=(
-                f"Refine the brief for {project_name}. Strengthen the architecture framing and improve the "
-                "mission_objective without changing the JSON schema."
-            ),
-            expected_output="Valid JSON with the same planning brief schema.",
-            agent=architect_agent,
-        ),
-        Task(
-            description=(
-                f"Turn the brief for {project_name} into a practical implementation lens. Keep the JSON schema "
-                "unchanged and sharpen the execution focus."
-            ),
-            expected_output="Valid JSON with the same planning brief schema.",
-            agent=implementer_agent,
-        ),
-        Task(
-            description=(
-                f"Review the plan for {project_name} and add missing verification or handoff detail. Return "
-                "only JSON with summary, themes, mission_title, mission_objective, and role_notes."
-            ),
-            expected_output="Valid JSON with the same planning brief schema.",
-            agent=qa_agent,
-        ),
-        Task(
-            description=(
-                f"Finalize the operator-ready planning envelope for {project_name}. Return only JSON with keys "
-                "`summary`, `themes`, `mission_title`, `mission_objective`, and `role_notes`."
-            ),
-            expected_output="Valid JSON with the same planning brief schema.",
-            agent=reviewer_agent,
-        ),
+            agent=agent,
+        )
+        for definition, agent in zip(role_definitions, agents)
     ]
 
     crew = Crew(
-        agents=[planner_agent, architect_agent, implementer_agent, qa_agent, reviewer_agent],
+        agents=agents,
         tasks=tasks,
         process=Process.sequential,
         memory=False,
@@ -615,7 +595,9 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         for key, value in notes_payload.items():
             text = _clean_text(value)
             if text:
-                notes[str(key)] = text
+                normalized_key = _normalize_role_key(str(key))
+                if normalized_key:
+                    notes[normalized_key] = text
 
     mission = _compose_mission(
         planning_input.project_id,
@@ -631,17 +613,17 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     secondary_theme = themes_text[1] if len(themes_text) > 1 else None
 
     tasks_result = [
-        _primary_task(planning_input.project_name, primary_theme, _note_for(notes, Role.PLANNER)),
+        _primary_task(planning_input.project_name, primary_theme, _note_for_role_key(notes, "planner") or _note_for(notes, Role.PLANNER)),
         _implementation_task(
             planning_input.project_name,
             secondary_theme or primary_theme,
-            _note_for(notes, Role.IMPLEMENTER),
+            _note_for_role_key(notes, "implementer") or _note_for(notes, Role.IMPLEMENTER),
         ),
-        _verification_task(planning_input.project_name, primary_theme, _note_for(notes, Role.QA)),
-        _fallback_task(planning_input.project_name, _note_for(notes, Role.REVIEWER)),
+        _verification_task(planning_input.project_name, primary_theme, _note_for_role_key(notes, "qa") or _note_for(notes, Role.QA)),
+        _fallback_task(planning_input.project_name, _note_for_role_key(notes, "reviewer") or _note_for(notes, Role.REVIEWER)),
     ]
 
-    if note := _note_for(notes, Role.ARCHITECT):
+    if note := _note_for_role_key(notes, "architect") or _note_for(notes, Role.ARCHITECT):
         tasks_result[0].description = f"{tasks_result[0].description} {note}"
 
     return PlanningResult(

@@ -51,6 +51,16 @@ export interface ProjectJobRecord {
 
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
 
+export interface ProjectRoleDefinition {
+  id: string;
+  roleKey: string;
+  sortOrder: number;
+  label: string;
+  enabled: boolean;
+  goal: string;
+  backstory: string;
+}
+
 export interface ProjectBlockerRecord {
   id: string;
   taskId: string | null;
@@ -88,6 +98,7 @@ export interface ProjectRecord {
   localPath: string;
   constitutionStatus: ConstitutionStatus;
   constitution: ConstitutionSummary;
+  roleDefinitions: ProjectRoleDefinition[];
   missions: ProjectMissionRecord[];
   dispatchableRoles?: string[];
   nextDispatchableTaskId?: string;
@@ -160,6 +171,150 @@ function stringArrayValue(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function normalizeRoleId(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function formatRoleLabel(value: string): string {
+  const parts = value
+    .trim()
+    .split(/[\s_-]+/g)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "Role";
+  }
+
+  return parts
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): ProjectRoleDefinition[] {
+  const enabled = new Set(dispatchableRoles.map((role) => normalizeRoleId(role)));
+
+  return [
+    {
+      id: "planner",
+      roleKey: "planner",
+      sortOrder: 0,
+      label: "Planner",
+      enabled: enabled.has("planner"),
+      goal: "Turn the constitution into a crisp planning brief.",
+      backstory: "Grounds the team in project intent and the first durable slice."
+    },
+    {
+      id: "architect",
+      roleKey: "architect",
+      sortOrder: 1,
+      label: "Architect",
+      enabled: enabled.has("architect"),
+      goal: "Refine the plan into concrete structural boundaries.",
+      backstory: "Identifies the shape of the system and the dependencies that matter first."
+    },
+    {
+      id: "implementer",
+      roleKey: "implementer",
+      sortOrder: 2,
+      label: "Implementer",
+      enabled: enabled.has("implementer") || dispatchableRoles.length === 0,
+      goal: "Convert the plan into the smallest shippable implementation slice.",
+      backstory: "Focuses on direct, executable steps that move the project forward."
+    },
+    {
+      id: "qa",
+      roleKey: "qa",
+      sortOrder: 3,
+      label: "QA",
+      enabled: enabled.has("qa") || dispatchableRoles.length === 0,
+      goal: "Add verification and acceptance coverage for the slice.",
+      backstory: "Looks for missing checks, edge cases, and review gates."
+    },
+    {
+      id: "reviewer",
+      roleKey: "reviewer",
+      sortOrder: 4,
+      label: "Reviewer",
+      enabled: enabled.has("reviewer") || dispatchableRoles.length === 0,
+      goal: "Produce an operator-ready review and handoff.",
+      backstory: "Checks readability, grounding, and follow-up readiness."
+    },
+    {
+      id: "visual",
+      roleKey: "visual",
+      sortOrder: 5,
+      label: "Visual",
+      enabled: enabled.has("visual"),
+      goal: "Polish the presentation and any UI-facing details.",
+      backstory: "Tunes surfaces and keeps the experience legible."
+    }
+  ];
+}
+
+function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): ProjectRoleDefinition | null {
+  if (typeof value === "string") {
+    const label = value.trim();
+    if (!label) {
+      return null;
+    }
+
+    const id = normalizeRoleId(label);
+    return {
+      id,
+      roleKey: id,
+      sortOrder: fallbackIndex,
+      label: formatRoleLabel(label),
+      enabled: false,
+      goal: "",
+      backstory: ""
+    };
+  }
+
+  const raw = asRecord(value);
+  const label = stringValue(raw.label, raw.name, raw.title, raw.role, raw.id, raw.key);
+  const goal = stringValue(raw.goal, raw.objective, raw.summary);
+  const backstory = stringValue(raw.backstory, raw.description, raw.story);
+
+  if (!label && !goal && !backstory) {
+    return null;
+  }
+
+  const id = normalizeRoleId(stringValue(raw.id, raw.key, raw.role, raw.slug) || label || "role");
+
+  return {
+    id,
+    roleKey: normalizeRoleId(stringValue(raw.roleKey, raw.role_key, raw.id, raw.key, raw.slug, raw.role) || id),
+    sortOrder: numberValue(raw.sortOrder, raw.sort_order, raw.order) ?? fallbackIndex,
+    label: label || formatRoleLabel(id),
+    enabled: booleanValue(raw.enabled, raw.isEnabled, raw.active, raw.is_active),
+    goal,
+    backstory
+  };
+}
+
+function normalizeProjectRoleDefinitions(raw: RawRecord): ProjectRoleDefinition[] {
+  const candidates = Array.isArray(raw.roleDefinitions)
+    ? raw.roleDefinitions
+    : Array.isArray(raw.role_definitions)
+      ? raw.role_definitions
+      : Array.isArray(raw.roles)
+        ? raw.roles
+        : Array.isArray(raw.projectRoles)
+          ? raw.projectRoles
+          : Array.isArray(raw.project_roles)
+            ? raw.project_roles
+            : [];
+
+  const normalized = candidates
+    .map((entry, index) => normalizeProjectRoleDefinition(entry, index))
+    .filter((entry): entry is ProjectRoleDefinition => entry !== null);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return defaultProjectRoleDefinitions(stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles));
 }
 
 function isValidGitHubPathSegment(value: string): boolean {
@@ -599,6 +754,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
         constitutionSource(raw).status
     ),
     constitution,
+    roleDefinitions: normalizeProjectRoleDefinitions(raw),
     missions,
     dispatchableRoles: stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles),
     nextDispatchableTaskId: stringValue(raw.nextDispatchableTaskId, raw.next_dispatchable_task_id) || undefined,

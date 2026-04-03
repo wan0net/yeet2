@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from .planner import ConstitutionSection, PlanningInput, plan_project
+from .roles import PlanningRoleDefinition, normalize_planning_role_definitions
 from .plan_store import RunStore
 
 
@@ -90,6 +91,16 @@ def _extract_constitution(payload: dict[str, object]) -> dict[str, ConstitutionS
     }
 
 
+def _extract_role_definitions(payload: dict[str, object]) -> tuple[list[PlanningRoleDefinition], bool]:
+    for key in ("role_definitions", "roleDefinitions", "roles"):
+        if key in payload:
+            value = payload.get(key)
+            if isinstance(value, list):
+                return normalize_planning_role_definitions(value), True
+            return [], True
+    return [], False
+
+
 def _serialize_mission(mission: object) -> dict[str, object]:
     data = asdict(mission)
     return {
@@ -167,11 +178,22 @@ class BrainApp:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "project_id_required"})
                     return
                 project_name = str(payload.get("project_name", "")).strip() or project_id
+                role_definitions, role_definitions_provided = _extract_role_definitions(payload)
+                if role_definitions_provided and not any(definition.enabled for definition in role_definitions):
+                    self._send_json(
+                        HTTPStatus.BAD_REQUEST,
+                        {
+                            "error": "invalid_role_definitions",
+                            "message": "At least one enabled role definition is required",
+                        },
+                    )
+                    return
                 planning_input = PlanningInput(
                     project_id=project_id,
                     project_name=project_name,
                     requested_by=str(payload.get("requested_by", "system")).strip() or "system",
                     constitution=_extract_constitution(payload),
+                    role_definitions=role_definitions,
                     raw_payload=payload if isinstance(payload, dict) else {},
                 )
                 try:

@@ -17,6 +17,7 @@ export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
 export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
+export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -48,6 +49,7 @@ export interface Project {
   githubRepoOwner?: string | null;
   githubRepoName?: string | null;
   githubRepoUrl?: string | null;
+  roleDefinitions?: ProjectRoleDefinition[];
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionStatus;
@@ -72,6 +74,7 @@ export interface ProjectRegistrationResult {
 export interface ProjectSummary {
   project: Project;
   constitution: ConstitutionSummary;
+  roleDefinitions?: ProjectRoleDefinition[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;
@@ -126,6 +129,7 @@ export interface JobSummary {
 export interface ProjectDetailSummary {
   project: Project;
   constitution: ConstitutionSummary;
+  roleDefinitions?: ProjectRoleDefinition[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;
@@ -141,6 +145,7 @@ export interface ProjectMissionTaskSummary {
   project: Project;
   constitution: ConstitutionSummary;
   mission: MissionSummary | null;
+  roleDefinitions?: ProjectRoleDefinition[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;
@@ -179,6 +184,19 @@ export interface PlanningMissionDraft {
   title: string;
   objective: string;
   planningProvenance: PlanningProvenance;
+}
+
+export interface ProjectRoleDefinition {
+  id: string;
+  projectId: string;
+  roleKey: ProjectRoleKey;
+  label: string;
+  goal: string;
+  backstory: string;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PlanningRequest {

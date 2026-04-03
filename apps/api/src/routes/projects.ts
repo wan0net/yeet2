@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import type { ProjectRoleKey } from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
 import {
@@ -14,6 +15,8 @@ import {
   ProjectDispatchError,
   ProjectGitHubIssueError,
   ProjectRegistrationError,
+  ProjectRoleDefinitionError,
+  replaceProjectRoleDefinitions,
   type ProjectRegistrationInput
 } from "../projects";
 
@@ -64,6 +67,76 @@ function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrati
       defaultBranch,
       localPath: localPath || null
     },
+    error: null
+  };
+}
+
+function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKey: ProjectRoleKey; label: string; goal: string; backstory: string; enabled: boolean; sortOrder: number }> | null; error: string | null } {
+  if (typeof body !== "object" || body === null) {
+    return {
+      input: null,
+      error: "Request body must be an object"
+    };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const rawDefinitions = candidate.roleDefinitions;
+  if (!Array.isArray(rawDefinitions)) {
+    return {
+      input: null,
+      error: "roleDefinitions is required"
+    };
+  }
+
+  const parsedDefinitions = rawDefinitions
+    .map((definition) => {
+      if (typeof definition !== "object" || definition === null) {
+        return null;
+      }
+
+      const raw = definition as Record<string, unknown>;
+      const roleKey = typeof raw.roleKey === "string" ? (raw.roleKey.trim() as ProjectRoleKey) : "";
+      const label = typeof raw.label === "string" ? raw.label.trim() : "";
+      const goal = typeof raw.goal === "string" ? raw.goal.trim() : "";
+      const backstory = typeof raw.backstory === "string" ? raw.backstory.trim() : "";
+      const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
+      const sortOrder = typeof raw.sortOrder === "number" && Number.isFinite(raw.sortOrder) ? Math.trunc(raw.sortOrder) : 0;
+
+      if (
+        roleKey !== "planner" &&
+        roleKey !== "architect" &&
+        roleKey !== "implementer" &&
+        roleKey !== "qa" &&
+        roleKey !== "reviewer" &&
+        roleKey !== "visual"
+      ) {
+        return null;
+      }
+
+      if (!label || !goal || !backstory) {
+        return null;
+      }
+
+      return {
+        roleKey,
+        label,
+        goal,
+        backstory,
+        enabled,
+        sortOrder
+      };
+    })
+    .filter((definition): definition is NonNullable<typeof definition> => definition !== null);
+
+  if (!parsedDefinitions.length) {
+    return {
+      input: null,
+      error: "roleDefinitions must include at least one definition"
+    };
+  }
+
+  return {
+    input: parsedDefinitions,
     error: null
   };
 }
@@ -270,7 +343,43 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
       app.log.error(error);
       return reply.code(500).send({
         error: "internal_error",
-        message: "Unable to create GitHub issue"
+      message: "Unable to create GitHub issue"
+      });
+    }
+  });
+
+  app.put("/projects/:projectId/roles", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const parsedBody = parseProjectRoleDefinitionsBody(request.body);
+    if (!parsedBody.input) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: parsedBody.error ?? "Invalid project role definitions body"
+      });
+    }
+
+    try {
+      const project = await replaceProjectRoleDefinitions(projectId, parsedBody.input);
+      return reply.code(200).send({ project });
+    } catch (error) {
+      if (error instanceof ProjectRoleDefinitionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to update project role definitions"
       });
     }
   });

@@ -27,6 +27,15 @@ enum ProjectStatus {
   archived
 }
 
+enum ProjectRoleKey {
+  planner
+  architect
+  implementer
+  qa
+  reviewer
+  visual
+}
+
 enum MissionStatus {
   planned
   active
@@ -70,9 +79,27 @@ model Project {
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
   constitution      Constitution?
+  roleDefinitions    ProjectRoleDefinition[]
   missions           Mission[]
 
   @@map("projects")
+}
+
+model ProjectRoleDefinition {
+  id          String       @id @default(cuid())
+  projectId   String       @map("project_id")
+  roleKey     ProjectRoleKey @map("role_key")
+  label       String
+  goal        String
+  backstory   String
+  enabled     Boolean      @default(true)
+  sortOrder   Int          @default(0) @map("sort_order")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  project     Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, roleKey])
+  @@map("project_role_definitions")
 }
 
 model Constitution {
