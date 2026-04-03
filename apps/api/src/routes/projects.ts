@@ -17,6 +17,7 @@ import {
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
   readProjectJobLog,
+  refreshProjectActiveJobs,
   refreshProjectJob,
   applyProjectBlockerApproval,
   dispatchTask,
@@ -383,6 +384,33 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       });
     }
 
+    const rawRefresh = (request.query as { refreshActiveJobs?: string | boolean } | undefined)?.refreshActiveJobs;
+    const refreshActiveJobsRequested =
+      rawRefresh === true ||
+      rawRefresh === "true" ||
+      rawRefresh === "1" ||
+      rawRefresh === "yes";
+
+    if (refreshActiveJobsRequested) {
+      try {
+        const result = await refreshProjectActiveJobs(projectId);
+        return { project: result.project, refreshedJobIds: result.refreshedJobIds };
+      } catch (error) {
+        if (error instanceof ProjectJobRefreshError) {
+          return reply.code(error.statusCode).send({
+            error: error.code,
+            message: error.message
+          });
+        }
+
+        app.log.error(error);
+        return reply.code(500).send({
+          error: "internal_error",
+          message: "Unable to refresh active jobs for the project"
+        });
+      }
+    }
+
     const project = await getRegisteredProject(projectId);
     if (!project.project) {
       return reply.code(404).send({
@@ -641,6 +669,34 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to refresh the job"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/jobs/refresh-active", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    try {
+      const result = await refreshProjectActiveJobs(projectId);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectJobRefreshError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to refresh active jobs"
       });
     }
   });

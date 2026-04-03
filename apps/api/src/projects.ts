@@ -210,6 +210,11 @@ export interface ProjectJobRefreshResult {
   job: ProjectJobSummary;
 }
 
+export interface ProjectActiveJobRefreshResult {
+  project: ProjectSummary;
+  refreshedJobIds: string[];
+}
+
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
   visualName: string;
@@ -2680,6 +2685,40 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
   return {
     project: updatedProject,
     job: updatedJob
+  };
+}
+
+export async function refreshProjectActiveJobs(projectId: string): Promise<ProjectActiveJobRefreshResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectJobRefreshError("project_not_found", "Project not found", 404);
+  }
+
+  const activeJobs = project.missions
+    .flatMap((mission) => mission.tasks.flatMap((task) => task.jobs))
+    .filter((job) => job.status === "queued" || job.status === "running");
+
+  const refreshedJobIds: string[] = [];
+  for (const job of activeJobs) {
+    try {
+      await refreshProjectJob(projectId, job.id);
+      refreshedJobIds.push(job.id);
+    } catch (error) {
+      if (error instanceof ProjectJobRefreshError && error.code === "job_not_found") {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const updatedProject = await loadProjectById(projectId);
+  if (!updatedProject) {
+    throw new ProjectJobRefreshError("project_not_found", "Project not found", 404);
+  }
+
+  return {
+    project: updatedProject,
+    refreshedJobIds
   };
 }
 
