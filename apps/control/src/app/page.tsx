@@ -18,6 +18,9 @@ export default function HomePage() {
           <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/jobs" as Route}>
             View jobs
           </Link>
+          <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/approvals" as Route}>
+            View approvals
+          </Link>
           <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/workers" as Route}>
             View workers
           </Link>
@@ -32,6 +35,7 @@ export default function HomePage() {
         <ul className="grid gap-3 sm:grid-cols-3">
           <li className="rounded-xl border border-slate-200 bg-white p-4">Project registration shell</li>
           <li className="rounded-xl border border-slate-200 bg-white p-4">Health-first API skeleton</li>
+          <li className="rounded-xl border border-slate-200 bg-white p-4">Human review approvals queue</li>
           <li className="rounded-xl border border-slate-200 bg-white p-4">Shared domain model package</li>
         </ul>
       </SectionCard>
