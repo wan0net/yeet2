@@ -19,6 +19,7 @@ import {
   createProjectPullRequest,
   listGlobalBlockers,
   listGlobalJobs,
+  listGlobalMissions,
   listGlobalTasks,
   readProjectJobLog,
   listProjectApprovals,
@@ -447,6 +448,48 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
     return reply.code(200).send(
       await listGlobalTasks({
         status: taskStatus,
+        projectId:
+          typeof query.projectId === "string"
+            ? query.projectId
+            : typeof query.project_id === "string"
+              ? query.project_id
+              : null
+      })
+    );
+  });
+
+  app.get("/missions", async (request, reply) => {
+    const query = (request.query ?? {}) as {
+      status?: string;
+      projectId?: string;
+      project_id?: string;
+    };
+    const status =
+      typeof query.status === "string" && query.status.trim()
+        ? query.status.trim().toLowerCase()
+        : "all";
+
+    if (
+      status !== "all" &&
+      status !== "draft" &&
+      status !== "planned" &&
+      status !== "active" &&
+      status !== "blocked" &&
+      status !== "complete" &&
+      status !== "completed" &&
+      status !== "cancelled"
+    ) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "status must be all or a valid mission status"
+      });
+    }
+
+    const missionStatus = status as "all" | import("../projects").ProjectMissionSummary["status"];
+
+    return reply.code(200).send(
+      await listGlobalMissions({
+        status: missionStatus,
         projectId:
           typeof query.projectId === "string"
             ? query.projectId

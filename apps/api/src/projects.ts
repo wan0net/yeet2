@@ -14,6 +14,7 @@ import type {
 import type {
   GlobalBlockerQueueItem,
   GlobalJobQueueItem,
+  GlobalMissionQueueItem,
   GlobalTaskQueueItem,
   ProjectCostAnalysisSummary,
   ProjectApprovalQueueItem,
@@ -117,6 +118,10 @@ export interface GlobalBlockerQueueResponse {
 
 export interface GlobalTaskQueueResponse {
   tasks: GlobalTaskQueueItem[];
+}
+
+export interface GlobalMissionQueueResponse {
+  missions: GlobalMissionQueueItem[];
 }
 
 export interface ProjectTaskSummary {
@@ -3289,6 +3294,42 @@ export async function listGlobalTasks(input: { status?: ProjectTaskStatus | "all
         }
 
         return left.task.title.localeCompare(right.task.title, undefined, { sensitivity: "base" });
+      })
+  };
+}
+
+export async function listGlobalMissions(input: { status?: ProjectMissionSummary["status"] | "all" | null; projectId?: string | null } = {}): Promise<GlobalMissionQueueResponse> {
+  const projects = await loadProjects();
+
+  return {
+    missions: projects
+      .filter((project) => !input.projectId || project.id === input.projectId)
+      .flatMap((project) =>
+        project.missions
+          .filter((mission) => !input.status || input.status === "all" || mission.status === input.status)
+          .map((mission) => ({
+            projectId: project.id,
+            projectName: project.name,
+            projectRepoUrl: project.repoUrl,
+            projectGitHubUrl: project.githubRepoUrl,
+            mission: {
+              id: mission.id,
+              projectId: mission.projectId,
+              title: mission.title,
+              objective: mission.objective,
+              status: mission.status as GlobalMissionQueueItem["mission"]["status"],
+              createdBy: mission.createdBy ?? null,
+              planningProvenance: mission.planningProvenance ?? null,
+              startedAt: mission.startedAt ?? null,
+              completedAt: mission.completedAt ?? null,
+              taskCount: mission.tasks.length
+            }
+          }))
+      )
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.mission.startedAt ?? left.mission.completedAt ?? "") || 0;
+        const rightTime = Date.parse(right.mission.startedAt ?? right.mission.completedAt ?? "") || 0;
+        return rightTime - leftTime;
       })
   };
 }

@@ -147,6 +147,14 @@ export interface GlobalTaskQueueItem {
   task: TaskSummary;
 }
 
+export interface GlobalMissionQueueItem {
+  projectId: string;
+  projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
+  mission: MissionSummary;
+}
+
 export interface ControlPlaneOverview {
   generatedAt: string;
   auth: {
