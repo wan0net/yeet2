@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 
 import { createAutonomyLoopManager } from "./autonomy-loop";
+import { requireApiAuth } from "./auth";
 import { registerProjectRoutes } from "./routes/projects";
 import { registerWorkerRoutes } from "./routes/workers";
 import { seedLocalWorkerFromEnv } from "./workers";
@@ -15,6 +16,8 @@ app.get("/health", async () => {
     service: "yeet2-api"
   };
 });
+
+app.addHook("onRequest", requireApiAuth);
 
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "0.0.0.0";
