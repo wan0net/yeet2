@@ -649,9 +649,20 @@ This view should feel fun and alive, but still fit the internal tool tone of yee
 Shows:
 
 - workflow messages from planner, architect, implementer, QA, reviewer, visual, and system actors
+- live in-progress updates from agents about what they are currently working on, investigating, or validating
+- handoff-style messages between agents so the thread feels like a living software team rather than a silent pipeline
+- explicit baton-pass moments where one agent can tag the next agent or staff member to indicate "your turn"
 - operator messages in the same thread
 - `@reply` and mention support so humans can steer active work in context
+- `@role` and `@staff-member` addressing so both agents and humans can direct the next turn clearly
 - reply threading or reply references sufficient to preserve conversation context
+- durable message history in Postgres rather than ephemeral prompt state or repo files
+
+The intended interaction model is that team chat acts as the handoff surface between agents.
+For example, an implementer should be able to summarize work completed, tag QA or Reviewer, and leave the next actor with clear context, artifacts, and expectations.
+Operators should be able to interject into that same handoff stream without breaking the workflow trail.
+The same thread should also support "working chat" while an agent is active, so the operator can see short progress notes, discoveries, uncertainties, and requests for input before the handoff happens.
+In practice, yeet2 should support both in-progress working messages and clearer final handoff messages within one durable conversation trail.
 
 ### Mission Detail Page
 

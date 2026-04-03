@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { page } from "$app/state";
   import type { ActionData, PageData } from "./$types";
   import {
     activeMission,
@@ -19,6 +20,30 @@
   const taskGroups = $derived(groupTasksByState(project));
   const staffOverview = $derived(agentPresenceOverview(project));
   const staff = $derived(staffOverview.roles);
+  const currentTab = $derived((() => {
+    const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
+    return tab === "agents" || tab === "chat" ? tab : "overview";
+  })());
+  const chatEntries = $derived(
+    [
+      ...project.decisionLogs.map((entry) => ({
+        id: `decision-${entry.id}`,
+        actor: entry.actor || "system",
+        kind: entry.eventType || "workflow",
+        summary: entry.summary || entry.title,
+        createdAt: entry.createdAt,
+        tone: "info"
+      })),
+      ...project.operatorGuidance.map((entry) => ({
+        id: `guidance-${entry.id}`,
+        actor: entry.actor || "operator",
+        kind: entry.mentions.length > 0 ? `mentions ${entry.mentions.map((mention) => `@${mention}`).join(" ")}` : "operator note",
+        summary: entry.content,
+        createdAt: entry.createdAt,
+        tone: "success"
+      }))
+    ].sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
+  );
 
   function roleConfiguredModel(definitionId: string | null): string {
     if (!definitionId) return "Default";
@@ -31,6 +56,10 @@
     if (status === "blocked") return "Needs help";
     if (status === "queued") return "Queued up";
     return "Standing by";
+  }
+
+  function tabHref(tab: "overview" | "agents" | "chat"): string {
+    return tab === "overview" ? `/projects/${project.id}` : `/projects/${project.id}?tab=${tab}`;
   }
 </script>
 
@@ -63,6 +92,18 @@
   <div class="pill danger">{form.actionError}</div>
 {/if}
 
+<section class="project-tabs">
+  <a aria-current={currentTab === "overview" ? "page" : undefined} class:project-tab--active={currentTab === "overview"} class="project-tab" href={tabHref("overview")}>
+    Overview
+  </a>
+  <a aria-current={currentTab === "agents" ? "page" : undefined} class:project-tab--active={currentTab === "agents"} class="project-tab" href={tabHref("agents")}>
+    Agents
+  </a>
+  <a aria-current={currentTab === "chat" ? "page" : undefined} class:project-tab--active={currentTab === "chat"} class="project-tab" href={tabHref("chat")}>
+    Chat
+  </a>
+</section>
+
 <section class="metrics">
   <div class="metric">
     <div class="metric-kicker">Active missions</div>
@@ -78,6 +119,7 @@
   </div>
 </section>
 
+{#if currentTab === "overview"}
 <section class="split-grid">
   <div class="card">
     <div class="card-header">Repository</div>
@@ -112,7 +154,9 @@
     </div>
   </div>
 </section>
+{/if}
 
+{#if currentTab === "overview"}
 <section class="card">
   <div class="card-header">Mission</div>
   <div class="card-body">
@@ -132,7 +176,9 @@
     {/if}
   </div>
 </section>
+{/if}
 
+{#if currentTab === "overview"}
 <section class="card">
   <div class="card-header">Tasks by state</div>
   <div class="card-body">
@@ -159,7 +205,9 @@
     </div>
   </div>
 </section>
+{/if}
 
+{#if currentTab === "overview" || currentTab === "agents"}
 <section class="split-grid">
   <div class="card">
     <div class="card-header">Team</div>
@@ -194,7 +242,9 @@
     </div>
   </div>
 </section>
+{/if}
 
+{#if currentTab === "overview"}
 <section class="split-grid">
   <div class="card">
     <div class="card-header">Recent jobs</div>
@@ -231,7 +281,9 @@
     </div>
   </div>
 </section>
+{/if}
 
+{#if currentTab === "chat"}
 <section class="card">
   <div class="card-header">Team chat</div>
   <div class="card-body stack">
@@ -245,18 +297,31 @@
       </div>
     </form>
 
-    {#if project.decisionLogs.length === 0}
+    <div class="hero-card">
+      <strong>How this thread works</strong>
+      <div class="muted">
+        Agents can post working updates while they are active, then hand off with `@mentions` when it is the next role's turn. Operators can reply in the same trail.
+      </div>
+    </div>
+
+    {#if chatEntries.length === 0}
       <div class="empty-state">No workflow chat yet.</div>
     {:else}
-      {#each project.decisionLogs as entry}
+      {#each chatEntries as entry}
         <div class="hero-card">
           <div class="page-header">
-            <strong>{entry.actor || "system"}</strong>
-            <span class="pill">{entry.eventType}</span>
+            <strong>{entry.actor}</strong>
+            <div class="token-row">
+              <span class={`pill ${entry.tone}`}>{entry.kind}</span>
+              {#if entry.createdAt}
+                <span class="muted">{formatTimestamp(entry.createdAt) || entry.createdAt}</span>
+              {/if}
+            </div>
           </div>
-          <div>{entry.summary || entry.title}</div>
+          <div>{entry.summary}</div>
         </div>
       {/each}
     {/if}
   </div>
 </section>
+{/if}

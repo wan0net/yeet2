@@ -216,6 +216,38 @@ label {
   gap: 16px;
 }
 
+.project-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.project-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-mid);
+  font: 600 12px/1 var(--font-sans);
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.project-tab:hover {
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.project-tab--active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
 .eyebrow {
   display: inline-flex;
   align-items: center;
