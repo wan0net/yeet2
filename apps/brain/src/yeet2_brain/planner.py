@@ -305,6 +305,40 @@ def _note_for_role_key(notes: Mapping[str, str], role_key: str) -> str:
     return notes.get(normalized, "")
 
 
+def _mission_history(planning_input: PlanningInput) -> list[dict[str, Any]]:
+    raw_history = planning_input.raw_payload.get("mission_history")
+    if not isinstance(raw_history, list):
+        return []
+
+    history: list[dict[str, Any]] = []
+    for item in raw_history:
+        if isinstance(item, Mapping):
+            history.append(dict(item))
+    return history
+
+
+def _latest_mission_history(planning_input: PlanningInput) -> dict[str, Any] | None:
+    history = _mission_history(planning_input)
+    return history[0] if history else None
+
+
+def _continuation_summary(planning_input: PlanningInput) -> str:
+    latest = _latest_mission_history(planning_input)
+    if not latest:
+        return ""
+
+    title = _clean_text(latest.get("title")) or "the previous mission"
+    objective = _clean_text(latest.get("objective"))
+    status = _clean_text(latest.get("status"))
+    parts = [f"Continue from the previous mission \"{title}\""]
+    if status:
+        parts.append(f"(status: {status})")
+    if objective:
+        parts.append(f"Objective: {objective}.")
+    parts.append("Avoid repeating completed work and build on the established roadmap.")
+    return " ".join(parts)
+
+
 def _summarize_text(text: str) -> str:
     text = " ".join(text.split())
     if not text:
@@ -381,11 +415,16 @@ def _compose_mission(
     *,
     title: str | None = None,
     objective: str | None = None,
+    continuation_summary: str = "",
 ) -> PlannedMission:
-    mission_title = title or f"Advance {project_name} from the constitution"
+    mission_title = title or (
+        f"Continue {project_name} from the previous mission" if continuation_summary else f"Advance {project_name} from the constitution"
+    )
     objective_bits = [summary] if summary else []
     if themes:
         objective_bits.append(f"Focus areas: {', '.join(themes[:3])}.")
+    if continuation_summary:
+        objective_bits.append(continuation_summary)
     mission_objective = objective or " ".join(bit for bit in objective_bits if bit).strip() or (
         f"Establish the first durable planning loop for {project_name}."
     )
@@ -494,12 +533,14 @@ def _fallback_task(project_name: str, note: str = "") -> PlannedTask:
 
 
 def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: list[str]) -> PlanningResult:
+    continuation_summary = _continuation_summary(planning_input)
     mission = _compose_mission(
         planning_input.project_id,
         planning_input.project_name,
         summary,
         themes,
         planning_input.requested_by,
+        continuation_summary=continuation_summary,
     )
 
     primary_theme = themes[0] if themes else None
@@ -516,7 +557,12 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
         mission=mission,
         tasks=tasks,
         themes=themes,
-        summary=summary or f"Plan the first durable slice for {planning_input.project_name}.",
+        summary=summary
+        or (
+            f"Continue the next durable slice for {planning_input.project_name}."
+            if continuation_summary
+            else f"Plan the first durable slice for {planning_input.project_name}."
+        ),
         source="brain",
     )
 
@@ -529,6 +575,8 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     constitution_summary = summary or f"Plan the first durable slice for {project_name}."
     constitution_themes = themes or [project_name]
     role_definitions = _effective_role_definitions(planning_input)
+    continuation_summary = _continuation_summary(planning_input)
+    mission_history = _mission_history(planning_input)
 
     def allow_delegation_for(role_key: str) -> bool:
         return role_key in {"planner", "architect"}
@@ -554,6 +602,8 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         "requested_by": planning_input.requested_by,
         "summary": constitution_summary,
         "themes": constitution_themes,
+        "continuation_summary": continuation_summary,
+        "mission_history": mission_history,
         "role_definitions": [asdict(definition) for definition in role_definitions],
         "constitution": {
             key: section.text
@@ -609,6 +659,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         planning_input.requested_by,
         title=title_text or None,
         objective=objective_text or None,
+        continuation_summary=continuation_summary,
     )
 
     primary_theme = themes_text[0] if themes_text else None
@@ -632,7 +683,12 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         mission=mission,
         tasks=tasks_result,
         themes=themes_text,
-        summary=summary_text or f"Plan the first durable slice for {planning_input.project_name}.",
+        summary=summary_text
+        or (
+            f"Continue the next durable slice for {planning_input.project_name}."
+            if continuation_summary
+            else f"Plan the first durable slice for {planning_input.project_name}."
+        ),
         source="crewai",
     )
 

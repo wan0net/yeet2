@@ -12,6 +12,34 @@ export interface PlanningProject {
   defaultBranch: string;
   localPath: string;
   roleDefinitions: ProjectRoleDefinition[];
+  missionHistory: PlanningMissionHistory[];
+}
+
+export interface PlanningMissionHistoryTask {
+  id: string;
+  title: string;
+  description: string;
+  agentRole: "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+  status: "queued" | "pending" | "ready" | "running" | "in_progress" | "blocked" | "done" | "complete" | "failed";
+  priority: number;
+  acceptanceCriteria: string[];
+  attempts: number;
+  blockerReason: string | null;
+}
+
+export interface PlanningMissionHistory {
+  id: string;
+  title: string;
+  objective: string;
+  status: "draft" | "planned" | "active" | "blocked" | "complete" | "completed" | "cancelled";
+  createdBy: string | null;
+  planningProvenance: PlanningProvenance | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+  blockedTaskCount: number;
+  tasks: PlanningMissionHistoryTask[];
 }
 
 export interface PlanningMissionDraft {
@@ -70,6 +98,30 @@ interface BrainPlanningRequest {
   project_id: string;
   project_name: string;
   requested_by: string;
+  mission_history: Array<{
+    id: string;
+    title: string;
+    objective: string;
+    status: string;
+    planning_provenance: PlanningProvenance | null;
+    created_by: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    task_count: number;
+    completed_task_count: number;
+    blocked_task_count: number;
+    tasks: Array<{
+      id: string;
+      title: string;
+      description: string;
+      agent_role: string;
+      status: string;
+      priority: number;
+      acceptance_criteria: string[];
+      attempts: number;
+      blocker_reason: string | null;
+    }>;
+  }>;
   constitution: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
   constitution_files: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
   role_definitions: Array<{
@@ -198,6 +250,31 @@ function firstMeaningfulLine(text: string | null | undefined, fallback: string):
 }
 
 function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainRequestedBy): BrainPlanningRequest {
+  const mission_history = context.project.missionHistory.map((mission) => ({
+    id: mission.id,
+    title: mission.title,
+    objective: mission.objective,
+    status: mission.status,
+    planning_provenance: mission.planningProvenance,
+    created_by: mission.createdBy,
+    started_at: mission.startedAt,
+    completed_at: mission.completedAt,
+    task_count: mission.taskCount,
+    completed_task_count: mission.completedTaskCount,
+    blocked_task_count: mission.blockedTaskCount,
+    tasks: mission.tasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      agent_role: task.agentRole,
+      status: task.status,
+      priority: task.priority,
+      acceptance_criteria: task.acceptanceCriteria,
+      attempts: task.attempts,
+      blocker_reason: task.blockerReason
+    }))
+  }));
+
   const sections = (Object.keys(context.constitution.files) as ConstitutionFileKey[]).reduce(
     (acc, key) => {
       const file = context.constitution.files[key];
@@ -224,6 +301,7 @@ function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainR
     project_id: context.project.id,
     project_name: context.project.name,
     requested_by: requestedBy,
+    mission_history,
     constitution: sections.constitution,
     constitution_files: sections.constitution_files,
     role_definitions: context.project.roleDefinitions.map((definition) => ({

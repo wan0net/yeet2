@@ -642,13 +642,49 @@ async function resolveProjectRegistration(input: ProjectRegistrationInput): Prom
   };
 }
 
-function asProjectInput(project: Pick<ProjectWithRelations, "id" | "name" | "repoUrl" | "defaultBranch" | "localPath" | "roleDefinitions">): PlanningProject {
+function asProjectInput(
+  project: Pick<ProjectWithRelations, "id" | "name" | "repoUrl" | "defaultBranch" | "localPath" | "roleDefinitions" | "missions">
+): PlanningProject {
   return {
     id: project.id,
     name: project.name,
     repoUrl: project.repoUrl ?? "",
     defaultBranch: project.defaultBranch,
     localPath: project.localPath,
+    missionHistory: [...project.missions]
+      .sort((left, right) => (right.startedAt?.getTime() ?? 0) - (left.startedAt?.getTime() ?? 0))
+      .map((mission) => {
+        const tasks = [...mission.tasks].sort((left, right) => left.priority - right.priority);
+        return {
+          id: mission.id,
+          title: mission.title,
+          objective: mission.objective,
+          status: mission.status,
+          createdBy: mission.createdBy ?? null,
+          planningProvenance: planningProvenanceFromCreatedBy(mission.createdBy),
+          startedAt: mission.startedAt?.toISOString() ?? null,
+          completedAt: mission.completedAt?.toISOString() ?? null,
+          taskCount: tasks.length,
+          completedTaskCount: tasks.filter((task) => task.status === "complete").length,
+          blockedTaskCount: tasks.filter((task) => task.status === "blocked").length,
+          tasks: tasks.map((task) => ({
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            agentRole: task.agentRole as "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual",
+            status: task.status,
+            priority: task.priority,
+            acceptanceCriteria: Array.isArray(task.acceptanceCriteria)
+              ? (task.acceptanceCriteria as unknown[])
+                  .filter((value): value is string => typeof value === "string")
+                  .map((value) => value.trim())
+                  .filter(Boolean)
+              : [],
+            attempts: task.attempts,
+            blockerReason: task.blockerReason ?? null
+          }))
+        };
+      }),
     roleDefinitions: [...project.roleDefinitions]
       .sort((left, right) => left.sortOrder - right.sortOrder)
       .map((definition) => ({
@@ -1297,8 +1333,30 @@ async function resolveProjectPullRequestReviewBlocker(mission: ProjectMissionWit
   });
 }
 
-function isPlanningComplete(missions: ProjectMissionSummary[]): boolean {
-  return missions.length > 0 && missions[0].tasks.length >= 3;
+function missionHasActionableWork(mission: ProjectMissionSummary): boolean {
+  return mission.tasks.some((task) => {
+    if (task.dispatchable) {
+      return true;
+    }
+
+    return ["queued", "pending", "ready", "running", "in_progress", "blocked", "failed"].includes(task.status);
+  });
+}
+
+function shouldStartFollowOnPlanning(summary: ProjectSummary): boolean {
+  const hasLiveMission = summary.missions.some((mission) => {
+    if (mission.status !== "active" && mission.status !== "planned") {
+      return false;
+    }
+
+    return missionHasActionableWork(mission);
+  });
+
+  if (hasLiveMission) {
+    return false;
+  }
+
+  return summary.nextDispatchableTaskId === null;
 }
 
 function buildBranchName(projectId: string, taskId: string): string {
@@ -2537,7 +2595,7 @@ export async function planProject(projectId: string): Promise<ProjectSummary | n
   }
 
   const currentSummary = await hydrateProject(project);
-  if (isPlanningComplete(currentSummary.missions)) {
+  if (!shouldStartFollowOnPlanning(currentSummary)) {
     return currentSummary;
   }
 
