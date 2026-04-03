@@ -266,10 +266,10 @@ This means:
 
 ### Frontend
 
-- Next.js for `apps/control`
-- React for UI
-- Tailwind CSS for basic styling
-- shadcn/ui may be used for fast internal UI composition
+- SvelteKit for `apps/control`
+- Svelte for UI
+- link42-aligned tokens, CSS, and component patterns for the control surface
+- auxiliary component libraries may be used only when they do not fight the link42 design system direction
 
 ### API
 
@@ -317,7 +317,7 @@ This means:
 ### Authentication
 
 - for MVP, use a minimal local-only auth model or no auth if the system is exposed only on a trusted internal network
-- when auth is enabled, prefer **better-auth** or a strong Next.js-native equivalent that fits the control app and API integration cleanly
+- when auth is enabled, prefer **better-auth** or a strong SvelteKit-native equivalent that fits the control app and API integration cleanly
 - auth boundaries must still be designed so a stronger auth model can be added later
 - session, identity, and future role/approval boundaries should be modeled so the chosen auth system can expand from local auth toward stronger operator authentication without a major rewrite
 
@@ -355,7 +355,7 @@ This means:
 
 ## Preferred Initial Stack Summary
 
-- Frontend: Next.js + React + Tailwind
+- Frontend: SvelteKit + Svelte + link42-aligned CSS
 - API: Fastify on Node.js
 - Brain: Python + CrewAI
 - Executor: Python + OpenHands adapter

@@ -98,9 +98,10 @@ services:
       dockerfile: infra/docker/Dockerfile.node
     environment:
       PORT: 3000
-      HOSTNAME: 0.0.0.0
-      YEET2_API_BASE_URL: http://api:3001
-    command: ["/bin/sh", "-lc", "pnpm --filter @yeet2/control start --hostname 0.0.0.0 --port 3000"]
+      HOST: 0.0.0.0
+      ORIGIN: http://10.42.10.101:3000
+      YEET2_API_URL: http://api:3001
+    command: ["pnpm", "--filter", "@yeet2/control", "start"]
     ports:
       - "${CONTROL_PORT:-3000}:3000"
     depends_on:

@@ -1,9 +1,11 @@
 node_modules
 .next
+.svelte-kit
 .turbo
 dist
 build
 coverage
+*.tsbuildinfo
 .env
 .env.*
 *.log

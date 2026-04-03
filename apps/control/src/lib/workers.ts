@@ -1,5 +1,3 @@
-import { controlBaseUrl } from "./project-resource";
-
 export type WorkerStatus = "idle" | "busy" | "offline" | "error" | "unknown";
 
 export interface WorkerLeaseInfo {
@@ -34,6 +32,8 @@ export interface WorkerRegistrySnapshot {
   error: string | null;
   detail: unknown | null;
 }
+
+export type WorkerRegistryResult = WorkerRegistrySnapshot;
 
 type RawRecord = Record<string, unknown>;
 
@@ -230,22 +230,11 @@ export function workerStatusTone(value: string): string {
 }
 
 export async function fetchWorkerRegistry(): Promise<WorkerRegistrySnapshot> {
-  const baseUrl = await controlBaseUrl();
-  const response = await fetch(`${baseUrl}/api/workers`, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/json"
-    }
-  });
-  const payload = (await readJsonResponse(response)) as Record<string, unknown> | null;
-  const workers = normalizeWorkerList(payload?.workers ?? payload);
-  const registryAvailable = payload?.registryAvailable === false ? false : response.ok;
-
   return {
-    workers,
-    registryAvailable,
-    status: response.status,
-    error: typeof payload?.error === "string" ? payload.error : null,
-    detail: payload?.detail ?? (registryAvailable ? null : payload)
+    workers: [],
+    registryAvailable: false,
+    status: null,
+    error: "Worker registry fetch is not available in the SvelteKit control app.",
+    detail: null
   };
 }

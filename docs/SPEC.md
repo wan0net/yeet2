@@ -6,7 +6,7 @@ yeet2 is a self-hosted autonomous software-team platform built as a monorepo.
 
 The MVP stack is:
 
-- Next.js + React + Tailwind for `apps/control`
+- SvelteKit + link42-aligned CSS and components for `apps/control`
 - Fastify on Node.js for `apps/api`
 - Python + CrewAI for `apps/brain`
 - Python + OpenHands adapter for `apps/executor`

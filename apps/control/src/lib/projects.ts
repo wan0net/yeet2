@@ -1317,7 +1317,11 @@ function normalizeBlockers(raw: RawRecord): ProjectBlockerRecord[] {
   return candidates.map(normalizeBlockerRecord).filter((entry): entry is ProjectBlockerRecord => entry !== null);
 }
 
-export function formatConstitutionFiles(files: ConstitutionFileSummary): string {
+export function formatConstitutionFiles(files?: ConstitutionFileSummary): string {
+  if (!files) {
+    return "0/6 files present";
+  }
+
   const entries = Object.values(files);
   const present = entries.filter(Boolean).length;
   return `${present}/${entries.length} files present`;
@@ -1375,6 +1379,8 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     blockerCount: numberValue(raw.blockerCount, raw.blocker_count) ?? blockers.filter((blocker) => blocker.status === "open").length
   };
 }
+
+export const normalizeProject = normalizeProjectRecord;
 
 export function normalizeProjectList(payload: unknown): ProjectRecord[] {
   const raw = asRecord(payload);
@@ -1716,7 +1722,13 @@ export function formatUsdAmount(value: number | null | undefined): string | null
   return `$${value.toPrecision(2)}`;
 }
 
-export function projectModelCostSummary(model: Pick<ProjectModelCatalogOption, "promptCostPerMillionUsd" | "completionCostPerMillionUsd" | "requestCostUsd">): string | null {
+export function projectModelCostSummary(
+  model: Pick<ProjectModelCatalogOption, "promptCostPerMillionUsd" | "completionCostPerMillionUsd" | "requestCostUsd"> | null | undefined
+): string | null {
+  if (!model) {
+    return null;
+  }
+
   const parts = [
     model.promptCostPerMillionUsd !== null ? `in ${formatUsdAmount(model.promptCostPerMillionUsd)}/1M` : null,
     model.completionCostPerMillionUsd !== null ? `out ${formatUsdAmount(model.completionCostPerMillionUsd)}/1M` : null,

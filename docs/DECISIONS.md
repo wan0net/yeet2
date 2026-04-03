@@ -99,3 +99,13 @@ No implementation deviations recorded yet.
 - Chosen Approach: `The executor keeps the yeet2-owned local worktree flow and adds an ASRT-backed sandbox mode controlled by YEET2_EXECUTOR_SANDBOX_* env vars, rendering a yeet2-owned per-job config and optionally merging a base JSON policy file before launching OpenHands through srt`
 - Reason: `This keeps sandbox policy under yeet2 control, fits the existing synchronous subprocess model, and borrows the sharkcage-style pattern of generating isolated config per job instead of relying on a shared operator-managed sandbox file`
 - Consequences: `ASRT mode adds a host dependency on srt plus sandbox config management, but it keeps executor behavior compatible with the current OpenHands adapter, leaves sandbox mode optional for local development, and keeps older YEET2_ASRT_* names as compatibility aliases rather than the primary interface`
+
+### DECISION-008: Control App Moves From Next.js To SvelteKit
+
+- Date: `2026-04-03`
+- Status: `accepted`
+- Area: `frontend`
+- Spec Default: `Next.js for apps/control`
+- Chosen Approach: `apps/control is migrated to SvelteKit with adapter-node so yeet2 can align directly with the existing link42 platform libraries, theme tokens, layout patterns, and component language`
+- Reason: `The operator requested full UI alignment with link42, and link42 itself is built on SvelteKit with a shared token and component system. Matching that platform directly is the most reliable way to achieve true parity instead of approximating it inside a separate Next.js stack`
+- Consequences: `This is a deliberate frontend-stack deviation from the original MVP spec. The Fastify API, Brain, Executor, and domain contracts remain unchanged, but the control app now shares the same platform direction as link42. Deployment and local runtime expectations for apps/control now follow SvelteKit rather than Next.js`

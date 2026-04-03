@@ -1,26 +1,24 @@
 {
   "name": "@yeet2/control",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "dev": "vite dev",
+    "build": "svelte-kit sync && vite build",
+    "start": "node build",
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
     "@yeet2/domain": "workspace:*",
-    "@yeet2/ui": "workspace:*",
-    "next": "^15.1.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@sveltejs/adapter-node": "^5.2.12",
+    "@sveltejs/kit": "^2.40.3",
+    "svelte": "^5.38.6"
   },
   "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.1.0",
     "@types/node": "^22.10.2",
-    "@types/react": "^19.0.2",
-    "@types/react-dom": "^19.0.2",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.49",
-    "tailwindcss": "^3.4.16",
-    "typescript": "^5.7.2"
+    "svelte-check": "^4.3.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.2.0"
   }
 }
