@@ -1,5 +1,3 @@
-import Link from "next/link";
-import type { Route } from "next";
 import type { PropsWithChildren } from "react";
 
 export function TopBar() {
@@ -23,14 +21,14 @@ export function TopBar() {
             ["/approvals", "Approvals"],
             ["/workers", "Workers"],
             ["/blockers", "Blockers"]
-          ] as ReadonlyArray<readonly [Route, string]>).map(([href, label]) => (
-            <Link
+          ] as ReadonlyArray<readonly [string, string]>).map(([href, label]) => (
+            <a
               key={href}
               className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--foreground)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-muted)]"
               href={href}
             >
               {label}
-            </Link>
+            </a>
           ))}
         </nav>
       </div>
