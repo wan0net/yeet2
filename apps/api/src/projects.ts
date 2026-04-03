@@ -1439,17 +1439,29 @@ function missionHasActionableWork(mission: ProjectMissionSummary): boolean {
   });
 }
 
-function shouldStartFollowOnPlanning(summary: ProjectSummary): boolean {
-  const hasLiveMission = summary.missions.some((mission) => {
+function missionIsQueuedBacklog(mission: ProjectMissionSummary): boolean {
+  return mission.status === "planned" && mission.startedAt === null && missionHasActionableWork(mission);
+}
+
+function shouldTopUpMissionBacklog(summary: ProjectSummary): boolean {
+  if (summary.missions.some(missionIsQueuedBacklog)) {
+    return false;
+  }
+
+  const liveMissionCount = summary.missions.filter((mission) => {
     if (mission.status !== "active" && mission.status !== "planned") {
       return false;
     }
 
     return missionHasActionableWork(mission);
-  });
+  }).length;
 
-  if (hasLiveMission) {
+  if (liveMissionCount > 1) {
     return false;
+  }
+
+  if (liveMissionCount === 1) {
+    return true;
   }
 
   return summary.nextDispatchableTaskId === null;
@@ -2696,8 +2708,62 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
   const missionObjective = draft.mission.objective.trim() || "Translate the constitution into an actionable project plan.";
   const createdBy = draft.mission.createdBy;
 
-  const existingMission = project.missions[0] ?? null;
+  const queuedBacklogMission = project.missions.find(
+    (mission) => mission.status === "planned" && mission.startedAt === null && mission.tasks.length > 0
+  );
+  if (queuedBacklogMission) {
+    return;
+  }
+
+  const existingMission = project.missions.find((mission) => mission.tasks.length === 0) ?? project.missions[0] ?? null;
   if (existingMission && existingMission.tasks.length > 0) {
+    const hasActionableMission = project.missions.some((mission) =>
+      mission.tasks.some((task) => hasActionableTaskWork(task))
+    );
+
+    if (hasActionableMission) {
+      const createdMission = await prisma.mission.create({
+        data: {
+          projectId: project.id,
+          title: missionTitle,
+          objective: missionObjective,
+          status: "planned",
+          createdBy,
+          startedAt: null,
+          tasks: {
+            create: (() => {
+              const roleUsageCounts = new Map<string, number>();
+              return draft.tasks.map((task) => ({
+                ...resolveAssignedRoleDefinitionForTaskDraft(project.roleDefinitions, task, roleUsageCounts),
+                title: task.title,
+                description: task.description,
+                agentRole: task.agentRole,
+                status: task.status,
+                priority: task.priority,
+                acceptanceCriteria: task.acceptanceCriteria,
+                attempts: task.attempts,
+                blockerReason: task.blockerReason
+              }));
+            })()
+          }
+        },
+        select: { id: true, title: true }
+      });
+
+      await recordDecisionLog({
+        projectId: project.id,
+        missionId: createdMission.id,
+        kind: "planning",
+        actor: draft.mission.planningProvenance,
+        summary: `Queued backlog mission "${createdMission.title}"`,
+        detail: {
+          taskCount: draft.tasks.length,
+          objective: missionObjective,
+          mode: "backlog_top_up"
+        }
+      });
+    }
+
     return;
   }
 
@@ -3064,7 +3130,7 @@ export async function planProject(projectId: string): Promise<ProjectSummary | n
   }
 
   const currentSummary = await hydrateProject(project);
-  if (!shouldStartFollowOnPlanning(currentSummary)) {
+  if (!shouldTopUpMissionBacklog(currentSummary)) {
     return currentSummary;
   }
 

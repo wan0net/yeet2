@@ -97,6 +97,35 @@ function needsInitialPlanning(project: ProjectSummary): boolean {
   return project.missions.length === 0 || firstMission?.tasks.length === 0;
 }
 
+function missionHasActionableWork(project: ProjectSummary, missionId: string): boolean {
+  const mission = project.missions.find((candidate) => candidate.id === missionId) ?? null;
+  if (!mission) {
+    return false;
+  }
+
+  return mission.tasks.some((task) => ["queued", "pending", "ready", "running", "in_progress", "blocked", "failed"].includes(task.status));
+}
+
+function hasQueuedBacklogMission(project: ProjectSummary): boolean {
+  return project.missions.some((mission) => mission.status === "planned" && mission.startedAt === null && missionHasActionableWork(project, mission.id));
+}
+
+function needsBacklogPlanning(project: ProjectSummary): boolean {
+  if (hasQueuedBacklogMission(project)) {
+    return false;
+  }
+
+  const liveMissionCount = project.missions.filter((mission) => {
+    if (mission.status !== "active" && mission.status !== "planned") {
+      return false;
+    }
+
+    return missionHasActionableWork(project, mission.id);
+  }).length;
+
+  return liveMissionCount === 1;
+}
+
 function latestMissionId(project: ProjectSummary): string | null {
   return project.missions[0]?.id ?? null;
 }
@@ -419,7 +448,7 @@ export class AutonomyLoopManager {
       return;
     }
 
-    const shouldPlan = needsInitialPlanning(project);
+    const shouldPlan = needsInitialPlanning(project) || needsBacklogPlanning(project);
     let currentProject = project;
 
     if (shouldPlan) {
@@ -441,7 +470,7 @@ export class AutonomyLoopManager {
 
     if (project.autonomyMode === "supervised") {
       if (shouldPlan) {
-        await this.persistTelemetry(currentProject, "plan", "planned", "Initial planning completed");
+        await this.persistTelemetry(currentProject, "plan", "planned", needsInitialPlanning(project) ? "Initial planning completed" : "Backlog planning completed");
       } else {
         await this.persistTelemetry(currentProject, "skip", "idle", "Supervised mode skipped dispatch");
       }

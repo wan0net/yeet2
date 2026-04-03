@@ -317,7 +317,9 @@ This means:
 ### Authentication
 
 - for MVP, use a minimal local-only auth model or no auth if the system is exposed only on a trusted internal network
+- when auth is enabled, prefer **better-auth** or a strong Next.js-native equivalent that fits the control app and API integration cleanly
 - auth boundaries must still be designed so a stronger auth model can be added later
+- session, identity, and future role/approval boundaries should be modeled so the chosen auth system can expand from local auth toward stronger operator authentication without a major rewrite
 
 ### Observability
 

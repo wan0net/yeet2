@@ -102,6 +102,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const jobs = recentJobs(project).slice(0, 8);
   const taskGroups = groupTasksByState(project);
   const currentMission = activeMission(project);
+  const queuedBacklogMissions = project.missions.filter((mission) => mission.status === "planned" && !mission.startedAt);
   const agentView = agentPresenceOverview(project);
   const githubRepo = projectGitHubRepoInfo(project) ?? parseGitHubRepoUrl(project.repoUrl);
   const githubDefaultBranchLink = githubBranchUrl(project.repoUrl, project.defaultBranch) ?? githubRepo?.webUrl ?? null;
@@ -310,6 +311,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Completed</div>
                 <div className="mt-1 font-medium text-slate-900">{formatTimestamp(currentMission.completedAt) ?? "Not completed"}</div>
               </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Queued backlog</div>
+              <div className="mt-1 font-medium text-slate-900">
+                {queuedBacklogMissions.length > 0 ? `${queuedBacklogMissions.length} queued` : "No queued follow-on mission"}
+              </div>
+              {queuedBacklogMissions[0] ? <div className="mt-2 text-xs text-slate-500">Next up: {queuedBacklogMissions[0].title}</div> : null}
             </div>
           </div>
         ) : (
