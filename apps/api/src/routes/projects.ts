@@ -17,6 +17,8 @@ import {
   advanceProject,
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
+  listGlobalBlockers,
+  listGlobalJobs,
   readProjectJobLog,
   listProjectApprovals,
   refreshProjectActiveJobs,
@@ -377,6 +379,68 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
   app.get("/projects", async () => {
     return listRegisteredProjects();
+  });
+
+  app.get("/jobs", async (request, reply) => {
+    const query = (request.query ?? {}) as {
+      status?: string;
+      projectId?: string;
+      project_id?: string;
+    };
+    const status =
+      typeof query.status === "string" && query.status.trim()
+        ? query.status.trim().toLowerCase()
+        : "all";
+
+    if (status !== "all" && status !== "queued" && status !== "running" && status !== "complete" && status !== "failed" && status !== "cancelled") {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "status must be all, queued, running, complete, failed, or cancelled"
+      });
+    }
+
+    return reply.code(200).send(
+      await listGlobalJobs({
+        status,
+        projectId:
+          typeof query.projectId === "string"
+            ? query.projectId
+            : typeof query.project_id === "string"
+              ? query.project_id
+              : null
+      })
+    );
+  });
+
+  app.get("/blockers", async (request, reply) => {
+    const query = (request.query ?? {}) as {
+      status?: string;
+      projectId?: string;
+      project_id?: string;
+    };
+    const status =
+      typeof query.status === "string" && query.status.trim()
+        ? query.status.trim().toLowerCase()
+        : "all";
+
+    if (status !== "all" && status !== "open" && status !== "resolved" && status !== "dismissed") {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "status must be all, open, resolved, or dismissed"
+      });
+    }
+
+    return reply.code(200).send(
+      await listGlobalBlockers({
+        status,
+        projectId:
+          typeof query.projectId === "string"
+            ? query.projectId
+            : typeof query.project_id === "string"
+              ? query.project_id
+              : null
+      })
+    );
   });
 
   app.get("/approvals", async (request, reply) => {

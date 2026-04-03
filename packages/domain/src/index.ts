@@ -111,6 +111,32 @@ export interface ProjectApprovalQueueItem {
   taskAgentRole: AgentRole;
 }
 
+export interface GlobalJobQueueItem {
+  projectId: string;
+  projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
+  missionId: string;
+  missionTitle: string;
+  taskId: string;
+  taskTitle: string;
+  taskAgentRole: AgentRole;
+  taskStatus: TaskStatus;
+  job: JobSummary;
+}
+
+export interface GlobalBlockerQueueItem {
+  projectId: string;
+  projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
+  missionId: string;
+  missionTitle: string;
+  taskId: string;
+  taskTitle: string;
+  blocker: ProjectBlockerSummary;
+}
+
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;

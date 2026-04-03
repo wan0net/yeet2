@@ -12,6 +12,8 @@ import type {
   Task as DbTask
 } from "@yeet2/db";
 import type {
+  GlobalBlockerQueueItem,
+  GlobalJobQueueItem,
   ProjectCostAnalysisSummary,
   ProjectApprovalQueueItem,
   OperatorGuidanceSummary,
@@ -102,6 +104,14 @@ export interface ProjectCostAnalysisResponse extends ProjectCostAnalysisSummary 
 
 export interface ProjectApprovalQueueResponse {
   approvals: ProjectApprovalQueueItem[];
+}
+
+export interface GlobalJobQueueResponse {
+  jobs: GlobalJobQueueItem[];
+}
+
+export interface GlobalBlockerQueueResponse {
+  blockers: GlobalBlockerQueueItem[];
 }
 
 export interface ProjectTaskSummary {
@@ -3165,6 +3175,82 @@ export async function listProjectApprovals(input: { projectId?: string | null; s
     });
 
   return { approvals };
+}
+
+export async function listGlobalJobs(input: { status?: ProjectJobStatus | "all" | null; projectId?: string | null } = {}): Promise<GlobalJobQueueResponse> {
+  const projects = await loadProjects();
+
+  return {
+    jobs: projects
+      .filter((project) => !input.projectId || project.id === input.projectId)
+      .flatMap((project) =>
+        project.missions.flatMap((mission) =>
+          mission.tasks.flatMap((task) =>
+            (task.jobs ?? [])
+              .filter((job) => !input.status || input.status === "all" || job.status === input.status)
+              .map((job) => ({
+                projectId: project.id,
+                projectName: project.name,
+                projectRepoUrl: project.repoUrl,
+                projectGitHubUrl: project.githubRepoUrl,
+                missionId: mission.id,
+                missionTitle: mission.title,
+                taskId: task.id,
+                taskTitle: task.title,
+                taskAgentRole: task.agentRole as GlobalJobQueueItem["taskAgentRole"],
+                taskStatus: task.status as GlobalJobQueueItem["taskStatus"],
+                job
+              }))
+          )
+        )
+      )
+      .sort((left, right) => {
+        const leftTime = Date.parse(left.job.completedAt ?? left.job.startedAt ?? "") || 0;
+        const rightTime = Date.parse(right.job.completedAt ?? right.job.startedAt ?? "") || 0;
+        return rightTime - leftTime;
+      })
+  };
+}
+
+export async function listGlobalBlockers(input: { status?: DbBlocker["status"] | "all" | null; projectId?: string | null } = {}): Promise<GlobalBlockerQueueResponse> {
+  const projects = await loadProjects();
+
+  return {
+    blockers: projects
+      .filter((project) => !input.projectId || project.id === input.projectId)
+      .flatMap((project) =>
+        project.missions.flatMap((mission) =>
+          mission.tasks.flatMap((task) =>
+            project.blockers
+              .filter((blocker) => blocker.taskId === task.id)
+              .filter((blocker) => !input.status || input.status === "all" || blocker.status === input.status)
+              .map((blocker) => ({
+                projectId: project.id,
+                projectName: project.name,
+                projectRepoUrl: project.repoUrl,
+                projectGitHubUrl: project.githubRepoUrl,
+                missionId: mission.id,
+                missionTitle: mission.title,
+                taskId: task.id,
+                taskTitle: task.title,
+                blocker: {
+                  ...blocker,
+                  taskAgentRole: task.agentRole as GlobalBlockerQueueItem["blocker"]["taskAgentRole"]
+                }
+              }))
+          )
+        )
+      )
+      .sort((left, right) => {
+        const leftOpen = left.blocker.status === "open";
+        const rightOpen = right.blocker.status === "open";
+        if (leftOpen !== rightOpen) {
+          return leftOpen ? -1 : 1;
+        }
+
+        return right.blocker.createdAt.localeCompare(left.blocker.createdAt);
+      })
+  };
 }
 
 async function persistPlannedMission(project: ProjectWithRelations, draft: PlanningDraft): Promise<void> {
