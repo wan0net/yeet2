@@ -339,6 +339,39 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
   app: FastifyInstance,
   options
 ) => {
+  async function triggerProjectRunIfEnabled(projectId: string): Promise<{
+    runTriggered: boolean;
+    telemetry: Awaited<ReturnType<AutonomyLoopManager["triggerProject"]>> | null;
+    triggerError: string | null;
+  }> {
+    const project = await getRegisteredProject(projectId);
+    const shouldTriggerRun = Boolean(project.project && project.project.autonomyMode !== "manual");
+    if (!shouldTriggerRun) {
+      return {
+        runTriggered: false,
+        telemetry: null,
+        triggerError: null
+      };
+    }
+
+    try {
+      const telemetry = await options.loopManager.triggerProject(projectId);
+      return {
+        runTriggered: true,
+        telemetry,
+        triggerError: null
+      };
+    } catch (error) {
+      const triggerError = error instanceof Error ? error.message : "Unable to trigger project run";
+      app.log.error({ error, projectId }, "Unable to trigger project run");
+      return {
+        runTriggered: true,
+        telemetry: null,
+        triggerError
+      };
+    }
+  }
+
   app.get("/projects", async () => {
     return listRegisteredProjects();
   });
@@ -441,7 +474,8 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const project = await updateProjectAutonomy(projectId, parsedBody.input);
-      return reply.code(200).send({ project });
+      const run = await triggerProjectRunIfEnabled(projectId);
+      return reply.code(200).send({ project, ...run });
     } catch (error) {
       if (error instanceof ProjectAutonomyError) {
         return reply.code(error.statusCode).send({
@@ -740,7 +774,11 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const result = await resolveProjectBlocker(projectId, blockerId);
-      return reply.code(200).send(result);
+      const run = await triggerProjectRunIfEnabled(projectId);
+      return reply.code(200).send({
+        ...result,
+        ...run
+      });
     } catch (error) {
       if (error instanceof ProjectBlockerError) {
         return reply.code(error.statusCode).send({
@@ -776,7 +814,11 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const result = await applyProjectBlockerApproval(projectId, blockerId, parsedBody.input.action);
-      return reply.code(200).send(result);
+      const run = await triggerProjectRunIfEnabled(projectId);
+      return reply.code(200).send({
+        ...result,
+        ...run
+      });
     } catch (error) {
       if (error instanceof ProjectApprovalError || error instanceof ProjectBlockerError || error instanceof ProjectPullRequestError) {
         return reply.code(error.statusCode).send({
@@ -840,7 +882,8 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const project = await replaceProjectRoleDefinitions(projectId, parsedBody.input);
-      return reply.code(200).send({ project });
+      const run = await triggerProjectRunIfEnabled(projectId);
+      return reply.code(200).send({ project, ...run });
     } catch (error) {
       if (error instanceof ProjectRoleDefinitionError) {
         return reply.code(error.statusCode).send({
@@ -876,26 +919,11 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const message = await createProjectMessage(projectId, parsedBody.input);
-      const project = await getRegisteredProject(projectId);
-      const shouldTriggerRun = Boolean(project.project && project.project.autonomyMode !== "manual");
-
-      let telemetry: Awaited<ReturnType<AutonomyLoopManager["triggerProject"]>> | null = null;
-      let triggerError: string | null = null;
-
-      if (shouldTriggerRun) {
-        try {
-          telemetry = await options.loopManager.triggerProject(projectId);
-        } catch (error) {
-          triggerError = error instanceof Error ? error.message : "Unable to trigger project run";
-          app.log.error({ error, projectId }, "Unable to trigger project run after operator message");
-        }
-      }
+      const run = await triggerProjectRunIfEnabled(projectId);
 
       return reply.code(201).send({
         message,
-        runTriggered: shouldTriggerRun,
-        telemetry,
-        triggerError
+        ...run
       });
     } catch (error) {
       if (error instanceof ProjectRegistrationError || error instanceof ProjectRoleDefinitionError) {

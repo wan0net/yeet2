@@ -8,6 +8,7 @@ import {
   mergeProjectPullRequest,
   planProject,
   recordProjectAutonomyRun,
+  refreshProjectActiveJobs,
   refreshProjectPullRequestState,
   type ProjectSummary
 } from "./projects";
@@ -95,6 +96,12 @@ function hasEnabledRoleDefinitions(project: ProjectSummary): boolean {
 function needsInitialPlanning(project: ProjectSummary): boolean {
   const firstMission = project.missions[0] ?? null;
   return project.missions.length === 0 || firstMission?.tasks.length === 0;
+}
+
+function hasInFlightJobs(project: ProjectSummary): boolean {
+  return project.missions.some((mission) =>
+    mission.tasks.some((task) => task.jobs.some((job) => job.status === "queued" || job.status === "running"))
+  );
 }
 
 function missionHasActionableWork(project: ProjectSummary, missionId: string): boolean {
@@ -448,29 +455,47 @@ export class AutonomyLoopManager {
       return;
     }
 
-    const shouldPlan = needsInitialPlanning(project) || needsBacklogPlanning(project);
     let currentProject = project;
+    if (hasInFlightJobs(currentProject)) {
+      try {
+        const refreshed = await refreshProjectActiveJobs(currentProject.id);
+        currentProject = refreshed.project;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Active job refresh failed";
+        this.logger.error({ error, projectId: project.id }, "Autonomy loop active job refresh failed");
+        await this.persistTelemetry(currentProject, "advance", "error", message);
+        return;
+      }
+    }
+
+    const isInitialPlanning = needsInitialPlanning(currentProject);
+    const shouldPlan = isInitialPlanning || needsBacklogPlanning(currentProject);
 
     if (shouldPlan) {
       try {
-        const plannedProject = await planProject(project.id);
+        const plannedProject = await planProject(currentProject.id);
         if (!plannedProject) {
-          await this.persistTelemetry(project, "plan", "error", "Project disappeared while planning");
+          await this.persistTelemetry(currentProject, "plan", "error", "Project disappeared while planning");
           return;
         }
 
         currentProject = plannedProject;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Planning failed";
-        this.logger.error({ error, projectId: project.id }, "Autonomy loop planning failed");
-        await this.persistTelemetry(project, "plan", "error", message);
+        this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop planning failed");
+        await this.persistTelemetry(currentProject, "plan", "error", message);
         return;
       }
     }
 
-    if (project.autonomyMode === "supervised") {
+    if (currentProject.autonomyMode === "supervised") {
       if (shouldPlan) {
-        await this.persistTelemetry(currentProject, "plan", "planned", needsInitialPlanning(project) ? "Initial planning completed" : "Backlog planning completed");
+        await this.persistTelemetry(
+          currentProject,
+          "plan",
+          "planned",
+          isInitialPlanning ? "Initial planning completed" : "Backlog planning completed"
+        );
       } else {
         await this.persistTelemetry(currentProject, "skip", "idle", "Supervised mode skipped dispatch");
       }
@@ -481,20 +506,21 @@ export class AutonomyLoopManager {
       try {
         const automation = await processProjectPullRequestAutomation(currentProject);
         if (!automation) {
+          await this.persistTelemetry(currentProject, "skip", "idle", "No dispatchable task or pull request action is available");
           return;
         }
 
         await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Pull request automation failed";
-        this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request automation failed");
+        this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop pull request automation failed");
         await this.persistTelemetry(currentProject, "merge", "error", message);
       }
       return;
     }
 
     try {
-      const dispatched = await advanceProject(project.id);
+      const dispatched = await advanceProject(currentProject.id);
       await this.persistTelemetry(dispatched.project, "advance", "advanced", `Dispatched task ${dispatched.job.taskId}`);
 
       const candidate = findLatestCompletedImplementerJob(dispatched.project);
@@ -506,13 +532,13 @@ export class AutonomyLoopManager {
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Pull request automation failed";
-          this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request automation failed");
+          this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop pull request automation failed");
           await this.persistTelemetry(dispatched.project, "merge", "error", message);
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dispatch failed";
-      this.logger.error({ error, projectId: project.id }, "Autonomy loop dispatch failed");
+      this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop dispatch failed");
       await this.persistTelemetry(currentProject, "advance", "error", message);
     }
   }
