@@ -189,6 +189,14 @@ export default async function JobsPage() {
                         <span>
                           Executor: <span className="font-medium text-slate-700">{job.executorType}</span>
                         </span>
+                        {job.workerId ? (
+                          <span>
+                            Worker:{" "}
+                            <Link className="font-medium text-slate-700 underline-offset-4 hover:underline" href={"/workers" as Route}>
+                              {job.workerId}
+                            </Link>
+                          </span>
+                        ) : null}
                         <span>
                           Branch:{" "}
                           {githubBranchLink ? (
@@ -249,6 +257,16 @@ export default async function JobsPage() {
                           <dt className="font-medium text-slate-800">Artifacts</dt>
                           <dd>{job.artifactSummary ?? "No artifact summary recorded"}</dd>
                         </div>
+                        {job.workerId ? (
+                          <div>
+                            <dt className="font-medium text-slate-800">Worker</dt>
+                            <dd>
+                              <Link className="font-medium text-slate-700 underline-offset-4 hover:underline" href={"/workers" as Route}>
+                                {job.workerId}
+                              </Link>
+                            </dd>
+                          </div>
+                        ) : null}
                         <div>
                           <dt className="font-medium text-slate-800">Log</dt>
                           <dd className="break-all font-mono text-xs text-slate-600">{summarizeLogPath(job.logPath)}</dd>

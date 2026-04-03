@@ -537,6 +537,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       </span>
                       <span>Role: <span className="font-medium text-slate-700">{task.agentRole}</span></span>
                       <span>Executor: <span className="font-medium text-slate-700">{job.executorType}</span></span>
+                      {job.workerId ? (
+                        <span>
+                          Worker:{" "}
+                          <Link className="font-medium text-slate-700 underline-offset-4 hover:underline" href={"/workers" as Route}>
+                            {job.workerId}
+                          </Link>
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
@@ -593,6 +601,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         {job.githubBranchCleanupDeletedAt ? <span className="text-slate-500">Deleted {formatTimestamp(job.githubBranchCleanupDeletedAt)}</span> : null}
                       </div>
                       {job.githubPrTitle ? <div className="mt-2 text-xs text-slate-500">{job.githubPrTitle}</div> : null}
+                      {job.workerId ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span className="uppercase tracking-[0.16em] text-slate-400">Worker</span>
+                          <Link className="font-medium text-slate-700 underline-offset-4 hover:underline" href={"/workers" as Route}>
+                            {job.workerId}
+                          </Link>
+                        </div>
+                      ) : null}
                     </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>

@@ -38,6 +38,7 @@ export interface ProjectTaskRecord {
 export interface ProjectJobRecord {
   id: string;
   taskId: string;
+  workerId: string | null;
   executorType: string;
   workspacePath: string;
   branchName: string;
@@ -938,6 +939,7 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
   return {
     id: id || `job-${Math.random().toString(36).slice(2, 8)}`,
     taskId: stringValue(raw.taskId, raw.task_id),
+    workerId: stringValue(raw.workerId, raw.worker_id, raw.executorWorkerId, raw.executor_worker_id) || null,
     executorType: stringValue(raw.executorType, raw.executor_type) || "unknown",
     workspacePath,
     branchName,
