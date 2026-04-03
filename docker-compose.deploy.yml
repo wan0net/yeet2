@@ -97,7 +97,7 @@ services:
       PORT: 3000
       HOSTNAME: 0.0.0.0
       YEET2_API_BASE_URL: http://api:3001
-    command: ["/bin/sh", "-lc", "pnpm --filter @yeet2/control start -- --hostname 0.0.0.0 --port 3000"]
+    command: ["/bin/sh", "-lc", "pnpm --filter @yeet2/control start --hostname 0.0.0.0 --port 3000"]
     ports:
       - "${CONTROL_PORT:-3000}:3000"
     depends_on:
