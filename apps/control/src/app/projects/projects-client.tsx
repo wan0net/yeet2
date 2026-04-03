@@ -418,12 +418,12 @@ export function ProjectsClient() {
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Register local repository">
+      <SectionCard title="Register repository">
         <form className="grid gap-4 lg:grid-cols-2" onSubmit={handleSubmit}>
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">Project name</span>
+            <span className="yeet-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Project name</span>
             <input
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+              className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--border-strong)]"
               name="name"
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
               placeholder="forgeyard"
@@ -432,9 +432,9 @@ export function ProjectsClient() {
           </label>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">Repository URL</span>
+            <span className="yeet-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Repository URL</span>
             <input
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+              className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--border-strong)]"
               name="repo_url"
               onChange={(event) => setForm((current) => ({ ...current, repo_url: event.target.value }))}
               placeholder="https://github.com/example/forgeyard.git"
@@ -443,9 +443,9 @@ export function ProjectsClient() {
           </label>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">Default branch</span>
+            <span className="yeet-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Default branch</span>
             <input
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+              className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--border-strong)]"
               name="default_branch"
               onChange={(event) => setForm((current) => ({ ...current, default_branch: event.target.value }))}
               placeholder="main"
@@ -454,28 +454,28 @@ export function ProjectsClient() {
           </label>
 
           <label className="grid gap-2">
-            <span className="text-sm font-medium text-slate-700">Local path</span>
+            <span className="yeet-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--muted)]">Local path</span>
             <input
-              className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+              className="rounded-[22px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-[var(--border-strong)]"
               name="local_path"
               onChange={(event) => setForm((current) => ({ ...current, local_path: event.target.value }))}
               placeholder="/Users/icd/Workspace/forgeyard (optional)"
               value={form.local_path}
             />
-            <span className="text-xs leading-5 text-slate-500">
+            <span className="text-xs leading-5 text-[var(--muted)]">
               Leave this blank to let yeet2 clone the repository into its managed projects directory, or set it to attach an existing local checkout.
             </span>
           </label>
 
           <div className="lg:col-span-2 flex flex-wrap items-center gap-3">
             <button
-              className="rounded-full bg-teal-700 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="rounded-full bg-[var(--foreground)] px-5 py-2.5 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={isSubmitting}
               type="submit"
             >
               {isSubmitting ? "Registering..." : "Register project"}
             </button>
-            <span className="text-sm text-slate-500">
+            <span className="text-sm text-[var(--muted)]">
               Register a repo by attaching an existing checkout or by letting yeet2 clone it before indexing the constitution.
             </span>
           </div>
@@ -505,7 +505,7 @@ export function ProjectsClient() {
             </button>
           </div>
         ) : projects.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+          <div className="rounded-[24px] border border-dashed border-[var(--border-strong)] bg-[var(--surface-muted)] px-4 py-8 text-sm text-[var(--muted)]">
             No projects are attached yet. Register a repository above to attach an existing checkout or let yeet2 clone it into the managed projects directory.
           </div>
         ) : (
@@ -523,12 +523,12 @@ export function ProjectsClient() {
               const blockers = sortBlockers(project.blockers);
 
               return (
-                <article key={project.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <article key={project.id} className="rounded-[30px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-3">
-                        <h2 className="text-xl font-semibold tracking-tight text-slate-900">
-                          <Link className="transition hover:text-teal-700" href={`/projects/${project.id}` as Route}>
+                        <h2 className="text-xl font-semibold tracking-[-0.03em] text-[var(--foreground)]">
+                          <Link className="transition hover:text-[var(--accent-strong)]" href={`/projects/${project.id}` as Route}>
                             {project.name}
                           </Link>
                         </h2>
@@ -536,59 +536,59 @@ export function ProjectsClient() {
                           {statusLabel(project.constitutionStatus)}
                         </span>
                       </div>
-                      <div className="space-y-1 text-sm text-slate-600">
+                      <div className="space-y-1 text-sm text-[var(--muted)]">
                         <div className="break-all">
-                          <span className="font-medium text-slate-800">Repo:</span> {project.repoUrl || "—"}
+                          <span className="font-medium text-[var(--foreground)]">Repo:</span> {project.repoUrl || "—"}
                         </div>
                         <div className="break-all">
-                          <span className="font-medium text-slate-800">Local path:</span> {project.localPath || "—"}
+                          <span className="font-medium text-[var(--foreground)]">Local path:</span> {project.localPath || "—"}
                         </div>
                         <div>
-                          <span className="font-medium text-slate-800">Constitution:</span> {fileSummary}
+                          <span className="font-medium text-[var(--foreground)]">Constitution:</span> {fileSummary}
                         </div>
                       </div>
                     </div>
 
                     <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[240px]">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Missions</div>
-                        <div className="text-lg font-semibold text-slate-900">{counts[0]}</div>
+                      <div className="rounded-[22px] border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2">
+                        <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Missions</div>
+                        <div className="text-lg font-semibold text-[var(--foreground)]">{counts[0]}</div>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Tasks</div>
-                        <div className="text-lg font-semibold text-slate-900">{counts[1]}</div>
+                      <div className="rounded-[22px] border border-[var(--signal-indigo-border)] bg-[var(--signal-indigo)] px-3 py-2">
+                        <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Tasks</div>
+                        <div className="text-lg font-semibold text-[var(--foreground)]">{counts[1]}</div>
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Blockers</div>
-                        <div className="text-lg font-semibold text-slate-900">{counts[2]}</div>
+                      <div className="rounded-[22px] border border-[var(--signal-rose-border)] bg-[var(--signal-rose)] px-3 py-2">
+                        <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Blockers</div>
+                        <div className="text-lg font-semibold text-[var(--foreground)]">{counts[2]}</div>
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-3">
                     <button
-                      className="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={planningProjectId === project.id}
                       onClick={() => void handlePlanProject(project.id)}
                       type="button"
                     >
                       {planningProjectId === project.id ? "Planning..." : "Plan project"}
                     </button>
-                    <span className="text-sm text-slate-500">
+                    <span className="text-sm text-[var(--muted)]">
                       Trigger the planner to turn this constitution into an initial mission and task set.
                     </span>
                   </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     <button
-                      className="rounded-full border border-teal-300 bg-teal-50 px-4 py-2 text-sm font-medium text-teal-900 transition hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="rounded-full border border-[var(--border-strong)] bg-[var(--accent-soft)] px-4 py-2 text-sm font-medium text-[var(--accent-strong)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={advancingProjectId === project.id}
                       onClick={() => void handleAdvanceProject(project.id)}
                       type="button"
                     >
                       {advancingProjectId === project.id ? "Advancing..." : "Advance project"}
                     </button>
-                    <span className="text-sm text-slate-500">
+                    <span className="text-sm text-[var(--muted)]">
                       Ask yeet2 to advance this project and dispatch the next eligible stage automatically.
                     </span>
                   </div>

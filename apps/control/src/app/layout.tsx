@@ -14,11 +14,11 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
-        <div className="mx-auto min-h-screen max-w-6xl px-6 py-5">
+    <html data-theme="light" lang="en">
+      <body className="yeet-shell-grid">
+        <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
           <TopBar />
-          {children}
+          <div className="mt-5">{children}</div>
         </div>
       </body>
     </html>

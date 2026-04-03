@@ -98,37 +98,49 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const missingRequiredFiles = project.constitution.missingRequiredFiles ?? [];
 
   return (
-    <main className="mt-10 space-y-6">
-      <section className="max-w-4xl space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
+    <main className="mt-8 space-y-6">
+      <section className="yeet-shell-panel overflow-hidden rounded-[34px] px-6 py-7 sm:px-8">
+        <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="space-y-4">
             <StatusBadge>project detail</StatusBadge>
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">{project.name}</h1>
+              <h1 className="text-4xl font-semibold tracking-[-0.05em] text-[var(--foreground)]">{project.name}</h1>
               <span className={`rounded-full border px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] ${statusTone(project.constitutionStatus)}`}>
                 {statusLabel(project.constitutionStatus)}
               </span>
             </div>
-            <p className="max-w-3xl text-sm text-slate-600">
-              Review constitution coverage, the active mission, task queues, recent execution history, and any blockers for this project.
+            <p className="max-w-3xl text-sm leading-7 text-[var(--muted)]">
+              Review constitution coverage, the active mission, agent posture, recent execution history, and blockers for this hosted project.
             </p>
+            <div className="flex flex-wrap gap-3">
+              <Link className="rounded-full border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--surface-muted)]" href={"/projects" as Route}>
+                Back to projects
+              </Link>
+              {githubRepo ? (
+                <a
+                  className="rounded-full bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                  href={githubRepo.webUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open GitHub repo
+                </a>
+              ) : null}
+            </div>
           </div>
-          <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/projects" as Route}>
-            Back to projects
-          </Link>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Missions</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{project.activeMissionCount ?? project.missions.length}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Tasks</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{project.activeTaskCount ?? taskGroups.reduce((sum, group) => sum + group.tasks.length, 0)}</div>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Open blockers</div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900">{openBlockers}</div>
+          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--surface)] px-4 py-4">
+              <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Missions</div>
+              <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{project.activeMissionCount ?? project.missions.length}</div>
+            </div>
+            <div className="rounded-[24px] border border-[var(--signal-indigo-border)] bg-[var(--signal-indigo)] px-4 py-4">
+              <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Active tasks</div>
+              <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{project.activeTaskCount ?? taskGroups.reduce((sum, group) => sum + group.tasks.length, 0)}</div>
+            </div>
+            <div className="rounded-[24px] border border-[var(--signal-rose-border)] bg-[var(--signal-rose)] px-4 py-4">
+              <div className="yeet-mono text-[10px] uppercase tracking-[0.2em] text-[var(--muted)]">Open blockers</div>
+              <div className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--foreground)]">{openBlockers}</div>
+            </div>
           </div>
         </div>
       </section>
