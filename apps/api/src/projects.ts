@@ -31,7 +31,8 @@ import {
   mergeGitHubPullRequest,
   parseGitHubRepositoryUrl,
   GitHubIssueError,
-  GitHubPullRequestError
+  GitHubPullRequestError,
+  type GitHubPullRequestDetails
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
@@ -56,6 +57,9 @@ export interface ProjectJobSummary {
   githubPrNumber: number | null;
   githubPrUrl: string | null;
   githubPrTitle: string | null;
+  githubPrState: "open" | "closed" | "merged" | null;
+  githubPrDraft: boolean | null;
+  githubPrMergedAt: string | null;
   status: ProjectJobStatus;
   logPath: string | null;
   artifactSummary: string | null;
@@ -760,6 +764,9 @@ function planningProvenanceFromCreatedBy(value: string | null | undefined): Plan
 }
 
 function toProjectJobSummary(job: DbJob): ProjectJobSummary {
+  const githubPrState =
+    job.githubPrState === "open" || job.githubPrState === "closed" || job.githubPrState === "merged" ? job.githubPrState : null;
+
   return {
     id: job.id,
     taskId: job.taskId,
@@ -770,6 +777,9 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     githubPrNumber: job.githubPrNumber ?? null,
     githubPrUrl: job.githubPrUrl ?? null,
     githubPrTitle: job.githubPrTitle ?? null,
+    githubPrState,
+    githubPrDraft: job.githubPrDraft ?? null,
+    githubPrMergedAt: job.githubPrMergedAt?.toISOString() ?? null,
     status: job.status,
     logPath: job.logPath ?? null,
     artifactSummary: job.artifactSummary ?? null,
@@ -1070,6 +1080,37 @@ function resolveProjectGitHubCompareUrl(project: ProjectWithRelations, branchNam
     repository,
     baseBranch: project.defaultBranch,
     compareBranch: branchName
+  });
+}
+
+function mapGitHubPullRequestLifecycle(pullRequest: GitHubPullRequestDetails): {
+  githubPrState: "open" | "closed" | "merged";
+  githubPrDraft: boolean;
+  githubPrMergedAt: Date | null;
+} {
+  const githubPrState = pullRequest.merged ? "merged" : pullRequest.state === "closed" ? "closed" : "open";
+
+  return {
+    githubPrState,
+    githubPrDraft: pullRequest.draft,
+    githubPrMergedAt: pullRequest.mergedAt ? new Date(pullRequest.mergedAt) : null
+  };
+}
+
+async function persistJobPullRequestState(
+  jobId: string,
+  pullRequest: GitHubPullRequestDetails,
+  compareUrl?: string | null
+): Promise<void> {
+  await prisma.job.update({
+    where: { id: jobId },
+    data: {
+      ...(typeof compareUrl !== "undefined" ? { githubCompareUrl: compareUrl } : {}),
+      githubPrNumber: pullRequest.number,
+      githubPrUrl: pullRequest.htmlUrl,
+      githubPrTitle: pullRequest.title,
+      ...mapGitHubPullRequestLifecycle(pullRequest)
+    }
   });
 }
 
@@ -1567,10 +1608,37 @@ async function createProjectJobPullRequest(
       throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
     }
 
+    const repository = resolveProjectGitHubRepository(project);
+    const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+    if (repository && token && job.githubPrNumber !== null) {
+      try {
+        const pullRequest = await fetchGitHubPullRequest({
+          token,
+          repository,
+          pullRequestNumber: job.githubPrNumber
+        });
+
+        await persistJobPullRequestState(
+          job.id,
+          pullRequest,
+          job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName)
+        );
+      } catch {
+        // Keep existing PR metadata readable if GitHub cannot be inspected right now.
+      }
+    }
+
+    const updatedJob = await prisma.job.findUnique({
+      where: { id: job.id }
+    });
+    if (!updatedJob) {
+      throw new ProjectPullRequestError("job_not_found", "Job not found", 404);
+    }
+
     const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
     if (mission) {
       try {
-        await ensureProjectPullRequestReviewBlocker(project, mission, job);
+        await ensureProjectPullRequestReviewBlocker(project, mission, updatedJob);
       } catch {
         // Keep PR reads resilient if blocker persistence is temporarily unavailable.
       }
@@ -1578,7 +1646,7 @@ async function createProjectJobPullRequest(
 
     return {
       project: hydratedProject,
-      job: toProjectJobSummary(job),
+      job: toProjectJobSummary(updatedJob),
       created: false
     };
   }
@@ -1641,15 +1709,21 @@ async function createProjectJobPullRequest(
     throw error;
   }
 
-  await prisma.job.update({
-    where: { id: job.id },
-    data: {
-      githubCompareUrl: compareUrl ?? job.githubCompareUrl ?? null,
-      githubPrNumber: pullRequest.number,
-      githubPrUrl: pullRequest.htmlUrl,
-      githubPrTitle: pullRequest.title
-    }
-  });
+  await persistJobPullRequestState(
+    job.id,
+    {
+      number: pullRequest.number,
+      htmlUrl: pullRequest.htmlUrl,
+      title: pullRequest.title,
+      draft: project.pullRequestDraftMode !== "ready",
+      merged: false,
+      mergedAt: null,
+      state: "open",
+      headBranch: branchName,
+      baseBranch: project.defaultBranch
+    },
+    compareUrl ?? job.githubCompareUrl ?? null
+  );
 
   const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
   if (mission) {
@@ -1703,7 +1777,7 @@ async function mergeProjectJobPullRequest(
     throw new ProjectPullRequestError("github_not_configured", "GITHUB_TOKEN is required to merge GitHub pull requests.", 503);
   }
 
-  const pullRequest = await fetchGitHubPullRequest({
+  let pullRequest = await fetchGitHubPullRequest({
     token,
     repository,
     pullRequestNumber: job.githubPrNumber
@@ -1715,7 +1789,7 @@ async function mergeProjectJobPullRequest(
 
   if (!pullRequest.merged) {
     try {
-      await mergeGitHubPullRequest({
+      pullRequest = await mergeGitHubPullRequest({
         token,
         repository,
         pullRequestNumber: pullRequest.number,
@@ -1733,6 +1807,12 @@ async function mergeProjectJobPullRequest(
       throw error;
     }
   }
+
+  await persistJobPullRequestState(
+    job.id,
+    pullRequest,
+    job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName)
+  );
 
   const hydratedProject = await loadProjectById(project.id);
   if (!hydratedProject) {

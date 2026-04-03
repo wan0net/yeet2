@@ -50,6 +50,9 @@ export interface ProjectJobRecord {
   githubPrNumber: number | null;
   githubPrUrl: string | null;
   githubPrTitle: string | null;
+  githubPrState: string | null;
+  githubPrDraft: boolean | null;
+  githubPrMergedAt: string | null;
 }
 
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
@@ -58,6 +61,7 @@ export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous" | "unkn
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer" | "unknown";
 export type ProjectPullRequestDraftMode = "draft" | "ready" | "unknown";
 export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval" | "unknown";
+export type ProjectPullRequestLifecycle = "draft" | "open" | "merged" | "closed" | "unknown";
 
 export interface ProjectAutonomyState {
   mode: ProjectAutonomyMode;
@@ -248,6 +252,25 @@ function normalizePullRequestDraftMode(value: unknown): ProjectPullRequestDraftM
     case "draft":
     case "ready":
       return normalized;
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function normalizePullRequestLifecycleState(value: unknown): ProjectPullRequestLifecycle {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "draft":
+      return "draft";
+    case "open":
+      return "open";
+    case "closed":
+      return "closed";
+    case "merged":
+      return "merged";
     case "":
       return "unknown";
     default:
@@ -641,6 +664,61 @@ export function jobGitHubPullRequestLabel(job: Pick<ProjectJobRecord, "githubPrN
   return "Pull request";
 }
 
+export function jobGitHubPullRequestLifecycle(job: Pick<ProjectJobRecord, "githubPrState" | "githubPrDraft" | "githubPrMergedAt">): ProjectPullRequestLifecycle {
+  if (typeof job.githubPrMergedAt === "string" && job.githubPrMergedAt.trim()) {
+    return "merged";
+  }
+
+  const state = normalizePullRequestLifecycleState(job.githubPrState);
+  if (state === "merged" || state === "closed") {
+    return state;
+  }
+
+  if (job.githubPrDraft === true || state === "draft") {
+    return "draft";
+  }
+
+  if (state === "open") {
+    return "open";
+  }
+
+  if (job.githubPrState) {
+    return "open";
+  }
+
+  return "unknown";
+}
+
+export function jobGitHubPullRequestLifecycleLabel(job: Pick<ProjectJobRecord, "githubPrState" | "githubPrDraft" | "githubPrMergedAt">): string {
+  switch (jobGitHubPullRequestLifecycle(job)) {
+    case "draft":
+      return "Draft PR";
+    case "open":
+      return "Open PR";
+    case "merged":
+      return "Merged";
+    case "closed":
+      return "Closed";
+    default:
+      return "PR status";
+  }
+}
+
+export function jobGitHubPullRequestLifecycleTone(job: Pick<ProjectJobRecord, "githubPrState" | "githubPrDraft" | "githubPrMergedAt">): string {
+  switch (jobGitHubPullRequestLifecycle(job)) {
+    case "draft":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "open":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "merged":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "closed":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
 function booleanValue(...values: unknown[]): boolean {
   for (const value of values) {
     if (typeof value === "boolean") {
@@ -818,7 +896,19 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     githubCompareUrl: stringValue(raw.githubCompareUrl, raw.github_compare_url, raw.compareUrl, raw.compare_url) || undefined,
     githubPrNumber: numberValue(raw.githubPrNumber, raw.github_pr_number, raw.pullRequestNumber, raw.pull_request_number) ?? null,
     githubPrUrl: stringValue(raw.githubPrUrl, raw.github_pr_url, raw.pullRequestUrl, raw.pull_request_url) || null,
-    githubPrTitle: stringValue(raw.githubPrTitle, raw.github_pr_title, raw.pullRequestTitle, raw.pull_request_title) || null
+    githubPrTitle: stringValue(raw.githubPrTitle, raw.github_pr_title, raw.pullRequestTitle, raw.pull_request_title) || null,
+    githubPrState: stringValue(raw.githubPrState, raw.github_pr_state, raw.pullRequestState, raw.pull_request_state, raw.state) || null,
+    githubPrDraft:
+      typeof raw.githubPrDraft === "boolean"
+        ? raw.githubPrDraft
+        : typeof raw.github_pr_draft === "boolean"
+          ? raw.github_pr_draft
+          : typeof raw.pullRequestDraft === "boolean"
+            ? raw.pullRequestDraft
+            : typeof raw.pull_request_draft === "boolean"
+              ? raw.pull_request_draft
+              : null,
+    githubPrMergedAt: stringValue(raw.githubPrMergedAt, raw.github_pr_merged_at, raw.pullRequestMergedAt, raw.pull_request_merged_at, raw.mergedAt, raw.merged_at) || null
   };
 }
 

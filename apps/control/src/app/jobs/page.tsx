@@ -5,7 +5,14 @@ import { headers } from "next/headers";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectJobs } from "../../lib/jobs";
-import { jobGitHubCompareUrl, jobGitHubPullRequestLabel, parseGitHubRepoUrl, projectGitHubRepoInfo } from "../../lib/projects";
+import {
+  jobGitHubCompareUrl,
+  jobGitHubPullRequestLabel,
+  jobGitHubPullRequestLifecycleLabel,
+  jobGitHubPullRequestLifecycleTone,
+  parseGitHubRepoUrl,
+  projectGitHubRepoInfo
+} from "../../lib/projects";
 import type { ProjectRecord } from "../../lib/projects";
 import { controlBaseUrl } from "../../lib/project-resource";
 
@@ -252,6 +259,9 @@ export default async function JobsPage() {
                                 <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={job.githubPrUrl} rel="noreferrer" target="_blank">
                                   {jobGitHubPullRequestLabel(job)}
                                 </a>
+                                <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${jobGitHubPullRequestLifecycleTone(job)}`}>
+                                  {jobGitHubPullRequestLifecycleLabel(job)}
+                                </span>
                                 {job.githubPrTitle ? <span className="text-slate-500">{job.githubPrTitle}</span> : null}
                               </>
                             ) : canCreatePullRequest ? (
@@ -265,6 +275,12 @@ export default async function JobsPage() {
                             )}
                           </dd>
                         </div>
+                        {job.githubPrMergedAt ? (
+                          <div>
+                            <dt className="font-medium text-slate-800">Merged</dt>
+                            <dd>{formatTimestamp(job.githubPrMergedAt)}</dd>
+                          </div>
+                        ) : null}
                       </dl>
                     </div>
                   </div>

@@ -36,6 +36,7 @@ export interface GitHubPullRequestResult {
 export interface GitHubPullRequestDetails extends GitHubPullRequestResult {
   draft: boolean;
   merged: boolean;
+  mergedAt: string | null;
   state: "open" | "closed";
   headBranch: string;
   baseBranch: string;
@@ -339,6 +340,7 @@ export async function fetchGitHubPullRequest(input: {
     typeof candidate.draft !== "boolean" ||
     typeof candidate.merged !== "boolean" ||
     typeof candidate.state !== "string" ||
+    ("merged_at" in candidate && candidate.merged_at !== null && typeof candidate.merged_at !== "string") ||
     !head ||
     typeof head.ref !== "string" ||
     !base ||
@@ -353,6 +355,7 @@ export async function fetchGitHubPullRequest(input: {
     title: candidate.title,
     draft: candidate.draft,
     merged: candidate.merged,
+    mergedAt: typeof candidate.merged_at === "string" ? candidate.merged_at : null,
     state: candidate.state === "closed" ? "closed" : "open",
     headBranch: head.ref,
     baseBranch: base.ref

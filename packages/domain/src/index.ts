@@ -256,6 +256,12 @@ export interface Job {
   workspacePath: string;
   branchName: string;
   githubCompareUrl?: string | null;
+  githubPrNumber?: number | null;
+  githubPrUrl?: string | null;
+  githubPrTitle?: string | null;
+  githubPrState?: "open" | "closed" | "merged" | null;
+  githubPrDraft?: boolean | null;
+  githubPrMergedAt?: string | null;
   status: JobStatus;
   logPath?: string | null;
   artifactSummary?: string | null;

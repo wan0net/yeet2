@@ -27,6 +27,8 @@ import {
   formatConstitutionFiles,
   githubBranchUrl,
   jobGitHubCompareUrl,
+  jobGitHubPullRequestLifecycleLabel,
+  jobGitHubPullRequestLifecycleTone,
   jobGitHubPullRequestLabel,
   parseGitHubRepoUrl,
   planningProvenanceLabel,
@@ -562,9 +564,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                         <span className="uppercase tracking-[0.16em] text-slate-400">PR</span>
                         {job.githubPrUrl ? (
-                          <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={job.githubPrUrl} rel="noreferrer" target="_blank">
-                            {jobGitHubPullRequestLabel(job)}
-                          </a>
+                          <>
+                            <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={job.githubPrUrl} rel="noreferrer" target="_blank">
+                              {jobGitHubPullRequestLabel(job)}
+                            </a>
+                            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${jobGitHubPullRequestLifecycleTone(job)}`}>
+                              {jobGitHubPullRequestLifecycleLabel(job)}
+                            </span>
+                          </>
                         ) : githubRepo && job.branchName ? (
                           <form action={createProjectJobPullRequest.bind(null, project.id, job.id)}>
                             <button className="rounded-full border border-slate-300 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100" type="submit">
@@ -575,6 +582,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                           <span className="text-slate-500">Not available</span>
                         )}
                       </div>
+                      {job.githubPrMergedAt ? <div className="mt-2 text-xs text-slate-500">Merged {formatTimestamp(job.githubPrMergedAt) ?? "recently"}</div> : null}
                       {job.githubPrTitle ? <div className="mt-2 text-xs text-slate-500">{job.githubPrTitle}</div> : null}
                     </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
