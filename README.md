@@ -2,6 +2,8 @@
 
 yeet2 is a self-hosted autonomous software-team platform. It keeps project intent in durable constitutions, turns that intent into missions and tasks, and routes work through specialist agents and execution workers over time.
 
+The internal dogfood project is `forgeyard`, which is the in-use expression of yeet2 rather than a separate adjacent track.
+
 ## Layout
 
 This repo is intended to grow into a monorepo with these major areas:
@@ -23,4 +25,3 @@ This repo is intended to grow into a monorepo with these major areas:
 3. Bring up the app services from their package-level tooling once those workspaces are added.
 
 This bootstrap only sets up the shared infrastructure slice. The application services and workspace tooling will come in later milestones.
-

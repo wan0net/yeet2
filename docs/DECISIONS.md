@@ -46,9 +46,9 @@ No implementation deviations recorded yet.
 - Status: `accepted`
 - Area: `brain`
 - Spec Default: `CrewAI is the initial orchestration framework for specialist roles`
-- Chosen Approach: `Milestone 3 uses a deterministic planning fallback in the Brain service until CrewAI wiring is added`
+- Chosen Approach: `Milestone 3 keeps a deterministic planning fallback in the Brain service behind the same mission and task contract that CrewAI will use`
 - Reason: `This keeps the planning loop moving for the MVP while the CrewAI integration boundary is still being established`
-- Consequences: `Initial mission and task generation will be rule-based for now; the same contract should later be driven by CrewAI without changing the API shape`
+- Consequences: `Initial mission and task generation can remain rule-based during the transition; the same contract should later be driven by CrewAI without changing the API shape`
 
 ### DECISION-003: OpenHands Via Headless CLI Adapter
 

@@ -9,6 +9,9 @@ description = "yeet2 Brain service skeleton"
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+crewai = ["crewai"]
+
 [project.scripts]
 yeet2-brain = "yeet2_brain.main:main"
 

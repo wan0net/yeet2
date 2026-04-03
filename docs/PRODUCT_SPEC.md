@@ -40,7 +40,7 @@ For each attached project, yeet2 should:
 
 Use an internal example project named `forgeyard` for dogfooding.
 
-`forgeyard` is a control plane for autonomous software teams and project missions.
+`forgeyard` is the internal dogfood expression of yeet2 itself, not a separate adjacent product track. It serves as the control plane for autonomous software teams and project missions.
 
 ## Relationship to Yeet
 

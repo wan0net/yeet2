@@ -1,13 +1,28 @@
-"""Deterministic planning helpers for the Brain service."""
+"""Planning helpers for the Brain service."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+import logging
+import os
 import re
-from typing import Any
+from enum import StrEnum
+from typing import Any, Mapping
 from uuid import uuid4
 
 from .roles import Role
+
+logger = logging.getLogger(__name__)
+
+try:
+    from crewai import Agent, Crew, LLM, Process, Task
+except Exception:  # pragma: no cover - optional dependency
+    Agent = None
+    Crew = None
+    LLM = None
+    Process = None
+    Task = None
 
 _WORD_RE = re.compile(r"[a-z0-9][a-z0-9_-]+", re.IGNORECASE)
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
@@ -109,6 +124,12 @@ class PlanningResult:
     summary: str
 
 
+class PlannerBackend(StrEnum):
+    AUTO = "auto"
+    CREWAI = "crewai"
+    DETERMINISTIC = "deterministic"
+
+
 def _clean_text(value: object) -> str:
     if isinstance(value, str):
         return value.strip()
@@ -119,6 +140,137 @@ def _clean_text(value: object) -> str:
             nested = _clean_text(value.get(key))
             if nested:
                 return nested
+    return ""
+
+
+def _env_text(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
+def _env_flag(name: str) -> bool:
+    value = _env_text(name).lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _planner_backend() -> PlannerBackend:
+    raw = _env_text("YEET2_BRAIN_PLANNER_BACKEND").lower()
+    try:
+        return PlannerBackend(raw or PlannerBackend.AUTO.value)
+    except ValueError:
+        return PlannerBackend.AUTO
+
+
+def _crewai_model_name() -> str:
+    return (
+        _env_text("YEET2_BRAIN_CREWAI_MODEL")
+        or _env_text("OPENAI_MODEL_NAME")
+        or _env_text("MODEL")
+    )
+
+
+def _crewai_requested() -> bool:
+    backend = _planner_backend()
+    if backend == PlannerBackend.DETERMINISTIC:
+        return False
+    if backend == PlannerBackend.CREWAI:
+        return True
+    return bool(_crewai_model_name() or _env_flag("YEET2_BRAIN_CREWAI_ENABLED"))
+
+
+def _crewai_ready() -> bool:
+    return all((Agent, Crew, Process, Task))
+
+
+def _crewai_llm() -> object | None:
+    model_name = _crewai_model_name()
+    if not model_name or LLM is None:
+        return None
+    return LLM(model=model_name, temperature=0.2)
+
+
+def _to_text_list(value: object) -> list[str]:
+    if isinstance(value, str):
+        parts = [part.strip() for part in re.split(r"[,\n;]+", value) if part.strip()]
+        return parts or ([value.strip()] if value.strip() else [])
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            text = _clean_text(item)
+            if text:
+                result.append(text)
+        return result
+    return []
+
+
+def _json_fragment(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        fence = stripped.find("\n")
+        if fence != -1:
+            stripped = stripped[fence + 1 :]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3].strip()
+
+    start = stripped.find("{")
+    if start == -1:
+        raise ValueError("No JSON object found")
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(stripped)):
+        char = stripped[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return stripped[start : index + 1]
+
+    raise ValueError("Unterminated JSON object")
+
+
+def _mapping_from_result(result: object) -> dict[str, Any]:
+    if isinstance(result, Mapping):
+        return dict(result)
+
+    for attr in ("json_dict", "pydantic"):
+        candidate = getattr(result, attr, None)
+        if candidate is None:
+            continue
+        if isinstance(candidate, Mapping):
+            return dict(candidate)
+        if hasattr(candidate, "model_dump"):
+            return dict(candidate.model_dump())
+        if hasattr(candidate, "dict"):
+            return dict(candidate.dict())
+
+    if hasattr(result, "to_dict"):
+        candidate = result.to_dict()
+        if isinstance(candidate, Mapping):
+            return dict(candidate)
+
+    raw = getattr(result, "raw", result)
+    if not isinstance(raw, str):
+        raw = str(raw)
+    return json.loads(_json_fragment(raw))
+
+
+def _note_for(notes: Mapping[str, str], role: Role) -> str:
+    for key in (role.value, role.value.lower(), role.name, role.name.lower()):
+        note = notes.get(key)
+        if note:
+            return note
     return ""
 
 
@@ -195,12 +347,15 @@ def _compose_mission(
     summary: str,
     themes: list[str],
     requested_by: str,
+    *,
+    title: str | None = None,
+    objective: str | None = None,
 ) -> PlannedMission:
-    mission_title = f"Advance {project_name} from the constitution"
+    mission_title = title or f"Advance {project_name} from the constitution"
     objective_bits = [summary] if summary else []
     if themes:
         objective_bits.append(f"Focus areas: {', '.join(themes[:3])}.")
-    objective = " ".join(bit for bit in objective_bits if bit).strip() or (
+    mission_objective = objective or " ".join(bit for bit in objective_bits if bit).strip() or (
         f"Establish the first durable planning loop for {project_name}."
     )
 
@@ -208,7 +363,7 @@ def _compose_mission(
         id=f"mission-{uuid4().hex}",
         project_id=project_id,
         title=mission_title,
-        objective=objective,
+        objective=mission_objective,
         status="active",
         created_by=requested_by,
     )
@@ -222,12 +377,14 @@ def _task_acceptance(label: str, detail: str) -> list[str]:
     ]
 
 
-def _primary_task(project_name: str, theme: str | None) -> PlannedTask:
+def _primary_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
     topic = theme or "the first roadmap slice"
     title = f"Shape the first {topic} milestone"
     description = (
         f"Turn the constitution for {project_name} into a concrete implementation slice centered on {topic}."
     )
+    if note:
+        description = f"{description} {note}"
     return PlannedTask(
         id=f"task-{uuid4().hex}",
         title=title,
@@ -242,12 +399,14 @@ def _primary_task(project_name: str, theme: str | None) -> PlannedTask:
     )
 
 
-def _implementation_task(project_name: str, theme: str | None) -> PlannedTask:
+def _implementation_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
     topic = theme or "project state"
     title = f"Implement the {topic} path"
     description = (
         f"Use the project constitution to define the first shippable change for {project_name}, centered on {topic}."
     )
+    if note:
+        description = f"{description} {note}"
     return PlannedTask(
         id=f"task-{uuid4().hex}",
         title=title,
@@ -262,10 +421,12 @@ def _implementation_task(project_name: str, theme: str | None) -> PlannedTask:
     )
 
 
-def _verification_task(project_name: str, theme: str | None) -> PlannedTask:
+def _verification_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
     topic = theme or "the project plan"
     title = f"Verify the {topic} deliverable"
     description = f"Add the checks and review steps needed to trust the first {topic} deliverable for {project_name}."
+    if note:
+        description = f"{description} {note}"
     return PlannedTask(
         id=f"task-{uuid4().hex}",
         title=title,
@@ -280,11 +441,13 @@ def _verification_task(project_name: str, theme: str | None) -> PlannedTask:
     )
 
 
-def _fallback_task(project_name: str) -> PlannedTask:
+def _fallback_task(project_name: str, note: str = "") -> PlannedTask:
     title = f"Stabilize the operator path for {project_name}"
     description = (
         f"Make sure the first plan for {project_name} can be understood, reviewed, and handed back to the operator."
     )
+    if note:
+        description = f"{description} {note}"
     return PlannedTask(
         id=f"task-{uuid4().hex}",
         title=title,
@@ -299,12 +462,7 @@ def _fallback_task(project_name: str) -> PlannedTask:
     )
 
 
-def plan_project(planning_input: PlanningInput) -> PlanningResult:
-    texts = [section.text for section in planning_input.constitution.values() if section.text.strip()]
-    summary_source = " ".join(texts)
-    summary = _summarize_text(summary_source)
-    themes = _discover_themes(texts or [planning_input.project_name])
-
+def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: list[str]) -> PlanningResult:
     mission = _compose_mission(
         planning_input.project_id,
         planning_input.project_name,
@@ -329,3 +487,182 @@ def plan_project(planning_input: PlanningInput) -> PlanningResult:
         themes=themes,
         summary=summary or f"Plan the first durable slice for {planning_input.project_name}.",
     )
+
+
+def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str]) -> PlanningResult:
+    if not _crewai_ready():
+        raise RuntimeError("CrewAI is not installed")
+
+    llm = _crewai_llm()
+    llm_kwargs: dict[str, object] = {}
+    if llm is not None:
+        llm_kwargs["llm"] = llm
+
+    project_name = planning_input.project_name
+    constitution_summary = summary or f"Plan the first durable slice for {project_name}."
+    constitution_themes = themes or [project_name]
+
+    planner_agent = Agent(
+        role=Role.PLANNER.value,
+        goal=f"Turn the constitution for {project_name} into a crisp planning brief.",
+        backstory="You ground the team in project intent and define the first durable slice.",
+        allow_delegation=True,
+        **llm_kwargs,
+    )
+    architect_agent = Agent(
+        role=Role.ARCHITECT.value,
+        goal=f"Refine the planning brief for {project_name} into concrete structural boundaries.",
+        backstory="You identify the shape of the system and the dependencies that matter first.",
+        allow_delegation=True,
+        **llm_kwargs,
+    )
+    implementer_agent = Agent(
+        role=Role.IMPLEMENTER.value,
+        goal=f"Convert the plan for {project_name} into the smallest shippable implementation slice.",
+        backstory="You focus on direct, executable steps that move the project forward.",
+        allow_delegation=False,
+        **llm_kwargs,
+    )
+    qa_agent = Agent(
+        role=Role.QA.value,
+        goal=f"Add verification and acceptance coverage for the first {project_name} slice.",
+        backstory="You look for missing checks, edge cases, and review gates.",
+        allow_delegation=False,
+        **llm_kwargs,
+    )
+    reviewer_agent = Agent(
+        role=Role.REVIEWER.value,
+        goal=f"Produce an operator-ready planning envelope for {project_name}.",
+        backstory="You make sure the final plan is readable, grounded, and ready for handoff.",
+        allow_delegation=False,
+        **llm_kwargs,
+    )
+
+    input_payload = {
+        "project_name": project_name,
+        "project_id": planning_input.project_id,
+        "requested_by": planning_input.requested_by,
+        "summary": constitution_summary,
+        "themes": constitution_themes,
+        "constitution": {
+            key: section.text
+            for key, section in planning_input.constitution.items()
+            if section.text.strip()
+        },
+    }
+
+    tasks = [
+        Task(
+            description=(
+                f"Read the constitution for {project_name}. Produce a concise planning brief with "
+                "summary, themes, mission_title, mission_objective, and role_notes. Return only valid JSON."
+            ),
+            expected_output="Valid JSON with summary, themes, mission_title, mission_objective, and role_notes.",
+            agent=planner_agent,
+        ),
+        Task(
+            description=(
+                f"Refine the brief for {project_name}. Strengthen the architecture framing and improve the "
+                "mission_objective without changing the JSON schema."
+            ),
+            expected_output="Valid JSON with the same planning brief schema.",
+            agent=architect_agent,
+        ),
+        Task(
+            description=(
+                f"Turn the brief for {project_name} into a practical implementation lens. Keep the JSON schema "
+                "unchanged and sharpen the execution focus."
+            ),
+            expected_output="Valid JSON with the same planning brief schema.",
+            agent=implementer_agent,
+        ),
+        Task(
+            description=(
+                f"Review the plan for {project_name} and add missing verification or handoff detail. Return "
+                "only JSON with summary, themes, mission_title, mission_objective, and role_notes."
+            ),
+            expected_output="Valid JSON with the same planning brief schema.",
+            agent=qa_agent,
+        ),
+        Task(
+            description=(
+                f"Finalize the operator-ready planning envelope for {project_name}. Return only JSON with keys "
+                "`summary`, `themes`, `mission_title`, `mission_objective`, and `role_notes`."
+            ),
+            expected_output="Valid JSON with the same planning brief schema.",
+            agent=reviewer_agent,
+        ),
+    ]
+
+    crew = Crew(
+        agents=[planner_agent, architect_agent, implementer_agent, qa_agent, reviewer_agent],
+        tasks=tasks,
+        process=Process.sequential,
+        memory=False,
+        verbose=False,
+    )
+
+    result = crew.kickoff(inputs=input_payload)
+    payload = _mapping_from_result(result)
+
+    summary_text = _clean_text(payload.get("summary")) or constitution_summary
+    themes_text = _to_text_list(payload.get("themes")) or constitution_themes
+    title_text = _clean_text(payload.get("mission_title"))
+    objective_text = _clean_text(payload.get("mission_objective"))
+
+    notes_payload = payload.get("role_notes")
+    notes: dict[str, str] = {}
+    if isinstance(notes_payload, Mapping):
+        for key, value in notes_payload.items():
+            text = _clean_text(value)
+            if text:
+                notes[str(key)] = text
+
+    mission = _compose_mission(
+        planning_input.project_id,
+        planning_input.project_name,
+        summary_text,
+        themes_text,
+        planning_input.requested_by,
+        title=title_text or None,
+        objective=objective_text or None,
+    )
+
+    primary_theme = themes_text[0] if themes_text else None
+    secondary_theme = themes_text[1] if len(themes_text) > 1 else None
+
+    tasks_result = [
+        _primary_task(planning_input.project_name, primary_theme, _note_for(notes, Role.PLANNER)),
+        _implementation_task(
+            planning_input.project_name,
+            secondary_theme or primary_theme,
+            _note_for(notes, Role.IMPLEMENTER),
+        ),
+        _verification_task(planning_input.project_name, primary_theme, _note_for(notes, Role.QA)),
+        _fallback_task(planning_input.project_name, _note_for(notes, Role.REVIEWER)),
+    ]
+
+    if note := _note_for(notes, Role.ARCHITECT):
+        tasks_result[0].description = f"{tasks_result[0].description} {note}"
+
+    return PlanningResult(
+        mission=mission,
+        tasks=tasks_result,
+        themes=themes_text,
+        summary=summary_text or f"Plan the first durable slice for {planning_input.project_name}.",
+    )
+
+
+def plan_project(planning_input: PlanningInput) -> PlanningResult:
+    texts = [section.text for section in planning_input.constitution.values() if section.text.strip()]
+    summary_source = " ".join(texts)
+    summary = _summarize_text(summary_source)
+    themes = _discover_themes(texts or [planning_input.project_name])
+
+    if _crewai_requested():
+        try:
+            return _crewai_plan(planning_input, summary, themes)
+        except Exception:
+            logger.exception("CrewAI planning failed, falling back to deterministic planning.")
+
+    return _deterministic_plan(planning_input, summary, themes)
