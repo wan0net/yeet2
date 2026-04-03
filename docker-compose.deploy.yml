@@ -76,6 +76,9 @@ services:
       YEET2_EXECUTOR_BASE_URL: http://executor:8021
       YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
     command: ["pnpm", "--filter", "@yeet2/api", "start"]
     ports:
       - "${API_PORT:-3001}:3001"
