@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 
-import type { WorkerHeartbeatInput, WorkerRegistrationInput, WorkerStatus, WorkerSummary } from "@yeet2/domain";
+import type { WorkerHeartbeatInput, WorkerLeaseSummary, WorkerRegistrationInput, WorkerStatus, WorkerSummary } from "@yeet2/domain";
 
 import { prisma } from "./db";
 
@@ -58,7 +58,83 @@ function normalizeWorkerStatus(value: unknown): WorkerStatus | null {
   return null;
 }
 
-export function toWorkerSummary(worker: DbWorker): WorkerSummary {
+async function loadWorkerLeaseSummary(currentJobId: string | null): Promise<{
+  currentJobTitle: string | null;
+  currentJobStatus: string | null;
+  projectName: string | null;
+  taskTitle: string | null;
+  lease: WorkerLeaseSummary | null;
+}> {
+  if (!currentJobId) {
+    return {
+      currentJobTitle: null,
+      currentJobStatus: null,
+      projectName: null,
+      taskTitle: null,
+      lease: null
+    };
+  }
+
+  const job = await prisma.job.findUnique({
+    where: { id: currentJobId },
+    include: {
+      task: {
+        include: {
+          mission: {
+            include: {
+              project: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!job) {
+    return {
+      currentJobTitle: null,
+      currentJobStatus: null,
+      projectName: null,
+      taskTitle: null,
+      lease: {
+        projectId: null,
+        projectName: null,
+        jobId: currentJobId,
+        jobTitle: null,
+        taskId: null,
+        taskTitle: null,
+        acquiredAt: null,
+        expiresAt: null
+      }
+    };
+  }
+
+  const projectName = job.task.mission.project.name ?? null;
+  const taskTitle = job.task.title ?? null;
+  const currentJobTitle = job.githubPrTitle ?? taskTitle ?? null;
+  const lease: WorkerLeaseSummary = {
+    projectId: job.task.mission.project.id,
+    projectName,
+    jobId: job.id,
+    jobTitle: currentJobTitle,
+    taskId: job.taskId,
+    taskTitle,
+    acquiredAt: job.startedAt?.toISOString() ?? null,
+    expiresAt: job.completedAt?.toISOString() ?? null
+  };
+
+  return {
+    currentJobTitle,
+    currentJobStatus: job.status,
+    projectName,
+    taskTitle,
+    lease
+  };
+}
+
+export async function toWorkerSummary(worker: DbWorker): Promise<WorkerSummary> {
+  const leaseContext = await loadWorkerLeaseSummary(worker.currentJobId ?? null);
+
   return {
     id: worker.id,
     name: worker.name,
@@ -68,6 +144,11 @@ export function toWorkerSummary(worker: DbWorker): WorkerSummary {
     lastHeartbeatAt: worker.lastHeartbeatAt?.toISOString() ?? null,
     leaseExpiresAt: worker.leaseExpiresAt?.toISOString() ?? null,
     currentJobId: worker.currentJobId ?? null,
+    currentJobTitle: leaseContext.currentJobTitle,
+    currentJobStatus: leaseContext.currentJobStatus,
+    projectName: leaseContext.projectName,
+    taskTitle: leaseContext.taskTitle,
+    lease: worker.currentJobId ? { ...leaseContext.lease, expiresAt: worker.leaseExpiresAt?.toISOString() ?? null } : null,
     host: worker.host ?? null,
     endpoint: worker.endpoint ?? null,
     createdAt: worker.createdAt.toISOString(),
@@ -87,7 +168,7 @@ export async function listWorkers(): Promise<WorkerSummary[]> {
     ]
   });
 
-  return workers.map(toWorkerSummary);
+  return Promise.all(workers.map((worker) => toWorkerSummary(worker)));
 }
 
 async function persistWorker(data: {

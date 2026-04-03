@@ -27,6 +27,17 @@ export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "fa
 export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
+export interface WorkerLeaseSummary {
+  projectId?: string | null;
+  projectName?: string | null;
+  jobId?: string | null;
+  jobTitle?: string | null;
+  taskId?: string | null;
+  taskTitle?: string | null;
+  acquiredAt?: string | null;
+  expiresAt?: string | null;
+}
+
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;
@@ -162,6 +173,11 @@ export interface WorkerSummary {
   lastHeartbeatAt?: string | null;
   leaseExpiresAt?: string | null;
   currentJobId?: string | null;
+  currentJobTitle?: string | null;
+  currentJobStatus?: string | null;
+  projectName?: string | null;
+  taskTitle?: string | null;
+  lease?: WorkerLeaseSummary | null;
   host?: string | null;
   endpoint?: string | null;
   createdAt: string;
