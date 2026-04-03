@@ -5,7 +5,7 @@ ENV PATH="$PNPM_HOME:$PATH"
 ENV DATABASE_URL="postgresql://yeet2:yeet2@127.0.0.1:5432/yeet2"
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends openssl ca-certificates git \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
