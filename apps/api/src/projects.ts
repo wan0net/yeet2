@@ -4005,15 +4005,41 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
     throw new ProjectRoleDefinitionError("invalid_role_definition", "Message content is required", 400);
   }
 
+  const replyTarget =
+    input.replyToId
+      ? await prisma.decisionLog.findFirst({
+          where: {
+            id: input.replyToId,
+            projectId
+          }
+        })
+      : null;
+
+  const inheritedMentions =
+    replyTarget && typeof replyTarget.detail === "object" && replyTarget.detail !== null
+      ? Array.isArray((replyTarget.detail as Record<string, unknown>).mentions)
+        ? ((replyTarget.detail as Record<string, unknown>).mentions as unknown[])
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : []
+      : [];
+  const mentions = extractMessageMentions(content);
+  const effectiveMentions = mentions.length > 0 ? mentions : inheritedMentions;
+
   return recordDecisionLog({
     projectId,
+    missionId: replyTarget?.missionId ?? undefined,
+    taskId: replyTarget?.taskId ?? undefined,
+    jobId: replyTarget?.jobId ?? undefined,
     kind: "message",
     actor: "operator",
     summary: content,
     detail: {
       source: "operator",
       replyToId: input.replyToId ?? null,
-      mentions: extractMessageMentions(content)
+      mentions: effectiveMentions,
+      inheritedMentions: mentions.length === 0 && inheritedMentions.length > 0
     }
   });
 }
