@@ -162,6 +162,22 @@ function stringArrayValue(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function isValidGitHubPathSegment(value: string): boolean {
+  return /^[A-Za-z0-9_.-]+$/.test(value) && value !== "." && value !== "..";
+}
+
+function buildGitHubRepoInfo(owner: string, repo: string): GitHubRepoInfo | null {
+  if (!isValidGitHubPathSegment(owner) || !isValidGitHubPathSegment(repo)) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo,
+    webUrl: `https://github.com/${owner}/${repo}`
+  };
+}
+
 function normalizePlanningProvenanceValue(...values: unknown[]): PlanningProvenance {
   for (const value of values) {
     const normalized = stringValue(value).toLowerCase().replace(/[\s_-]+/g, "");
@@ -196,26 +212,27 @@ export function parseGitHubRepoUrl(value: string): GitHubRepoInfo | null {
     return null;
   }
 
-  const httpsMatch = normalized.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?$/i);
-  if (httpsMatch) {
-    const owner = httpsMatch[1];
-    const repo = stripGitSuffix(httpsMatch[2]);
-    return {
-      owner,
-      repo,
-      webUrl: `https://github.com/${owner}/${repo}`
-    };
+  try {
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.toLowerCase();
+
+    if (parsed.protocol === "https:" && (hostname === "github.com" || hostname === "www.github.com") && !parsed.search && !parsed.hash) {
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments.length === 2) {
+        const owner = segments[0];
+        const repo = stripGitSuffix(segments[1]);
+        return buildGitHubRepoInfo(owner, repo);
+      }
+    }
+  } catch {
+    // Fall through to SSH-style parsing below.
   }
 
   const sshMatch = normalized.match(/^(?:ssh:\/\/)?git@github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?$/i);
   if (sshMatch) {
     const owner = sshMatch[1];
     const repo = stripGitSuffix(sshMatch[2]);
-    return {
-      owner,
-      repo,
-      webUrl: `https://github.com/${owner}/${repo}`
-    };
+    return buildGitHubRepoInfo(owner, repo);
   }
 
   return null;
@@ -236,19 +253,24 @@ export function projectGitHubRepoInfo(
   project: Pick<ProjectRecord, "repoUrl" | "githubRepoOwner" | "githubRepoName" | "githubRepoUrl">
 ): GitHubRepoInfo | null {
   const parsed = parseGitHubRepoUrl(project.repoUrl);
-  const owner = stringValue(project.githubRepoOwner, parsed?.owner);
-  const repo = stringValue(project.githubRepoName, parsed?.repo);
-  const webUrl = stringValue(project.githubRepoUrl, parsed?.webUrl);
+  const parsedGithubRepoUrl = parseGitHubRepoUrl(project.githubRepoUrl ?? "");
 
-  if (!owner && !repo && !webUrl) {
-    return null;
+  if (parsed) {
+    const owner = stringValue(project.githubRepoOwner, parsed.owner);
+    const repo = stringValue(project.githubRepoName, parsed.repo);
+
+    return {
+      owner: isValidGitHubPathSegment(owner) ? owner : parsed.owner,
+      repo: isValidGitHubPathSegment(repo) ? repo : parsed.repo,
+      webUrl: parsedGithubRepoUrl?.webUrl ?? parsed.webUrl
+    };
   }
 
-  return {
-    owner,
-    repo,
-    webUrl: webUrl || (owner && repo ? `https://github.com/${owner}/${repo}` : "")
-  };
+  if (parsedGithubRepoUrl) {
+    return parsedGithubRepoUrl;
+  }
+
+  return null;
 }
 
 export function jobGitHubCompareUrl(job: Pick<ProjectJobRecord, "githubCompareUrl">, repoUrl: string, branchName: string): string | null {

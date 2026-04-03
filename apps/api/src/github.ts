@@ -32,6 +32,25 @@ function cleanRepositoryName(value: string): string {
   return value.replace(/\.git$/i, "").replace(/\/+$/g, "");
 }
 
+function parseRepositoryPath(path: string): { owner: string; repo: string } | null {
+  const parts = cleanRepositoryName(path).split("/").filter(Boolean);
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const [owner, repo] = parts;
+  if (!owner || !repo || owner === "." || owner === ".." || repo === "." || repo === "..") {
+    return null;
+  }
+
+  return { owner, repo };
+}
+
+function isLocalHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]" || normalized === "::1";
+}
+
 function apiBaseUrlForHost(host: string): string {
   if (host === "github.com" || host === "www.github.com") {
     return "https://api.github.com";
@@ -61,16 +80,15 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
     }
 
     const [, host, path] = match;
-    const parts = cleanRepositoryName(path).split("/").filter(Boolean);
-    if (parts.length < 2) {
+    const parsedPath = parseRepositoryPath(path);
+    if (!parsedPath) {
       return null;
     }
 
-    const [owner, repo] = parts;
     return {
       host,
-      owner,
-      repo,
+      owner: parsedPath.owner,
+      repo: parsedPath.repo,
       apiBaseUrl: apiBaseUrlForHost(host),
       htmlBaseUrl: htmlBaseUrlForHost(host)
     };
@@ -78,16 +96,19 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
 
   try {
     const url = new URL(trimmed);
-    const parts = cleanRepositoryName(url.pathname).split("/").filter(Boolean);
-    if (parts.length < 2) {
+    if (url.protocol !== "https:" || !url.host || isLocalHost(url.hostname)) {
       return null;
     }
 
-    const [owner, repo] = parts;
+    const parsedPath = parseRepositoryPath(url.pathname);
+    if (!parsedPath) {
+      return null;
+    }
+
     return {
       host: url.host,
-      owner,
-      repo,
+      owner: parsedPath.owner,
+      repo: parsedPath.repo,
       apiBaseUrl: apiBaseUrlForHost(url.host),
       htmlBaseUrl: htmlBaseUrlForHost(url.host)
     };
