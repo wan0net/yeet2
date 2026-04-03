@@ -14,6 +14,7 @@ import type {
 import type {
   GlobalBlockerQueueItem,
   GlobalJobQueueItem,
+  GlobalTaskQueueItem,
   ProjectCostAnalysisSummary,
   ProjectApprovalQueueItem,
   OperatorGuidanceSummary,
@@ -112,6 +113,10 @@ export interface GlobalJobQueueResponse {
 
 export interface GlobalBlockerQueueResponse {
   blockers: GlobalBlockerQueueItem[];
+}
+
+export interface GlobalTaskQueueResponse {
+  tasks: GlobalTaskQueueItem[];
 }
 
 export interface ProjectTaskSummary {
@@ -3249,6 +3254,41 @@ export async function listGlobalBlockers(input: { status?: DbBlocker["status"] |
         }
 
         return right.blocker.createdAt.localeCompare(left.blocker.createdAt);
+      })
+  };
+}
+
+export async function listGlobalTasks(input: { status?: ProjectTaskStatus | "all" | null; projectId?: string | null } = {}): Promise<GlobalTaskQueueResponse> {
+  const projects = await loadProjects();
+
+  return {
+    tasks: projects
+      .filter((project) => !input.projectId || project.id === input.projectId)
+      .flatMap((project) =>
+        project.missions.flatMap((mission) =>
+          mission.tasks
+            .filter((task) => !input.status || input.status === "all" || task.status === input.status)
+            .map((task) => ({
+              projectId: project.id,
+              projectName: project.name,
+              projectRepoUrl: project.repoUrl,
+              projectGitHubUrl: project.githubRepoUrl,
+              missionId: mission.id,
+              missionTitle: mission.title,
+              task: {
+                ...task,
+                agentRole: task.agentRole as GlobalTaskQueueItem["task"]["agentRole"],
+                status: task.status as GlobalTaskQueueItem["task"]["status"]
+              }
+            }))
+        )
+      )
+      .sort((left, right) => {
+        if (left.task.priority !== right.task.priority) {
+          return right.task.priority - left.task.priority;
+        }
+
+        return left.task.title.localeCompare(right.task.title, undefined, { sensitivity: "base" });
       })
   };
 }

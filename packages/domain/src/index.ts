@@ -137,6 +137,16 @@ export interface GlobalBlockerQueueItem {
   blocker: ProjectBlockerSummary;
 }
 
+export interface GlobalTaskQueueItem {
+  projectId: string;
+  projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
+  missionId: string;
+  missionTitle: string;
+  task: TaskSummary;
+}
+
 export interface ControlPlaneOverview {
   generatedAt: string;
   auth: {
