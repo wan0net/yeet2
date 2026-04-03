@@ -134,6 +134,7 @@ export interface JobSummary {
   id: string;
   taskId: string;
   executorType: string;
+  workerId?: string | null;
   workspacePath: string;
   branchName: string;
   githubCompareUrl?: string | null;
@@ -307,6 +308,7 @@ export interface Job {
   id: string;
   taskId: string;
   executorType: string;
+  workerId?: string | null;
   workspacePath: string;
   branchName: string;
   githubCompareUrl?: string | null;

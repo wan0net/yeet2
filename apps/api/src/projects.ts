@@ -54,6 +54,7 @@ export interface ProjectJobSummary {
   id: string;
   taskId: string;
   executorType: string;
+  workerId: string | null;
   workspacePath: string;
   branchName: string;
   githubCompareUrl: string | null;
@@ -773,6 +774,7 @@ function planningProvenanceFromCreatedBy(value: string | null | undefined): Plan
 }
 
 function toProjectJobSummary(job: DbJob): ProjectJobSummary {
+  const workerId = (job as DbJob & { workerId?: string | null }).workerId ?? null;
   const githubPrState =
     job.githubPrState === "open" || job.githubPrState === "closed" || job.githubPrState === "merged" ? job.githubPrState : null;
 
@@ -780,6 +782,7 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     id: job.id,
     taskId: job.taskId,
     executorType: job.executorType,
+    workerId,
     workspacePath: job.workspacePath,
     branchName: job.branchName,
     githubCompareUrl: job.githubCompareUrl ?? null,
@@ -1447,6 +1450,7 @@ interface ExecutorJobRecord {
   id: string;
   task_id: string;
   executor_type: string;
+  worker_id?: string | null;
   status: string;
   workspace_path: string;
   branch_name: string;
@@ -1560,6 +1564,8 @@ async function submitTaskToExecutor(
   }
 
   const candidate = parsed as Record<string, unknown>;
+  const payload = typeof candidate.payload === "object" && candidate.payload !== null ? (candidate.payload as Record<string, unknown>) : null;
+  const payloadWorkerId = payload && typeof payload.worker_id === "string" ? payload.worker_id.trim() || null : null;
   if (
     typeof candidate.id !== "string" ||
     typeof candidate.task_id !== "string" ||
@@ -1575,6 +1581,7 @@ async function submitTaskToExecutor(
     id: candidate.id,
     task_id: candidate.task_id,
     executor_type: candidate.executor_type,
+    worker_id: payloadWorkerId,
     status: candidate.status,
     workspace_path: candidate.workspace_path,
     branch_name: candidate.branch_name,
@@ -1582,7 +1589,7 @@ async function submitTaskToExecutor(
     artifact_summary: typeof candidate.artifact_summary === "string" ? candidate.artifact_summary : null,
     started_at: typeof candidate.started_at === "string" ? candidate.started_at : null,
     completed_at: typeof candidate.completed_at === "string" ? candidate.completed_at : null,
-    payload: typeof candidate.payload === "object" && candidate.payload !== null ? (candidate.payload as Record<string, unknown>) : null
+    payload
   };
 }
 
@@ -1620,12 +1627,14 @@ async function persistDispatchedJob(
   const startedAt = parseDate(executorJob.started_at) ?? new Date();
   const completedAt = jobStatus === "queued" || jobStatus === "running" ? null : parseDate(executorJob.completed_at) ?? startedAt;
   const githubCompareUrl = resolveProjectGitHubCompareUrl(project, executorJob.branch_name);
+  const workerId = typeof executorJob.worker_id === "string" && executorJob.worker_id.trim() ? executorJob.worker_id.trim() : null;
 
   const createdJob = await prisma.job.create({
     data: {
       id: executorJob.id,
       taskId: task.id,
       executorType: executorJob.executor_type,
+      workerId,
       workspacePath: executorJob.workspace_path,
       branchName: executorJob.branch_name,
       githubCompareUrl,
@@ -1634,7 +1643,7 @@ async function persistDispatchedJob(
       artifactSummary: executorJob.artifact_summary ?? null,
       startedAt,
       completedAt
-    }
+    } as any
   });
 
   const blockerReason = taskStatus === "blocked" ? buildDispatchBlockerReason(`Executor reported job status ${jobStatus}`) : null;

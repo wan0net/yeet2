@@ -207,6 +207,7 @@ model Job {
   id               String    @id @default(cuid())
   taskId           String    @map("task_id")
   executorType     String    @map("executor_type")
+  workerId         String?   @map("worker_id")
   workspacePath    String    @map("workspace_path")
   branchName       String    @map("branch_name")
   githubCompareUrl String?   @map("github_compare_url")
