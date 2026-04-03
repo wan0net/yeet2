@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
-import logging
 import os
 import re
 from enum import StrEnum
@@ -12,8 +11,6 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from .roles import Role
-
-logger = logging.getLogger(__name__)
 
 try:
     from crewai import Agent, Crew, LLM, Process, Task
@@ -122,6 +119,7 @@ class PlanningResult:
     tasks: list[PlannedTask]
     themes: list[str]
     summary: str
+    source: str
 
 
 class PlannerBackend(StrEnum):
@@ -486,6 +484,7 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
         tasks=tasks,
         themes=themes,
         summary=summary or f"Plan the first durable slice for {planning_input.project_name}.",
+        source="brain",
     )
 
 
@@ -650,6 +649,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         tasks=tasks_result,
         themes=themes_text,
         summary=summary_text or f"Plan the first durable slice for {planning_input.project_name}.",
+        source="crewai",
     )
 
 
@@ -660,9 +660,6 @@ def plan_project(planning_input: PlanningInput) -> PlanningResult:
     themes = _discover_themes(texts or [planning_input.project_name])
 
     if _crewai_requested():
-        try:
-            return _crewai_plan(planning_input, summary, themes)
-        except Exception:
-            logger.exception("CrewAI planning failed, falling back to deterministic planning.")
+        return _crewai_plan(planning_input, summary, themes)
 
     return _deterministic_plan(planning_input, summary, themes)

@@ -29,3 +29,5 @@ This repo is intended to grow into a monorepo with these major areas:
 4. If you also want the Executor skeleton, run `pnpm dev:executor` in another terminal.
 
 Brain binds from repo-level env first, so `YEET2_HOST` and `BRAIN_PORT` from `.env` control the local listener. The compose file stays infra-only for now, which keeps the app runtime explicit and easy to change per service.
+
+The API now calls Brain directly and surfaces planning failures instead of silently synthesizing a fallback plan. Set `YEET2_BRAIN_PLANNER_BACKEND=deterministic` only if you want the local rule-based planner; otherwise Brain/CrewAI failures are returned as errors.

@@ -174,12 +174,22 @@ class BrainApp:
                     constitution=_extract_constitution(payload),
                     raw_payload=payload if isinstance(payload, dict) else {},
                 )
-                planning_result = plan_project(planning_input)
+                try:
+                    planning_result = plan_project(planning_input)
+                except Exception:
+                    self._send_json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {"error": "planning_failed", "message": "Brain planning failed"},
+                    )
+                    return
                 run = store.create_planning_run(planning_input, planning_result)
+                if isinstance(run.result, dict):
+                    run.result["source"] = planning_result.source
                 self._send_json(
                     HTTPStatus.OK,
                     {
                         "run": asdict(run),
+                        "source": planning_result.source,
                         "mission": _serialize_mission(planning_result.mission),
                         "tasks": [_serialize_task(task) for task in planning_result.tasks],
                         "themes": run.result["themes"],

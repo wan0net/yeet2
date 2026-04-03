@@ -73,8 +73,24 @@ interface BrainPlanningRequest {
   constitution_files: Partial<Record<ConstitutionFileKey, BrainPlanningRequestSection>>;
 }
 
+type PlanningBackend = "brain" | "crewai" | "deterministic";
+
 function brainBaseUrl(): string {
   return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
+}
+
+function brainPlanningTimeoutMs(): number {
+  const raw = cleanText(process.env.YEET2_BRAIN_PLAN_TIMEOUT_MS);
+  if (!raw) {
+    return 45_000;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return 45_000;
+  }
+
+  return Math.max(1_000, Math.floor(parsed));
 }
 
 function cleanText(value: string | null | undefined): string {
@@ -114,6 +130,19 @@ function runtimePrefersCrewAI(): boolean {
       cleanText(process.env.MODEL) ||
       ["1", "true", "yes", "on"].includes(cleanText(process.env.YEET2_BRAIN_CREWAI_ENABLED).toLowerCase())
   );
+}
+
+function planningBackend(): PlanningBackend {
+  const backend = cleanText(process.env.YEET2_BRAIN_PLANNER_BACKEND).toLowerCase();
+  if (backend === "deterministic") {
+    return "deterministic";
+  }
+
+  if (backend === "crewai") {
+    return "crewai";
+  }
+
+  return runtimePrefersCrewAI() ? "crewai" : "brain";
 }
 
 function requestedPlanningProvenance(): BrainRequestedBy {
@@ -347,7 +376,7 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
 
 function extractBrainDraft(payload: unknown, fallback: PlanningDraft, provenance: BrainRequestedBy): PlanningDraft {
   if (typeof payload !== "object" || payload === null) {
-    return fallback;
+    throw new Error("Brain planning response must be an object");
   }
 
   const raw = payload as Record<string, unknown>;
@@ -357,15 +386,23 @@ function extractBrainDraft(payload: unknown, fallback: PlanningDraft, provenance
 
   const missionValue = raw.mission ?? fromPlan?.mission ?? fromResult?.mission;
   const taskValues = raw.tasks ?? fromPlan?.tasks ?? fromResult?.tasks;
+  if (!missionValue) {
+    throw new Error("Brain planning response is missing a mission");
+  }
+  if (!Array.isArray(taskValues)) {
+    throw new Error("Brain planning response is missing tasks");
+  }
   const mission = normalizeMissionDraft(missionValue, fallback.mission);
-  const tasks = Array.isArray(taskValues)
-    ? taskValues
-        .map((value, index) => normalizeTaskDraft(value, index + 1))
-        .filter((task): task is PlanningTaskDraft => task !== null)
-    : fallback.tasks;
+  const tasks = taskValues.map((value, index) => {
+    const task = normalizeTaskDraft(value, index + 1);
+    if (!task) {
+      throw new Error(`Brain planning response contains an invalid task at index ${index}`);
+    }
+    return task;
+  });
 
   if (!tasks.length) {
-    return fallback;
+    throw new Error("Brain planning response did not include any tasks");
   }
 
   return {
@@ -375,9 +412,9 @@ function extractBrainDraft(payload: unknown, fallback: PlanningDraft, provenance
   };
 }
 
-async function callBrainPlanner(context: PlanningContext, provenance: BrainRequestedBy): Promise<PlanningDraft | null> {
+async function callBrainPlanner(context: PlanningContext, provenance: BrainRequestedBy): Promise<PlanningDraft> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const timeout = setTimeout(() => controller.abort(), brainPlanningTimeoutMs());
 
   try {
     const response = await fetch(`${brainBaseUrl()}/orchestration/plan`, {
@@ -391,21 +428,40 @@ async function callBrainPlanner(context: PlanningContext, provenance: BrainReque
     });
 
     if (!response.ok) {
-      return null;
+      const details = cleanText(await response.text().catch(() => ""));
+      throw new Error(
+        details
+          ? `Brain planning failed with HTTP ${response.status}: ${details}`
+          : `Brain planning failed with HTTP ${response.status}`
+      );
     }
 
     const payload = (await response.json().catch(() => null)) as unknown;
+    if (payload === null) {
+      throw new Error("Brain planning returned invalid JSON");
+    }
+
     const fallback = buildFallbackDraft(context);
     return extractBrainDraft(payload, fallback, provenance);
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Brain planning request timed out after ${brainPlanningTimeoutMs()} ms`);
+    }
+
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error("Brain planning request failed");
   } finally {
     clearTimeout(timeout);
   }
 }
 
 export async function createInitialPlan(context: PlanningContext): Promise<PlanningDraft> {
-  const fallback = buildFallbackDraft(context);
-  const brainDraft = await callBrainPlanner(context, requestedPlanningProvenance());
-  return brainDraft ?? fallback;
+  if (planningBackend() === "deterministic") {
+    return buildFallbackDraft(context);
+  }
+
+  return callBrainPlanner(context, requestedPlanningProvenance());
 }
