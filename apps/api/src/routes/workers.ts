@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 
-import { WorkerRegistryError, heartbeatWorker, listWorkers, registerWorker } from "../workers";
+import { WorkerRegistryError, heartbeatWorker, listWorkers, matchWorkers, registerWorker, summarizeWorkerFleet } from "../workers";
 
 function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -98,9 +98,66 @@ function parseWorkerHeartbeatBody(body: unknown): {
   };
 }
 
+function parseWorkerMatchQuery(query: unknown): {
+  input: { executorType?: string | null; capabilities?: string[]; includeBusy?: boolean } | null;
+  error: string | null;
+} {
+  if (typeof query !== "object" || query === null) {
+    return {
+      input: {
+        executorType: null,
+        capabilities: [],
+        includeBusy: false
+      },
+      error: null
+    };
+  }
+
+  const candidate = query as Record<string, unknown>;
+  const rawCapabilities = candidate.capabilities ?? candidate.capability ?? candidate.requires;
+  const capabilities = Array.isArray(rawCapabilities)
+    ? readStringArray(rawCapabilities)
+    : typeof rawCapabilities === "string"
+      ? rawCapabilities.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+  const rawIncludeBusy = candidate.includeBusy ?? candidate.include_busy;
+  const includeBusy =
+    rawIncludeBusy === true ||
+    rawIncludeBusy === "true" ||
+    rawIncludeBusy === "1" ||
+    rawIncludeBusy === "yes";
+
+  return {
+    input: {
+      executorType: readString(candidate.executorType ?? candidate.executor_type) || null,
+      capabilities,
+      includeBusy
+    },
+    error: null
+  };
+}
+
 export const registerWorkerRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get("/workers", async () => {
     return { workers: await listWorkers() };
+  });
+
+  app.get("/workers/summary", async () => {
+    return { summary: await summarizeWorkerFleet() };
+  });
+
+  app.get("/workers/match", async (request, reply) => {
+    const parsedQuery = parseWorkerMatchQuery(request.query);
+    if (!parsedQuery.input) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: parsedQuery.error ?? "Invalid worker match query"
+      });
+    }
+
+    return reply.code(200).send({
+      workers: await matchWorkers(parsedQuery.input)
+    });
   });
 
   app.post("/workers/register", async (request, reply) => {

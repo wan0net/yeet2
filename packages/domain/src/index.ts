@@ -26,6 +26,7 @@ export type ProjectBranchCleanupMode = "manual" | "after_merge";
 export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "failed";
 export type ProjectApprovalAction = "approve" | "reject";
 export type WorkerStatus = "online" | "busy" | "offline";
+export type WorkerHealthState = "healthy" | "stale" | "expired_lease" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message";
 
@@ -229,6 +230,9 @@ export interface WorkerSummary {
   name: string;
   executorType: string;
   status: WorkerStatus;
+  healthState?: WorkerHealthState | null;
+  healthReason?: string | null;
+  available?: boolean;
   capabilities: string[];
   lastHeartbeatAt?: string | null;
   leaseExpiresAt?: string | null;
@@ -245,6 +249,24 @@ export interface WorkerSummary {
 }
 
 export type Worker = WorkerSummary;
+
+export interface WorkerFleetSummary {
+  generatedAt: string;
+  totalWorkers: number;
+  healthyWorkers: number;
+  staleWorkers: number;
+  offlineWorkers: number;
+  busyWorkers: number;
+  availableWorkers: number;
+  expiredLeaseWorkers: number;
+  capabilityCounts: Record<string, number>;
+}
+
+export interface WorkerMatchRequest {
+  executorType?: string | null;
+  capabilities?: string[];
+  includeBusy?: boolean;
+}
 
 export interface WorkerRegistrationInput {
   id?: string | null;

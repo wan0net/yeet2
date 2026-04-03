@@ -1,6 +1,15 @@
 import { hostname } from "node:os";
 
-import type { WorkerHeartbeatInput, WorkerLeaseSummary, WorkerRegistrationInput, WorkerStatus, WorkerSummary } from "@yeet2/domain";
+import type {
+  WorkerFleetSummary,
+  WorkerHealthState,
+  WorkerHeartbeatInput,
+  WorkerLeaseSummary,
+  WorkerMatchRequest,
+  WorkerRegistrationInput,
+  WorkerStatus,
+  WorkerSummary
+} from "@yeet2/domain";
 
 import { prisma } from "./db";
 
@@ -56,6 +65,56 @@ function normalizeWorkerStatus(value: unknown): WorkerStatus | null {
   }
 
   return null;
+}
+
+function resolveWorkerHeartbeatStaleMs(): number {
+  const raw = envText("YEET2_WORKER_STALE_MS");
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 120_000;
+  }
+
+  return Math.max(10_000, Math.trunc(parsed));
+}
+
+function deriveWorkerHealth(worker: Pick<DbWorker, "status" | "lastHeartbeatAt" | "leaseExpiresAt" | "currentJobId">): {
+  healthState: WorkerHealthState;
+  healthReason: string | null;
+  available: boolean;
+} {
+  if (worker.status === "offline") {
+    return {
+      healthState: "offline",
+      healthReason: "Worker is marked offline.",
+      available: false
+    };
+  }
+
+  const now = Date.now();
+  const staleMs = resolveWorkerHeartbeatStaleMs();
+  const lastHeartbeatMs = worker.lastHeartbeatAt?.getTime() ?? 0;
+  if (!lastHeartbeatMs || now - lastHeartbeatMs > staleMs) {
+    return {
+      healthState: "stale",
+      healthReason: "Worker heartbeat is stale.",
+      available: false
+    };
+  }
+
+  const leaseExpiresMs = worker.leaseExpiresAt?.getTime() ?? 0;
+  if (worker.currentJobId && leaseExpiresMs && leaseExpiresMs < now) {
+    return {
+      healthState: "expired_lease",
+      healthReason: "Worker lease expired while a job is still attached.",
+      available: false
+    };
+  }
+
+  return {
+    healthState: "healthy",
+    healthReason: null,
+    available: worker.status === "online" && !worker.currentJobId
+  };
 }
 
 async function loadWorkerLeaseSummary(currentJobId: string | null): Promise<{
@@ -134,12 +193,16 @@ async function loadWorkerLeaseSummary(currentJobId: string | null): Promise<{
 
 export async function toWorkerSummary(worker: DbWorker): Promise<WorkerSummary> {
   const leaseContext = await loadWorkerLeaseSummary(worker.currentJobId ?? null);
+  const health = deriveWorkerHealth(worker);
 
   return {
     id: worker.id,
     name: worker.name,
     executorType: worker.executorType,
     status: worker.status,
+    healthState: health.healthState,
+    healthReason: health.healthReason,
+    available: health.available,
     capabilities: normalizeCapabilities(worker.capabilities),
     lastHeartbeatAt: worker.lastHeartbeatAt?.toISOString() ?? null,
     leaseExpiresAt: worker.leaseExpiresAt?.toISOString() ?? null,
@@ -169,6 +232,71 @@ export async function listWorkers(): Promise<WorkerSummary[]> {
   });
 
   return Promise.all(workers.map((worker) => toWorkerSummary(worker)));
+}
+
+export async function summarizeWorkerFleet(): Promise<WorkerFleetSummary> {
+  const workers = await listWorkers();
+  const capabilityCounts = workers.reduce<Record<string, number>>((counts, worker) => {
+    for (const capability of worker.capabilities) {
+      counts[capability] = (counts[capability] ?? 0) + 1;
+    }
+
+    return counts;
+  }, {});
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totalWorkers: workers.length,
+    healthyWorkers: workers.filter((worker) => worker.healthState === "healthy").length,
+    staleWorkers: workers.filter((worker) => worker.healthState === "stale").length,
+    offlineWorkers: workers.filter((worker) => worker.healthState === "offline").length,
+    busyWorkers: workers.filter((worker) => worker.status === "busy" || Boolean(worker.currentJobId)).length,
+    availableWorkers: workers.filter((worker) => worker.available).length,
+    expiredLeaseWorkers: workers.filter((worker) => worker.healthState === "expired_lease").length,
+    capabilityCounts
+  };
+}
+
+function normalizeCapabilityList(capabilities: string[] | undefined): string[] {
+  return [...new Set((capabilities ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+function workerMatchesCapabilities(worker: WorkerSummary, requiredCapabilities: string[]): boolean {
+  if (requiredCapabilities.length === 0) {
+    return true;
+  }
+
+  const available = new Set(worker.capabilities.map((capability) => capability.trim().toLowerCase()));
+  return requiredCapabilities.every((capability) => available.has(capability.trim().toLowerCase()));
+}
+
+export async function matchWorkers(input: WorkerMatchRequest): Promise<WorkerSummary[]> {
+  const executorType = normalizeText(input.executorType)?.toLowerCase() ?? null;
+  const requiredCapabilities = normalizeCapabilityList(input.capabilities).map((value) => value.toLowerCase());
+  const includeBusy = input.includeBusy === true;
+  const workers = await listWorkers();
+
+  return workers
+    .filter((worker) => {
+      if (executorType && worker.executorType.trim().toLowerCase() !== executorType) {
+        return false;
+      }
+
+      if (!includeBusy && !worker.available) {
+        return false;
+      }
+
+      return workerMatchesCapabilities(worker, requiredCapabilities);
+    })
+    .sort((left, right) => {
+      const leftScore = Number(Boolean(left.available)) + Number(left.healthState === "healthy");
+      const rightScore = Number(Boolean(right.available)) + Number(right.healthState === "healthy");
+      if (leftScore !== rightScore) {
+        return rightScore - leftScore;
+      }
+
+      return (right.lastHeartbeatAt ?? "").localeCompare(left.lastHeartbeatAt ?? "");
+    });
 }
 
 async function persistWorker(data: {
