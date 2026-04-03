@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .runtime import bootstrap_runtime
+
+bootstrap_runtime()
+
 from .http import serve
 
 
@@ -11,4 +15,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

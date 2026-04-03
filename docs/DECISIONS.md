@@ -79,3 +79,13 @@ No implementation deviations recorded yet.
 - Chosen Approach: `Project registration now stores GitHub repo owner, repo name, and canonical web URL when repoUrl targets GitHub, and dispatched jobs store a canonical compare URL for the branch they ran on`
 - Reason: `The API already had enough context at write time to persist stable artifact links, which reduces repeated URL derivation at render time and keeps the stored records closer to the engineering artifact they represent`
 - Consequences: `Existing rows will retain null GitHub metadata until they are rewritten or backfilled, but new and updated records now preserve the canonical GitHub references alongside the project/job data`
+
+### DECISION-006: Repo-Local CrewAI Runtime For Brain
+
+- Date: `2026-04-03`
+- Status: `accepted`
+- Area: `brain`
+- Spec Default: `CrewAI is the initial orchestration framework for specialist roles`
+- Chosen Approach: `The default local Brain runtime uses a dedicated virtualenv at apps/brain/.venv and keeps CrewAI home and storage state under apps/brain/.home and apps/brain/.crewai-data`
+- Reason: `A repo-local runtime keeps Brain setup reproducible, avoids leaking CrewAI state into the operator's global environment, and lets pnpm dev:brain work against the installed CrewAI path without extra shell setup`
+- Consequences: `Local Brain bootstrap now expects uv to create and populate apps/brain/.venv. Repo-local runtime artifacts must stay ignored in git, and operators can still override HOME or CREWAI_STORAGE_DIR if they need a different path`
