@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -26,6 +27,38 @@ def _clean_text(value: object) -> str:
 
 def _section_from_payload(title: str, payload: object) -> ConstitutionSection:
     return ConstitutionSection(title=title, text=_clean_text(payload))
+
+
+def _env_text(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
+def _env_int(name: str) -> int | None:
+    raw = _env_text(name)
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _resolve_bind(host: str | None, port: int | None) -> tuple[str, int]:
+    bind_host = host or _env_text("YEET2_HOST") or _env_text("BRAIN_HOST") or _env_text("HOST")
+    if not bind_host:
+        bind_host = "0.0.0.0"
+
+    bind_port = port
+    if bind_port is None:
+        for env_name in ("BRAIN_PORT", "YEET2_BRAIN_PORT", "PORT", "YEET2_PORT"):
+            env_port = _env_int(env_name)
+            if env_port is not None:
+                bind_port = env_port
+                break
+    if bind_port is None:
+        bind_port = 8011
+
+    return bind_host, bind_port
 
 
 def _extract_constitution(payload: dict[str, object]) -> dict[str, ConstitutionSection]:
@@ -130,7 +163,8 @@ class BrainApp:
         return Handler
 
 
-def serve(host: str = "0.0.0.0", port: int = 8011) -> None:
+def serve(host: str | None = None, port: int | None = None) -> None:
+    bind_host, bind_port = _resolve_bind(host, port)
     app = BrainApp()
-    server = ThreadingHTTPServer((host, port), app.handler_class())
+    server = ThreadingHTTPServer((bind_host, bind_port), app.handler_class())
     server.serve_forever()

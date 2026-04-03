@@ -22,6 +22,10 @@ This repo is intended to grow into a monorepo with these major areas:
 
 1. Copy `.env.example` to `.env` and fill in local values.
 2. Start PostgreSQL and Redis with `docker compose up -d`.
-3. Bring up the app services from their package-level tooling once those workspaces are added.
+3. In separate terminals, start Control, API, and Brain with:
+   - `pnpm dev:control`
+   - `pnpm dev:api`
+   - `pnpm dev:brain`
+4. If you also want the Executor skeleton, run `pnpm dev:executor` in another terminal.
 
-This bootstrap only sets up the shared infrastructure slice. The application services and workspace tooling will come in later milestones.
+Brain binds from repo-level env first, so `YEET2_HOST` and `BRAIN_PORT` from `.env` control the local listener. The compose file stays infra-only for now, which keeps the app runtime explicit and easy to change per service.

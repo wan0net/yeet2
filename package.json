@@ -8,6 +8,8 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "dev:control": "pnpm --filter @yeet2/control dev",
-    "dev:api": "pnpm --filter @yeet2/api dev"
+    "dev:api": "pnpm --filter @yeet2/api dev",
+    "dev:brain": "cd apps/brain && PYTHONPATH=src python3 -m yeet2_brain",
+    "dev:executor": "cd apps/executor && PYTHONPATH=src python3 -m yeet2_executor"
   }
 }

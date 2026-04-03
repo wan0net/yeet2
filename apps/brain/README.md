@@ -2,6 +2,15 @@
 
 Orchestration service for yeet2 planning.
 
+## Runtime
+
+Brain is meant to run from the repo's standard local surface:
+
+- `pnpm dev:brain` from the repo root
+- `PYTHONPATH=src python3 -m yeet2_brain` from `apps/brain`
+
+It reads its bind address from repo-level env vars, preferring `YEET2_HOST` and `BRAIN_PORT`, with common fallbacks like `HOST` and `PORT` when present.
+
 ## Planner selection
 
 Brain keeps the existing HTTP contract stable and can choose between two planning paths:
