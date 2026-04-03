@@ -39,7 +39,8 @@ import {
   planningProvenanceLabel,
   planningProvenanceTone,
   projectModelCostSummary,
-  projectGitHubRepoInfo
+  projectGitHubRepoInfo,
+  recommendedRoleModel
 } from "../../../lib/projects";
 import { controlBaseUrl, fetchProjectRoleModels } from "../../../lib/project-resource";
 import { ProjectAutonomyPanel } from "./project-autonomy-panel";
@@ -67,7 +68,11 @@ function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): strin
 function roleConfiguredModel(project: LoadedProject, definitionId: string): string | null {
   const definition = project.roleDefinitions.find((entry) => entry.id === definitionId);
   const model = definition?.model?.trim();
-  return model && model.length > 0 ? model : null;
+  if (model && model.length > 0) {
+    return model;
+  }
+
+  return definition ? recommendedRoleModel(definition.roleKey) : null;
 }
 
 async function createProjectJobPullRequest(projectId: string, jobId: string): Promise<void> {

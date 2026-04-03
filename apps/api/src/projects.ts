@@ -205,6 +205,11 @@ export interface ProjectJobLogResult {
   truncated: boolean;
 }
 
+export interface ProjectJobRefreshResult {
+  project: ProjectSummary;
+  job: ProjectJobSummary;
+}
+
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
   visualName: string;
@@ -301,6 +306,17 @@ export class ProjectJobLogError extends Error {
   ) {
     super(message);
     this.name = "ProjectJobLogError";
+  }
+}
+
+export class ProjectJobRefreshError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "job_not_found" | "executor_unavailable",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectJobRefreshError";
   }
 }
 
@@ -450,6 +466,21 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     sortOrder: 5
   }
 ];
+
+const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
+  planner: "openrouter/anthropic/claude-sonnet-4",
+  architect: "openrouter/anthropic/claude-sonnet-4",
+  implementer: "openrouter/openai/gpt-4.1",
+  qa: "openrouter/openai/gpt-4.1-mini",
+  reviewer: "openrouter/anthropic/claude-sonnet-4",
+  visual: "openrouter/google/gemini-2.5-pro"
+};
+
+function recommendedRoleModel(roleKey: ProjectRoleKey): string | null {
+  const envName = `YEET2_ROLE_MODEL_DEFAULT_${roleKey.toUpperCase()}`;
+  const configured = normalizeOptionalString(process.env[envName]);
+  return configured ?? RECOMMENDED_ROLE_MODELS[roleKey] ?? null;
+}
 
 type DispatchableTaskRole = (typeof DISPATCHABLE_TASK_ROLES)[number];
 
@@ -1658,6 +1689,39 @@ interface ExecutorJobRecord {
   payload?: Record<string, unknown> | null;
 }
 
+async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
+  const response = await fetch(`${executorBaseUrl()}/jobs/${encodeURIComponent(jobId)}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new ProjectJobRefreshError("executor_unavailable", `Executor returned invalid JSON for job ${jobId}`, 502);
+    }
+  }
+
+  if (response.status === 404) {
+    throw new ProjectJobRefreshError("job_not_found", "Executor does not know about this job", 404);
+  }
+
+  if (!response.ok || typeof parsed !== "object" || parsed === null) {
+    throw new ProjectJobRefreshError(
+      "executor_unavailable",
+      `Unable to load job ${jobId} from the executor`,
+      502
+    );
+  }
+
+  return parsed as ExecutorJobRecord;
+}
+
 interface ExecutorDispatchPayload {
   repo_path: string;
   base_branch: string;
@@ -1800,7 +1864,7 @@ async function submitTaskToExecutor(
   task: ProjectWithRelations["missions"][number]["tasks"][number]
 ): Promise<ExecutorJobRecord> {
   const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
-  const assignedRoleModel = assignedRoleDefinition?.model?.trim() || null;
+  const assignedRoleModel = assignedRoleDefinition?.model?.trim() || recommendedRoleModel(assignedRoleDefinition?.roleKey ?? (task.agentRole as ProjectRoleKey)) || null;
   const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentOperatorGuidance(project.id, 6)).slice(0, 4);
   const response = await fetch(`${executorBaseUrl()}/jobs`, {
     method: "POST",
@@ -2539,6 +2603,84 @@ export async function readProjectJobLog(projectId: string, jobId: string): Promi
 
     throw new ProjectJobLogError("log_read_failed", error instanceof Error ? error.message : "Unable to read job log", 500);
   }
+}
+
+export async function refreshProjectJob(projectId: string, jobId: string): Promise<ProjectJobRefreshResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectJobRefreshError("project_not_found", "Project not found", 404);
+  }
+
+  const match = findProjectJob(project, jobId);
+  if (!match) {
+    throw new ProjectJobRefreshError("job_not_found", "Job not found", 404);
+  }
+
+  const executorJob = await readExecutorJob(jobId);
+  const task = match.task;
+  const attempts = task.attempts;
+  const jobStatus = mapExecutorJobStatus(executorJob.status);
+  const taskStatus = taskStatusFromJobStatus(jobStatus, attempts, task.agentRole);
+  const startedAt = parseDate(executorJob.started_at) ?? match.job.startedAt ?? new Date();
+  const completedAt = jobStatus === "queued" || jobStatus === "running" ? null : parseDate(executorJob.completed_at) ?? startedAt;
+  const blockerReason = taskStatus === "blocked" ? buildDispatchBlockerReason(`Executor reported job status ${jobStatus}`) : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        executorType: executorJob.executor_type,
+        workerId: executorJob.worker_id?.trim() || null,
+        workspacePath: executorJob.workspace_path,
+        branchName: executorJob.branch_name,
+        logPath: executorJob.log_path ?? null,
+        artifactSummary: executorJob.artifact_summary ?? null,
+        status: jobStatus,
+        startedAt,
+        completedAt
+      } as any
+    });
+
+    await tx.task.update({
+      where: { id: task.id },
+      data: {
+        status: taskStatus,
+        blockerReason
+      }
+    });
+
+    if (taskStatus === "blocked" && blockerReason) {
+      await upsertOpenTaskBlocker(
+        tx,
+        task,
+        buildBlockedTaskDraft(task, `Executor reported job status ${jobStatus}`, {
+          source: "executor_outcome",
+          attempts,
+          jobStatus
+        })
+      );
+    }
+  });
+
+  const updatedProject = await loadProjectById(projectId);
+  if (!updatedProject) {
+    throw new ProjectJobRefreshError("project_not_found", "Project not found", 404);
+  }
+
+  const updatedJob =
+    updatedProject.missions
+      .flatMap((mission) => mission.tasks)
+      .flatMap((taskEntry) => taskEntry.jobs)
+      .find((jobEntry) => jobEntry.id === jobId) ?? null;
+
+  if (!updatedJob) {
+    throw new ProjectJobRefreshError("job_not_found", "Job not found after refresh", 404);
+  }
+
+  return {
+    project: updatedProject,
+    job: updatedJob
+  };
 }
 
 export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {

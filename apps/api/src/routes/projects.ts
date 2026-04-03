@@ -17,6 +17,7 @@ import {
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
   readProjectJobLog,
+  refreshProjectJob,
   applyProjectBlockerApproval,
   dispatchTask,
   getRegisteredProject,
@@ -30,6 +31,7 @@ import {
   ProjectGitHubIssueError,
   ProjectRegistrationError,
   ProjectAutonomyError,
+  ProjectJobRefreshError,
   ProjectRoleDefinitionError,
   ProjectJobLogError,
   ProjectPullRequestError,
@@ -611,6 +613,34 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to load the job log"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/jobs/:jobId/refresh", async (request, reply) => {
+    const { projectId, jobId } = request.params as { projectId?: string; jobId?: string };
+    if (!projectId || !jobId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and jobId are required"
+      });
+    }
+
+    try {
+      const result = await refreshProjectJob(projectId, jobId);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectJobRefreshError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to refresh the job"
       });
     }
   });

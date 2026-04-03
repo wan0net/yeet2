@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+import os
 
 
 class Role(StrEnum):
@@ -58,6 +59,39 @@ def _normalize_role_key(value: object) -> str | None:
 
     normalized = value.strip().lower()
     return normalized or None
+
+
+_ROLE_MODEL_ENV_NAMES = {
+    "planner": "YEET2_ROLE_MODEL_DEFAULT_PLANNER",
+    "architect": "YEET2_ROLE_MODEL_DEFAULT_ARCHITECT",
+    "implementer": "YEET2_ROLE_MODEL_DEFAULT_IMPLEMENTER",
+    "qa": "YEET2_ROLE_MODEL_DEFAULT_QA",
+    "reviewer": "YEET2_ROLE_MODEL_DEFAULT_REVIEWER",
+    "visual": "YEET2_ROLE_MODEL_DEFAULT_VISUAL",
+}
+
+_ROLE_MODEL_DEFAULTS = {
+    "planner": "openrouter/anthropic/claude-sonnet-4",
+    "architect": "openrouter/anthropic/claude-sonnet-4",
+    "implementer": "openrouter/openai/gpt-4.1",
+    "qa": "openrouter/openai/gpt-4.1-mini",
+    "reviewer": "openrouter/anthropic/claude-sonnet-4",
+    "visual": "openrouter/google/gemini-2.5-pro",
+}
+
+
+def recommended_model_for_role_key(role_key: str) -> str | None:
+    normalized = _normalize_role_key(role_key)
+    if not normalized:
+        return None
+
+    env_name = _ROLE_MODEL_ENV_NAMES.get(normalized)
+    if env_name:
+        configured = _clean_text(os.getenv(env_name))
+        if configured:
+            return configured
+
+    return _ROLE_MODEL_DEFAULTS.get(normalized)
 
 
 def default_planning_role_definitions(project_name: str | None = None) -> list[PlanningRoleDefinition]:

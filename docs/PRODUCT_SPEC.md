@@ -321,6 +321,13 @@ This means:
 - auth boundaries must still be designed so a stronger auth model can be added later
 - session, identity, and future role/approval boundaries should be modeled so the chosen auth system can expand from local auth toward stronger operator authentication without a major rewrite
 
+### Ease Of Use Defaults
+
+- yeet2 should be easy to drive in its normal mode, with advanced controls available only when the operator wants them
+- the system should choose recommended defaults whenever a sensible default exists
+- model selection should be role-aware by default, so planner, architect, implementer, QA, reviewer, and visual staff each get a recommended model without manual tuning
+- custom per-staff model overrides are an advanced control, not the required path
+
 ### Observability
 
 - structured logs for all services

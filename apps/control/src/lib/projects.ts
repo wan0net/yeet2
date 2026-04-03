@@ -107,6 +107,19 @@ export interface ProjectRoleDefinition {
   backstory: string;
 }
 
+const RECOMMENDED_ROLE_MODELS: Record<string, string> = {
+  planner: "openrouter/anthropic/claude-sonnet-4",
+  architect: "openrouter/anthropic/claude-sonnet-4",
+  implementer: "openrouter/openai/gpt-4.1",
+  qa: "openrouter/openai/gpt-4.1-mini",
+  reviewer: "openrouter/anthropic/claude-sonnet-4",
+  visual: "openrouter/google/gemini-2.5-pro"
+};
+
+export function recommendedRoleModel(roleKey: string): string | null {
+  return RECOMMENDED_ROLE_MODELS[roleKey.trim().toLowerCase()] ?? null;
+}
+
 export interface ProjectBlockerRecord {
   id: string;
   taskId: string | null;

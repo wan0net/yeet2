@@ -25,6 +25,16 @@ export function JobLogViewer({ projectId, jobId }: JobLogViewerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function refreshJob() {
+    await fetch(`/api/projects/${projectId}/jobs/${jobId}/refresh`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json"
+      }
+    }).catch(() => null);
+  }
+
   async function handleLoad() {
     if (isLoading) {
       return;
@@ -34,6 +44,7 @@ export function JobLogViewer({ projectId, jobId }: JobLogViewerProps) {
     setError(null);
 
     try {
+      await refreshJob();
       const response = await fetch(`/api/projects/${projectId}/jobs/${jobId}/log`, {
         cache: "no-store",
         headers: {

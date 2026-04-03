@@ -6,6 +6,7 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
 import type { ProjectModelCatalogOption, ProjectRoleDefinition } from "../../../lib/projects";
+import { recommendedRoleModel } from "../../../lib/projects";
 
 interface ProjectRolesEditorProps {
   projectId: string;
@@ -358,38 +359,46 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
                 </label>
 
                 <label className="block space-y-1">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model</span>
-                  <input
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
-                    onChange={(event) => updateRole(index, { model: event.currentTarget.value })}
-                    list={`project-role-models-${projectId}`}
-                    placeholder="Select or type a model"
-                    value={role.model ?? ""}
-                  />
-                  <datalist id={`project-role-models-${projectId}`}>
-                    {availableModels.map((model) => (
-                      <option key={model.value} value={model.value} />
-                    ))}
-                  </datalist>
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model strategy</span>
                   <div className="text-xs text-slate-500">
-                    Leave blank to use the Brain default model.
+                    Leave blank to use the recommended default model for this role{recommendedRoleModel(role.roleKey) ? `: ${recommendedRoleModel(role.roleKey)}` : ""}.
                     {modelsLoading ? " Loading available models..." : null}
                     {modelsError ? ` Catalog unavailable: ${modelsError}` : null}
                   </div>
                   {(() => {
-                    const selectedModel = availableModels.find((entry) => entry.value === (role.model ?? ""));
+                    const effectiveModel = role.model?.trim() || recommendedRoleModel(role.roleKey) || "";
+                    const selectedModel = availableModels.find((entry) => entry.value === effectiveModel);
                     const costCopy = modelCostCopy(selectedModel ?? null);
-                    if (!selectedModel && !costCopy) {
+                    if (!effectiveModel && !selectedModel && !costCopy) {
                       return null;
                     }
 
                     return (
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        <div className="font-medium text-slate-800">{selectedModel?.label ?? role.model}</div>
+                        <div className="font-medium text-slate-800">{selectedModel?.label ?? effectiveModel}</div>
+                        {!role.model?.trim() ? <div className="mt-1 text-slate-500">Recommended default</div> : null}
                         {costCopy ? <div className="mt-1">{costCopy}</div> : null}
                       </div>
                     );
                   })()}
+                  <details className="rounded-xl border border-slate-200 bg-white">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-700">Advanced model override</summary>
+                    <div className="border-t border-slate-200 px-3 py-3">
+                      <input
+                        className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                        onChange={(event) => updateRole(index, { model: event.currentTarget.value })}
+                        list={`project-role-models-${projectId}`}
+                        placeholder="Select or type a model"
+                        value={role.model ?? ""}
+                      />
+                      <datalist id={`project-role-models-${projectId}`}>
+                        {availableModels.map((model) => (
+                          <option key={model.value} value={model.value} />
+                        ))}
+                      </datalist>
+                      <div className="mt-2 text-xs text-slate-500">Only set this if you want to override the recommended default for this staff member.</div>
+                    </div>
+                  </details>
                 </label>
 
                 <label className="block space-y-1">

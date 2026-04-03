@@ -14,6 +14,7 @@ from .roles import (
     PlanningRoleDefinition,
     Role,
     default_planning_role_definitions,
+    recommended_model_for_role_key,
 )
 
 try:
@@ -192,6 +193,10 @@ def _crewai_llm_for_model(model_name: str | None) -> object | None:
 
 def _crewai_llm() -> object | None:
     return _crewai_llm_for_model(_crewai_model_name())
+
+
+def _resolved_role_model(role_definition: PlanningRoleDefinition) -> str | None:
+    return role_definition.model or recommended_model_for_role_key(role_definition.key) or _crewai_model_name()
 
 
 def _normalize_role_key(value: object) -> str | None:
@@ -615,8 +620,8 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
             backstory=definition.backstory,
             allow_delegation=allow_delegation_for(definition.key),
             **(
-                {"llm": _crewai_llm_for_model(definition.model or _crewai_model_name())}
-                if (definition.model or _crewai_model_name())
+                {"llm": _crewai_llm_for_model(_resolved_role_model(definition))}
+                if _resolved_role_model(definition)
                 else {}
             ),
         )
