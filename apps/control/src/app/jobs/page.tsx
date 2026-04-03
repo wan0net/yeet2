@@ -18,6 +18,7 @@ import {
 import type { ProjectRecord } from "../../lib/projects";
 import { controlBaseUrl } from "../../lib/project-resource";
 import { JobLogViewer } from "./job-log-viewer";
+import { JobRefreshButton } from "./job-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -220,11 +221,14 @@ export default async function JobsPage() {
                         </span>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
-                      <div className="font-medium text-slate-800">Job ID</div>
-                      <div className="mt-1 break-all font-mono">{job.id}</div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
+                    <div className="font-medium text-slate-800">Job ID</div>
+                    <div className="mt-1 break-all font-mono">{job.id}</div>
+                    <div className="mt-3">
+                      <JobRefreshButton jobId={job.id} projectId={project.id} />
                     </div>
                   </div>
+                </div>
 
                   <div className="mt-3 grid gap-3 lg:grid-cols-[1.25fr_0.95fr_0.9fr]">
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">

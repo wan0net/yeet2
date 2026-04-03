@@ -7,6 +7,7 @@ import { formatTimestamp, jobStatusTone, missionRecentJobs, missionResultSummari
 import { fetchMissionDetail } from "../../../lib/project-resource";
 import { planningProvenanceLabel, planningProvenanceTone } from "../../../lib/projects";
 import { JobLogViewer } from "../../jobs/job-log-viewer";
+import { JobRefreshButton } from "../../jobs/job-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -186,6 +187,9 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
                     <div className="font-medium text-slate-800">Job ID</div>
                     <div className="mt-1 break-all font-mono">{job.id}</div>
+                    <div className="mt-3">
+                      <JobRefreshButton jobId={job.id} projectId={project.id} />
+                    </div>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 lg:grid-cols-3">
