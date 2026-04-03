@@ -1,5 +1,11 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import type { ProjectAutonomyMode, ProjectPullRequestDraftMode, ProjectPullRequestMode, ProjectRoleKey } from "@yeet2/domain";
+import type {
+  ProjectAutonomyMode,
+  ProjectBranchCleanupMode,
+  ProjectPullRequestDraftMode,
+  ProjectPullRequestMode,
+  ProjectRoleKey
+} from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
 import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
@@ -149,13 +155,14 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
 }
 
 function parseProjectAutonomyBody(body: unknown): {
-  input:
-    | {
-        autonomyMode: ProjectAutonomyMode;
-        pullRequestMode?: ProjectPullRequestMode;
-        pullRequestDraftMode?: ProjectPullRequestDraftMode;
-        mergeApprovalMode?: import("@yeet2/domain").ProjectMergeApprovalMode;
-      }
+      input:
+        | {
+            autonomyMode: ProjectAutonomyMode;
+            pullRequestMode?: ProjectPullRequestMode;
+            pullRequestDraftMode?: ProjectPullRequestDraftMode;
+            mergeApprovalMode?: import("@yeet2/domain").ProjectMergeApprovalMode;
+            branchCleanupMode?: ProjectBranchCleanupMode;
+          }
     | null;
   error: string | null;
 } {
@@ -218,12 +225,23 @@ function parseProjectAutonomyBody(body: unknown): {
     };
   }
 
+  const rawBranchCleanupMode = candidate.branchCleanupMode ?? candidate.branch_cleanup_mode;
+  const branchCleanupMode =
+    typeof rawBranchCleanupMode === "string" ? rawBranchCleanupMode.trim().toLowerCase() : "";
+  if (branchCleanupMode && branchCleanupMode !== "manual" && branchCleanupMode !== "after_merge") {
+    return {
+      input: null,
+      error: "branchCleanupMode must be manual or after_merge"
+    };
+  }
+
   return {
     input: {
       autonomyMode,
       ...(pullRequestMode ? { pullRequestMode: pullRequestMode as ProjectPullRequestMode } : {}),
       ...(pullRequestDraftMode ? { pullRequestDraftMode: pullRequestDraftMode as ProjectPullRequestDraftMode } : {}),
-      ...(mergeApprovalMode ? { mergeApprovalMode: mergeApprovalMode as import("@yeet2/domain").ProjectMergeApprovalMode } : {})
+      ...(mergeApprovalMode ? { mergeApprovalMode: mergeApprovalMode as import("@yeet2/domain").ProjectMergeApprovalMode } : {}),
+      ...(branchCleanupMode ? { branchCleanupMode: branchCleanupMode as ProjectBranchCleanupMode } : {})
     },
     error: null
   };

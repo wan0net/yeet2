@@ -42,6 +42,17 @@ export interface GitHubPullRequestDetails extends GitHubPullRequestResult {
   baseBranch: string;
 }
 
+export class GitHubBranchError extends Error {
+  constructor(
+    public readonly code: "missing_token" | "invalid_repository_url" | "branch_delete_failed",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "GitHubBranchError";
+  }
+}
+
 export class GitHubIssueError extends Error {
   constructor(
     public readonly code: "missing_token" | "invalid_repository_url" | "issue_create_failed",
@@ -410,6 +421,46 @@ export async function mergeGitHubPullRequest(input: {
     repository: input.repository,
     pullRequestNumber: input.pullRequestNumber
   });
+}
+
+export async function deleteGitHubBranchRef(input: {
+  token: string | undefined;
+  repository: GitHubRepositoryRef;
+  branchName: string;
+}): Promise<void> {
+  if (!input.token) {
+    throw new GitHubBranchError("missing_token", "GITHUB_TOKEN is required to delete GitHub branches.", 503);
+  }
+
+  const response = await fetch(
+    `${input.repository.apiBaseUrl}/repos/${input.repository.owner}/${input.repository.repo}/git/refs/heads/${encodeURIComponent(input.branchName)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${input.token}`,
+        "User-Agent": "yeet2",
+        "X-GitHub-Api-Version": "2022-11-28"
+      }
+    }
+  );
+
+  if (response.status === 204 || response.status === 404) {
+    return;
+  }
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new GitHubBranchError("branch_delete_failed", `GitHub returned invalid JSON (${response.status}).`, 502);
+    }
+  }
+
+  const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+  throw new GitHubBranchError("branch_delete_failed", message || "Unable to delete GitHub branch.", 502);
 }
 
 export async function createGitHubIssue(input: GitHubIssueInput & { repository: GitHubRepositoryRef }): Promise<GitHubIssueResult> {

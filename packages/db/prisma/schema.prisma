@@ -50,6 +50,18 @@ enum ProjectMergeApprovalMode {
   no_approval
 }
 
+enum ProjectBranchCleanupMode {
+  manual
+  after_merge
+}
+
+enum ProjectBranchCleanupState {
+  pending
+  deleted
+  retained
+  failed
+}
+
 enum ProjectRoleKey {
   planner
   architect
@@ -101,6 +113,7 @@ model Project {
   pullRequestMode    ProjectPullRequestMode @default(manual) @map("pull_request_mode")
   pullRequestDraftMode ProjectPullRequestDraftMode @default(draft) @map("pull_request_draft_mode")
   mergeApprovalMode  ProjectMergeApprovalMode @default(human_approval) @map("merge_approval_mode")
+  branchCleanupMode  ProjectBranchCleanupMode @default(manual) @map("branch_cleanup_mode")
   lastAutonomyRunAt  DateTime?           @map("last_autonomy_run_at")
   lastAutonomyStatus String?             @map("last_autonomy_status")
   lastAutonomyMessage String?            @map("last_autonomy_message")
@@ -197,6 +210,8 @@ model Job {
   githubPrState    String?   @map("github_pr_state")
   githubPrDraft    Boolean?  @map("github_pr_draft")
   githubPrMergedAt DateTime? @map("github_pr_merged_at")
+  githubBranchCleanupState ProjectBranchCleanupState @default(pending) @map("github_branch_cleanup_state")
+  githubBranchDeletedAt DateTime? @map("github_branch_deleted_at")
   status           JobStatus @default(queued)
   logPath          String?   @map("log_path")
   artifactSummary  String?   @map("artifact_summary")

@@ -6,6 +6,8 @@ import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectJobs } from "../../lib/jobs";
 import {
+  branchCleanupLifecycleLabel,
+  branchCleanupLifecycleTone,
   jobGitHubCompareUrl,
   jobGitHubPullRequestLabel,
   jobGitHubPullRequestLifecycleLabel,
@@ -273,6 +275,15 @@ export default async function JobsPage() {
                             ) : (
                               <span className="text-slate-500">Not available</span>
                             )}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Branch cleanup</dt>
+                          <dd className="flex flex-wrap items-center gap-2">
+                            <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${branchCleanupLifecycleTone(job)}`}>
+                              {branchCleanupLifecycleLabel(job)}
+                            </span>
+                            {job.githubBranchCleanupDeletedAt ? <span className="text-slate-500">Deleted {formatTimestamp(job.githubBranchCleanupDeletedAt)}</span> : null}
                           </dd>
                         </div>
                         {job.githubPrMergedAt ? (

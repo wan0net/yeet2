@@ -22,6 +22,8 @@ export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
 export type ProjectPullRequestDraftMode = "draft" | "ready";
 export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval";
+export type ProjectBranchCleanupMode = "manual" | "after_merge";
+export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "failed";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -58,6 +60,7 @@ export interface Project {
   pullRequestMode?: ProjectPullRequestMode | null;
   pullRequestDraftMode?: ProjectPullRequestDraftMode | null;
   mergeApprovalMode?: ProjectMergeApprovalMode | null;
+  branchCleanupMode?: ProjectBranchCleanupMode | null;
   lastAutonomyRunAt?: string | null;
   lastAutonomyStatus?: string | null;
   lastAutonomyMessage?: string | null;
@@ -132,6 +135,15 @@ export interface JobSummary {
   executorType: string;
   workspacePath: string;
   branchName: string;
+  githubCompareUrl?: string | null;
+  githubPrNumber?: number | null;
+  githubPrUrl?: string | null;
+  githubPrTitle?: string | null;
+  githubPrState?: "open" | "closed" | "merged" | null;
+  githubPrDraft?: boolean | null;
+  githubPrMergedAt?: string | null;
+  githubBranchCleanupState?: ProjectBranchCleanupState | null;
+  githubBranchDeletedAt?: string | null;
   status: JobStatus;
   logPath?: string | null;
   artifactSummary?: string | null;
@@ -262,6 +274,8 @@ export interface Job {
   githubPrState?: "open" | "closed" | "merged" | null;
   githubPrDraft?: boolean | null;
   githubPrMergedAt?: string | null;
+  githubBranchCleanupState?: ProjectBranchCleanupState | null;
+  githubBranchDeletedAt?: string | null;
   status: JobStatus;
   logPath?: string | null;
   artifactSummary?: string | null;

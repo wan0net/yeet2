@@ -53,6 +53,8 @@ export interface ProjectJobRecord {
   githubPrState: string | null;
   githubPrDraft: boolean | null;
   githubPrMergedAt: string | null;
+  githubBranchCleanupState: string | null;
+  githubBranchCleanupDeletedAt: string | null;
 }
 
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
@@ -62,12 +64,15 @@ export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_rev
 export type ProjectPullRequestDraftMode = "draft" | "ready" | "unknown";
 export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval" | "unknown";
 export type ProjectPullRequestLifecycle = "draft" | "open" | "merged" | "closed" | "unknown";
+export type ProjectBranchCleanupMode = "manual" | "after_merge" | "unknown";
+export type ProjectBranchCleanupLifecycle = "pending" | "kept" | "deleted" | "failed" | "unknown";
 
 export interface ProjectAutonomyState {
   mode: ProjectAutonomyMode;
   pullRequestMode: ProjectPullRequestMode;
   pullRequestDraftMode: ProjectPullRequestDraftMode;
   mergeApprovalMode: ProjectMergeApprovalMode;
+  branchCleanupMode: ProjectBranchCleanupMode;
   lastRunStatus: string | null;
   lastRunMessage: string | null;
   lastRunAt: string | null;
@@ -299,6 +304,44 @@ function normalizeMergeApprovalMode(value: unknown): ProjectMergeApprovalMode {
   }
 }
 
+function normalizeBranchCleanupMode(value: unknown): ProjectBranchCleanupMode {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "manual":
+    case "after_merge":
+      return normalized;
+    case "after-merge":
+      return "after_merge";
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function normalizeBranchCleanupLifecycle(value: unknown): ProjectBranchCleanupLifecycle {
+  const normalized = stringValue(value).toLowerCase().replace(/[\s_-]+/g, "");
+
+  switch (normalized) {
+    case "pending":
+      return "pending";
+    case "kept":
+    case "retained":
+      return "kept";
+    case "deleted":
+    case "removed":
+      return "deleted";
+    case "failed":
+    case "error":
+      return "failed";
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
 function autonomySource(raw: RawRecord): RawRecord {
   return asRecord(raw.autonomy ?? raw.autonomyState ?? raw.autonomy_state ?? raw.loop ?? raw.loopState ?? raw.loop_state);
 }
@@ -349,6 +392,16 @@ function normalizeAutonomyState(raw: RawRecord): ProjectAutonomyState {
         autonomy.approval_mode ??
         autonomy.pullRequestApprovalMode ??
         autonomy.pull_request_approval_mode
+    ),
+    branchCleanupMode: normalizeBranchCleanupMode(
+      raw.branchCleanupMode ??
+        raw.branch_cleanup_mode ??
+        raw.cleanupMode ??
+        raw.cleanup_mode ??
+        autonomy.branchCleanupMode ??
+        autonomy.branch_cleanup_mode ??
+        autonomy.cleanupMode ??
+        autonomy.cleanup_mode
     ),
     lastRunStatus: stringValue(
       raw.lastRunStatus,
@@ -908,7 +961,29 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
             : typeof raw.pull_request_draft === "boolean"
               ? raw.pull_request_draft
               : null,
-    githubPrMergedAt: stringValue(raw.githubPrMergedAt, raw.github_pr_merged_at, raw.pullRequestMergedAt, raw.pull_request_merged_at, raw.mergedAt, raw.merged_at) || null
+    githubPrMergedAt: stringValue(raw.githubPrMergedAt, raw.github_pr_merged_at, raw.pullRequestMergedAt, raw.pull_request_merged_at, raw.mergedAt, raw.merged_at) || null,
+    githubBranchCleanupState:
+      stringValue(
+        raw.githubBranchCleanupState,
+        raw.github_branch_cleanup_state,
+        raw.branchCleanupState,
+        raw.branch_cleanup_state,
+        raw.cleanupState,
+        raw.cleanup_state,
+        raw.branchState,
+        raw.branch_state
+      ) || null,
+    githubBranchCleanupDeletedAt:
+      stringValue(
+        raw.githubBranchCleanupDeletedAt,
+        raw.github_branch_cleanup_deleted_at,
+        raw.branchCleanupDeletedAt,
+        raw.branch_cleanup_deleted_at,
+        raw.cleanupDeletedAt,
+        raw.cleanup_deleted_at,
+        raw.deletedAt,
+        raw.deleted_at
+      ) || null,
   };
 }
 
@@ -1239,6 +1314,75 @@ export function mergeApprovalModeTone(value: ProjectMergeApprovalMode | string |
       return "border-sky-200 bg-sky-50 text-sky-800";
     case "no_approval":
       return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function branchCleanupModeLabel(value: ProjectBranchCleanupMode | string | null | undefined): string {
+  switch (normalizeBranchCleanupMode(value)) {
+    case "manual":
+      return "Manual";
+    case "after_merge":
+      return "After merge";
+    default:
+      return "Unknown";
+  }
+}
+
+export function branchCleanupModeTone(value: ProjectBranchCleanupMode | string | null | undefined): string {
+  switch (normalizeBranchCleanupMode(value)) {
+    case "manual":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    case "after_merge":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function branchCleanupLifecycle(job: Pick<ProjectJobRecord, "githubBranchCleanupState" | "githubBranchCleanupDeletedAt">): ProjectBranchCleanupLifecycle {
+  if (typeof job.githubBranchCleanupDeletedAt === "string" && job.githubBranchCleanupDeletedAt.trim()) {
+    return "deleted";
+  }
+
+  const state = normalizeBranchCleanupLifecycle(job.githubBranchCleanupState);
+  if (state !== "unknown") {
+    return state;
+  }
+
+  if (job.githubBranchCleanupDeletedAt) {
+    return "pending";
+  }
+
+  return "unknown";
+}
+
+export function branchCleanupLifecycleLabel(job: Pick<ProjectJobRecord, "githubBranchCleanupState" | "githubBranchCleanupDeletedAt">): string {
+  switch (branchCleanupLifecycle(job)) {
+    case "pending":
+      return "Cleanup pending";
+    case "kept":
+      return "Branch kept";
+    case "deleted":
+      return "Branch deleted";
+    case "failed":
+      return "Cleanup failed";
+    default:
+      return "Branch cleanup";
+  }
+}
+
+export function branchCleanupLifecycleTone(job: Pick<ProjectJobRecord, "githubBranchCleanupState" | "githubBranchCleanupDeletedAt">): string {
+  switch (branchCleanupLifecycle(job)) {
+    case "pending":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "kept":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    case "deleted":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "failed":
+      return "border-rose-200 bg-rose-50 text-rose-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";
   }

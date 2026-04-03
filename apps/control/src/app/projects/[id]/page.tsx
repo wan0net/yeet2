@@ -23,6 +23,8 @@ import {
 } from "../../../lib/project-detail";
 import { fetchProject } from "../../../lib/project-resource";
 import {
+  branchCleanupLifecycleLabel,
+  branchCleanupLifecycleTone,
   emptyConstitutionFiles,
   formatConstitutionFiles,
   githubBranchUrl,
@@ -583,6 +585,13 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         )}
                       </div>
                       {job.githubPrMergedAt ? <div className="mt-2 text-xs text-slate-500">Merged {formatTimestamp(job.githubPrMergedAt) ?? "recently"}</div> : null}
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="uppercase tracking-[0.16em] text-slate-400">Branch</span>
+                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${branchCleanupLifecycleTone(job)}`}>
+                          {branchCleanupLifecycleLabel(job)}
+                        </span>
+                        {job.githubBranchCleanupDeletedAt ? <span className="text-slate-500">Deleted {formatTimestamp(job.githubBranchCleanupDeletedAt)}</span> : null}
+                      </div>
                       {job.githubPrTitle ? <div className="mt-2 text-xs text-slate-500">{job.githubPrTitle}</div> : null}
                     </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">

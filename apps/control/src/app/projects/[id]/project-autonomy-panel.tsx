@@ -9,6 +9,8 @@ import { formatTimestamp } from "../../../lib/project-detail";
 import {
   autonomyModeLabel,
   autonomyModeTone,
+  branchCleanupModeLabel,
+  branchCleanupModeTone,
   mergeApprovalModeLabel,
   mergeApprovalModeTone,
   pullRequestDraftModeLabel,
@@ -17,6 +19,7 @@ import {
   pullRequestModeTone,
   type ProjectAutonomyMode,
   type ProjectAutonomyState,
+  type ProjectBranchCleanupMode,
   type ProjectMergeApprovalMode,
   type ProjectPullRequestDraftMode,
   type ProjectPullRequestMode
@@ -51,6 +54,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
   const [pullRequestMode, setPullRequestMode] = useState<ProjectPullRequestMode>(autonomy.pullRequestMode);
   const [pullRequestDraftMode, setPullRequestDraftMode] = useState<ProjectPullRequestDraftMode>(autonomy.pullRequestDraftMode);
   const [mergeApprovalMode, setMergeApprovalMode] = useState<ProjectMergeApprovalMode>(autonomy.mergeApprovalMode);
+  const [branchCleanupMode, setBranchCleanupMode] = useState<ProjectBranchCleanupMode>(autonomy.branchCleanupMode);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -60,7 +64,8 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
     setPullRequestMode(autonomy.pullRequestMode);
     setPullRequestDraftMode(autonomy.pullRequestDraftMode);
     setMergeApprovalMode(autonomy.mergeApprovalMode);
-  }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode, autonomy.mergeApprovalMode]);
+    setBranchCleanupMode(autonomy.branchCleanupMode);
+  }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode, autonomy.mergeApprovalMode, autonomy.branchCleanupMode]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +85,8 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
           autonomyMode: mode,
           pullRequestMode,
           pullRequestDraftMode,
-          mergeApprovalMode
+          mergeApprovalMode,
+          branchCleanupMode
         })
       });
       const payload = (await response.json().catch(() => null)) as { error?: string; detail?: unknown; message?: string } | null;
@@ -104,9 +110,9 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Control how {projectName} runs its planning loop, PR automation, and merge gating. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, start as draft or ready, and merge approval can stay with a human or be handed off.
+              Control how {projectName} runs its planning loop, PR automation, merge gating, and branch cleanup. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, start as draft or ready, merge approval can stay with a human or be handed off, and branches can be kept or cleaned up after merge.
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <label className="block space-y-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Autonomy mode</span>
                 <select
@@ -158,6 +164,18 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
                   <option value="no_approval">No approval</option>
                 </select>
               </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Branch cleanup</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  onChange={(event) => setBranchCleanupMode(event.currentTarget.value as ProjectBranchCleanupMode)}
+                  value={branchCleanupMode}
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="manual">Manual</option>
+                  <option value="after_merge">After merge</option>
+                </select>
+              </label>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -178,6 +196,9 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
               </span>
               <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${mergeApprovalModeTone(autonomy.mergeApprovalMode)}`}>
                 Merge: {mergeApprovalModeLabel(autonomy.mergeApprovalMode)}
+              </span>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${branchCleanupModeTone(autonomy.branchCleanupMode)}`}>
+                Cleanup: {branchCleanupModeLabel(autonomy.branchCleanupMode)}
               </span>
             </div>
           </div>

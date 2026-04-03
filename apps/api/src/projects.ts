@@ -13,6 +13,8 @@ import type {
 } from "@yeet2/db";
 import type {
   PlanningProvenance,
+  ProjectBranchCleanupMode,
+  ProjectBranchCleanupState,
   ProjectAutonomyMode,
   ProjectMergeApprovalMode,
   ProjectPullRequestDraftMode,
@@ -27,6 +29,7 @@ import {
   buildGitHubIssueBody,
   createGitHubIssue,
   createGitHubPullRequest,
+  deleteGitHubBranchRef,
   fetchGitHubPullRequest,
   mergeGitHubPullRequest,
   parseGitHubRepositoryUrl,
@@ -60,6 +63,8 @@ export interface ProjectJobSummary {
   githubPrState: "open" | "closed" | "merged" | null;
   githubPrDraft: boolean | null;
   githubPrMergedAt: string | null;
+  githubBranchCleanupState: ProjectBranchCleanupState;
+  githubBranchDeletedAt: string | null;
   status: ProjectJobStatus;
   logPath: string | null;
   artifactSummary: string | null;
@@ -140,6 +145,7 @@ export interface ProjectSummary {
   pullRequestMode: ProjectPullRequestMode;
   pullRequestDraftMode: ProjectPullRequestDraftMode;
   mergeApprovalMode: ProjectMergeApprovalMode;
+  branchCleanupMode: ProjectBranchCleanupMode;
   lastAutonomyRunAt: string | null;
   lastAutonomyStatus: string | null;
   lastAutonomyMessage: string | null;
@@ -188,6 +194,7 @@ export interface ProjectAutonomyUpdateInput {
   pullRequestMode?: ProjectPullRequestMode;
   pullRequestDraftMode?: ProjectPullRequestDraftMode;
   mergeApprovalMode?: ProjectMergeApprovalMode;
+  branchCleanupMode?: ProjectBranchCleanupMode;
 }
 
 export interface ProjectAutonomyRunUpdateInput {
@@ -707,6 +714,7 @@ function toAutonomySummary(
     | "pullRequestMode"
     | "pullRequestDraftMode"
     | "mergeApprovalMode"
+    | "branchCleanupMode"
     | "lastAutonomyRunAt"
     | "lastAutonomyStatus"
     | "lastAutonomyMessage"
@@ -719,6 +727,7 @@ function toAutonomySummary(
     pullRequestMode: project.pullRequestMode ?? "manual",
     pullRequestDraftMode: project.pullRequestDraftMode ?? "draft",
     mergeApprovalMode: project.mergeApprovalMode ?? "human_approval",
+    branchCleanupMode: project.branchCleanupMode ?? "manual",
     lastAutonomyRunAt: project.lastAutonomyRunAt?.toISOString() ?? null,
     lastAutonomyStatus: project.lastAutonomyStatus ?? null,
     lastAutonomyMessage: project.lastAutonomyMessage ?? null,
@@ -780,6 +789,14 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     githubPrState,
     githubPrDraft: job.githubPrDraft ?? null,
     githubPrMergedAt: job.githubPrMergedAt?.toISOString() ?? null,
+    githubBranchCleanupState:
+      job.githubBranchCleanupState === "pending" ||
+      job.githubBranchCleanupState === "deleted" ||
+      job.githubBranchCleanupState === "retained" ||
+      job.githubBranchCleanupState === "failed"
+        ? job.githubBranchCleanupState
+        : "pending",
+    githubBranchDeletedAt: job.githubBranchDeletedAt?.toISOString() ?? null,
     status: job.status,
     logPath: job.logPath ?? null,
     artifactSummary: job.artifactSummary ?? null,
@@ -1097,11 +1114,60 @@ function mapGitHubPullRequestLifecycle(pullRequest: GitHubPullRequestDetails): {
   };
 }
 
+async function resolveJobBranchCleanupState(
+  project: Pick<ProjectWithRelations, "branchCleanupMode" | "repoUrl" | "githubRepoUrl">,
+  pullRequest: GitHubPullRequestDetails
+): Promise<{ githubBranchCleanupState: ProjectBranchCleanupState; githubBranchDeletedAt: Date | null }> {
+  if (!pullRequest.merged) {
+    return {
+      githubBranchCleanupState: "pending",
+      githubBranchDeletedAt: null
+    };
+  }
+
+  if (project.branchCleanupMode !== "after_merge") {
+    return {
+      githubBranchCleanupState: "retained",
+      githubBranchDeletedAt: null
+    };
+  }
+
+  const repository = resolveProjectGitHubRepository(project);
+  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  if (!repository || !token) {
+    return {
+      githubBranchCleanupState: "failed",
+      githubBranchDeletedAt: null
+    };
+  }
+
+  try {
+    await deleteGitHubBranchRef({
+      token,
+      repository,
+      branchName: pullRequest.headBranch
+    });
+
+    return {
+      githubBranchCleanupState: "deleted",
+      githubBranchDeletedAt: new Date()
+    };
+  } catch {
+    return {
+      githubBranchCleanupState: "failed",
+      githubBranchDeletedAt: null
+    };
+  }
+}
+
 async function persistJobPullRequestState(
   jobId: string,
+  project: Pick<ProjectWithRelations, "branchCleanupMode" | "repoUrl" | "githubRepoUrl">,
   pullRequest: GitHubPullRequestDetails,
   compareUrl?: string | null
 ): Promise<void> {
+  const branchCleanup = await resolveJobBranchCleanupState(project, pullRequest);
+
   await prisma.job.update({
     where: { id: jobId },
     data: {
@@ -1109,7 +1175,8 @@ async function persistJobPullRequestState(
       githubPrNumber: pullRequest.number,
       githubPrUrl: pullRequest.htmlUrl,
       githubPrTitle: pullRequest.title,
-      ...mapGitHubPullRequestLifecycle(pullRequest)
+      ...mapGitHubPullRequestLifecycle(pullRequest),
+      ...branchCleanup
     }
   });
 }
@@ -1618,11 +1685,7 @@ async function createProjectJobPullRequest(
           pullRequestNumber: job.githubPrNumber
         });
 
-        await persistJobPullRequestState(
-          job.id,
-          pullRequest,
-          job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName)
-        );
+        await persistJobPullRequestState(job.id, project, pullRequest, job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName));
       } catch {
         // Keep existing PR metadata readable if GitHub cannot be inspected right now.
       }
@@ -1711,6 +1774,7 @@ async function createProjectJobPullRequest(
 
   await persistJobPullRequestState(
     job.id,
+    project,
     {
       number: pullRequest.number,
       htmlUrl: pullRequest.htmlUrl,
@@ -1808,11 +1872,7 @@ async function mergeProjectJobPullRequest(
     }
   }
 
-  await persistJobPullRequestState(
-    job.id,
-    pullRequest,
-    job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName)
-  );
+  await persistJobPullRequestState(job.id, project, pullRequest, job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName));
 
   const hydratedProject = await loadProjectById(project.id);
   if (!hydratedProject) {
@@ -2423,7 +2483,8 @@ export async function updateProjectAutonomy(
       ...(update.autonomyMode ? { autonomyMode: update.autonomyMode } : {}),
       ...(update.pullRequestMode ? { pullRequestMode: update.pullRequestMode } : {}),
       ...(update.pullRequestDraftMode ? { pullRequestDraftMode: update.pullRequestDraftMode } : {}),
-      ...(update.mergeApprovalMode ? { mergeApprovalMode: update.mergeApprovalMode } : {})
+      ...(update.mergeApprovalMode ? { mergeApprovalMode: update.mergeApprovalMode } : {}),
+      ...(update.branchCleanupMode ? { branchCleanupMode: update.branchCleanupMode } : {})
     }
   });
 
