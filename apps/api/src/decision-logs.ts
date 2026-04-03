@@ -167,3 +167,52 @@ export async function loadRecentOperatorGuidance(projectId: string, take = 6): P
 
   return logs.map(toOperatorGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null);
 }
+
+function toActionableGuidanceSummary(log: DbDecisionLog): OperatorGuidanceSummary | null {
+  if (log.kind !== "message") {
+    return null;
+  }
+
+  const detail = typeof log.detail === "object" && log.detail !== null ? (log.detail as Record<string, unknown>) : {};
+  const source = typeof detail.source === "string" ? detail.source.trim().toLowerCase() : "";
+  if (source !== "operator" && source !== "agent") {
+    return null;
+  }
+
+  const mentions = Array.isArray(detail.mentions)
+    ? detail.mentions.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)
+    : [];
+
+  // Broadcast chat is visible in the project thread, but only targeted messages
+  // should steer another role by default.
+  if (mentions.length === 0) {
+    return null;
+  }
+
+  const content = log.summary.trim();
+  if (!content) {
+    return null;
+  }
+
+  return {
+    id: log.id,
+    actor: log.actor,
+    content,
+    mentions,
+    replyToId: typeof detail.replyToId === "string" ? detail.replyToId.trim() || null : null,
+    createdAt: log.createdAt.toISOString()
+  };
+}
+
+export async function loadRecentActionableGuidance(projectId: string, take = 8): Promise<OperatorGuidanceSummary[]> {
+  const logs = await prisma.decisionLog.findMany({
+    where: {
+      projectId,
+      kind: "message"
+    },
+    orderBy: { createdAt: "desc" },
+    take: Math.max(take * 3, take)
+  });
+
+  return logs.map(toActionableGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null).slice(0, take);
+}

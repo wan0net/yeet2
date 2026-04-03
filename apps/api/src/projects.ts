@@ -16,6 +16,7 @@ import type {
   GlobalJobQueueItem,
   GlobalMissionQueueItem,
   GlobalTaskQueueItem,
+  ProjectChatMessageSummary,
   ProjectCostAnalysisSummary,
   ProjectApprovalQueueItem,
   OperatorGuidanceSummary,
@@ -32,7 +33,7 @@ import type {
 } from "@yeet2/domain";
 
 import { prisma } from "./db";
-import { loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
+import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
 import {
   buildGitHubCompareUrl,
   buildGitHubPullRequestBody,
@@ -244,6 +245,14 @@ export interface ProjectActiveJobRefreshResult {
   refreshedJobIds: string[];
 }
 
+export interface ProjectChatQuery {
+  take?: number;
+  actor?: string | null;
+  mention?: string | null;
+  replyToId?: string | null;
+  actionableOnly?: boolean;
+}
+
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
   visualName: string;
@@ -253,6 +262,10 @@ export interface ProjectRoleDefinitionInput {
   model: string | null;
   enabled: boolean;
   sortOrder: number;
+}
+
+export interface ProjectChatResponse {
+  messages: ProjectChatMessageSummary[];
 }
 
 export interface ProjectAutonomyUpdateInput {
@@ -1871,6 +1884,138 @@ function slugifyMention(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+function uniqueMentionList(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((value) => (typeof value === "string" ? slugifyMention(value) : "")).filter(Boolean))];
+}
+
+function mentionHandle(value: string | null | undefined): string | null {
+  const normalized = uniqueMentionList([value])[0];
+  return normalized ? `@${normalized}` : null;
+}
+
+async function recordWorkflowMessage(input: {
+  projectId: string;
+  actor: string;
+  summary: string;
+  mentions?: Array<string | null | undefined>;
+  mode?: "working" | "handoff" | "directive";
+  missionId?: string | null;
+  taskId?: string | null;
+  jobId?: string | null;
+  replyToId?: string | null;
+}): Promise<void> {
+  await recordDecisionLog({
+    projectId: input.projectId,
+    missionId: input.missionId,
+    taskId: input.taskId,
+    jobId: input.jobId,
+    kind: "message",
+    actor: input.actor,
+    summary: input.summary,
+    detail: {
+      source: "agent",
+      messageMode: input.mode ?? "working",
+      mentions: uniqueMentionList(input.mentions ?? []),
+      replyToId: input.replyToId ?? null
+    }
+  });
+}
+
+function firstEnabledRoleDefinitionForKey(project: ProjectWithRelations, roleKey: ProjectRoleKey): ProjectRoleDefinitionRecord | null {
+  return (
+    project.roleDefinitions
+      .filter((definition) => definition.roleKey === roleKey && definition.enabled)
+      .sort((left, right) => left.sortOrder - right.sortOrder)[0] ?? null
+  );
+}
+
+function nextPlanningHandoffDefinition(
+  project: ProjectWithRelations,
+  draft: PlanningDraft
+): ProjectRoleDefinitionRecord | null {
+  const architect = firstEnabledRoleDefinitionForKey(project, "architect");
+  if (architect) {
+    return architect;
+  }
+
+  const firstTask = draft.tasks[0];
+  if (!firstTask) {
+    return null;
+  }
+
+  return firstEnabledRoleDefinitionForKey(project, firstTask.agentRole as ProjectRoleKey);
+}
+
+function nextWorkflowRoleKeyForTask(task: ProjectTaskWithRelations): ProjectRoleKey | null {
+  switch (task.agentRole) {
+    case "planner":
+      return "architect";
+    case "architect":
+      return "implementer";
+    case "implementer":
+      return "qa";
+    case "qa":
+      return "reviewer";
+    case "reviewer":
+      return "planner";
+    default:
+      return null;
+  }
+}
+
+async function recordTaskOutcomeWorkflowMessage(input: {
+  project: ProjectWithRelations;
+  task: ProjectTaskWithRelations;
+  actor: string;
+  taskStatus: ProjectTaskStatus;
+  previousTaskStatus?: ProjectTaskStatus | null;
+  jobId?: string | null;
+  artifactSummary?: string | null;
+}): Promise<void> {
+  if (input.previousTaskStatus === input.taskStatus) {
+    return;
+  }
+
+  if (input.taskStatus === "blocked") {
+    const planner = firstEnabledRoleDefinitionForKey(input.project, "planner");
+    const plannerMention = mentionHandle(planner?.label ?? planner?.roleKey);
+    await recordWorkflowMessage({
+      projectId: input.project.id,
+      missionId: input.task.missionId,
+      taskId: input.task.id,
+      jobId: input.jobId ?? null,
+      actor: input.actor,
+      mode: "directive",
+      mentions: [planner?.label, planner?.roleKey],
+      summary: `${plannerMention ?? "Planner"}, this work is blocked on "${input.task.title}". Re-check the spec, decide the next move, and keep the mission aligned.`
+    });
+    return;
+  }
+
+  if (input.taskStatus !== "complete") {
+    return;
+  }
+
+  const nextRoleKey = nextWorkflowRoleKeyForTask(input.task);
+  const nextDefinition = nextRoleKey ? firstEnabledRoleDefinitionForKey(input.project, nextRoleKey) : null;
+  if (!nextDefinition) {
+    return;
+  }
+
+  const nextMention = mentionHandle(nextDefinition.label) ?? mentionHandle(nextDefinition.roleKey) ?? nextDefinition.label;
+  const summarySuffix = input.artifactSummary?.trim() ? ` ${input.artifactSummary.trim()}` : "";
+  await recordWorkflowMessage({
+    projectId: input.project.id,
+    missionId: input.task.missionId,
+    taskId: input.task.id,
+    jobId: input.jobId ?? null,
+    actor: input.actor,
+    mode: "handoff",
+    mentions: [nextDefinition.label, nextDefinition.roleKey],
+    summary: `${nextMention} your turn. "${input.task.title}" is ready for ${nextDefinition.roleKey}.${summarySuffix}`
+  });
+}
+
 function guidanceAliasesForTask(
   task: ProjectWithRelations["missions"][number]["tasks"][number],
   assignedRoleDefinition: ProjectRoleDefinitionRecord | null
@@ -1922,13 +2067,51 @@ function guidanceLogDetail(entries: OperatorGuidanceSummary[]): {
   };
 }
 
+function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectChatMessageSummary | null {
+  if (log.kind !== "message") {
+    return null;
+  }
+
+  const detail = typeof log.detail === "object" && log.detail !== null ? (log.detail as Record<string, unknown>) : {};
+  const source =
+    typeof detail.source === "string" && (detail.source === "operator" || detail.source === "agent" || detail.source === "system")
+      ? detail.source
+      : "system";
+  const messageMode =
+    typeof detail.messageMode === "string" &&
+    (detail.messageMode === "working" || detail.messageMode === "handoff" || detail.messageMode === "directive" || detail.messageMode === "comment")
+      ? detail.messageMode
+      : source === "operator"
+        ? "comment"
+        : "working";
+  const mentions = Array.isArray(detail.mentions)
+    ? detail.mentions.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)
+    : [];
+
+  return {
+    id: log.id,
+    projectId: log.projectId,
+    missionId: log.missionId ?? null,
+    taskId: log.taskId ?? null,
+    jobId: log.jobId ?? null,
+    actor: log.actor,
+    content: log.summary,
+    source,
+    messageMode,
+    mentions,
+    replyToId: typeof detail.replyToId === "string" ? detail.replyToId.trim() || null : null,
+    actionable: mentions.length > 0,
+    createdAt: log.createdAt
+  };
+}
+
 async function submitTaskToExecutor(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number]
 ): Promise<ExecutorJobRecord> {
   const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
   const assignedRoleModel = assignedRoleDefinition?.model?.trim() || recommendedRoleModel(assignedRoleDefinition?.roleKey ?? (task.agentRole as ProjectRoleKey)) || null;
-  const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentOperatorGuidance(project.id, 6)).slice(0, 4);
+  const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentActionableGuidance(project.id, 8)).slice(0, 4);
   const response = await fetch(`${executorBaseUrl()}/jobs`, {
     method: "POST",
     headers: {
@@ -2055,7 +2238,7 @@ async function persistDispatchedJob(
   const githubCompareUrl = resolveProjectGitHubCompareUrl(project, executorJob.branch_name);
   const workerId = typeof executorJob.worker_id === "string" && executorJob.worker_id.trim() ? executorJob.worker_id.trim() : null;
   const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
-  const operatorGuidance = await loadRecentOperatorGuidance(project.id, 4);
+  const operatorGuidance = await loadRecentActionableGuidance(project.id, 6);
 
   const createdJob = await prisma.job.create({
     data: {
@@ -2123,6 +2306,27 @@ async function persistDispatchedJob(
       assignedRoleDefinitionLabel: createdJobWithAssignment.assignedRoleDefinitionLabel ?? null,
       assignedRoleDefinitionModel: createdJobWithAssignment.assignedRoleDefinitionModel ?? null
     }
+  });
+
+  await recordWorkflowMessage({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId: createdJob.id,
+    actor: assignedRoleDefinition?.label ?? task.agentRole,
+    mode: "working",
+    summary: `Working on "${task.title}" in ${executorJob.branch_name}. Staying within the spec and acceptance criteria.`,
+    mentions: []
+  });
+
+  await recordTaskOutcomeWorkflowMessage({
+    project,
+    task,
+    actor: assignedRoleDefinition?.label ?? task.agentRole,
+    taskStatus,
+    previousTaskStatus: task.status,
+    jobId: createdJob.id,
+    artifactSummary: executorJob.artifact_summary ?? null
   });
 
   return toProjectJobSummary(createdJob);
@@ -2681,6 +2885,7 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
 
   const executorJob = await readExecutorJob(jobId);
   const task = match.task;
+  const previousTaskStatus = task.status;
   const attempts = task.attempts;
   const jobStatus = mapExecutorJobStatus(executorJob.status);
   const taskStatus = taskStatusFromJobStatus(jobStatus, attempts, task.agentRole);
@@ -2723,6 +2928,16 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
         })
       );
     }
+  });
+
+  await recordTaskOutcomeWorkflowMessage({
+    project,
+    task,
+    actor: match.job.assignedRoleDefinitionLabel ?? task.agentRole,
+    taskStatus,
+    previousTaskStatus,
+    jobId,
+    artifactSummary: executorJob.artifact_summary ?? null
   });
 
   const updatedProject = await loadProjectById(projectId);
@@ -3335,7 +3550,7 @@ export async function listGlobalMissions(input: { status?: ProjectMissionSummary
 }
 
 async function persistPlannedMission(project: ProjectWithRelations, draft: PlanningDraft): Promise<void> {
-  const operatorGuidance = guidanceForPlanning(project, await loadRecentOperatorGuidance(project.id, 6));
+  const operatorGuidance = guidanceForPlanning(project, await loadRecentActionableGuidance(project.id, 8));
   const missionTitle = draft.mission.title.trim() || "Initial mission";
   const missionObjective = draft.mission.objective.trim() || "Translate the constitution into an actionable project plan.";
   const createdBy = draft.mission.createdBy;
@@ -3395,6 +3610,19 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
           ...guidanceLogDetail(operatorGuidance)
         }
       });
+
+      const nextDefinition = nextPlanningHandoffDefinition(project, draft);
+      const firstTaskTitle = draft.tasks[0]?.title?.trim() || createdMission.title;
+      if (nextDefinition) {
+        await recordWorkflowMessage({
+          projectId: project.id,
+          missionId: createdMission.id,
+          actor: planningActorName(project, draft.mission.planningProvenance),
+          mode: "handoff",
+          mentions: [nextDefinition.label, nextDefinition.roleKey],
+          summary: `${mentionHandle(nextDefinition.label) ?? mentionHandle(nextDefinition.roleKey) ?? "Next up"} your turn. Review "${firstTaskTitle}" against the constitution and keep the mission moving.`
+        });
+      }
     }
 
     return;
@@ -3428,6 +3656,18 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
         ...guidanceLogDetail(operatorGuidance)
       }
     });
+    const nextDefinition = nextPlanningHandoffDefinition(project, draft);
+    const firstTaskTitle = draft.tasks[0]?.title?.trim() || existingMission.title;
+    if (nextDefinition) {
+      await recordWorkflowMessage({
+        projectId: project.id,
+        missionId: existingMission.id,
+        actor: planningActorName(project, draft.mission.planningProvenance),
+        mode: "handoff",
+        mentions: [nextDefinition.label, nextDefinition.roleKey],
+        summary: `${mentionHandle(nextDefinition.label) ?? mentionHandle(nextDefinition.roleKey) ?? "Next up"} your turn. Review "${firstTaskTitle}" against the constitution and keep the mission moving.`
+      });
+    }
     return;
   }
 
@@ -3472,6 +3712,18 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
       ...guidanceLogDetail(operatorGuidance)
     }
   });
+  const nextDefinition = nextPlanningHandoffDefinition(project, draft);
+  const firstTaskTitle = draft.tasks[0]?.title?.trim() || createdMission.title;
+  if (nextDefinition) {
+    await recordWorkflowMessage({
+      projectId: project.id,
+      missionId: createdMission.id,
+      actor: planningActorName(project, draft.mission.planningProvenance),
+      mode: "handoff",
+      mentions: [nextDefinition.label, nextDefinition.roleKey],
+      summary: `${mentionHandle(nextDefinition.label) ?? mentionHandle(nextDefinition.roleKey) ?? "Next up"} your turn. Review "${firstTaskTitle}" against the constitution and keep the mission moving.`
+    });
+  }
 }
 
 async function getProjectWithRelations(projectId: string): Promise<ProjectWithRelations | null> {
@@ -3766,6 +4018,20 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   });
 }
 
+export async function listProjectChatMessages(projectId: string, query: ProjectChatQuery = {}): Promise<ProjectChatMessageSummary[]> {
+  const logs = await listProjectDecisionLogs(projectId, {
+    kind: "message",
+    take: Math.max(1, Math.min(200, Math.trunc(query.take ?? 50))),
+    actor: query.actor ?? null,
+    mention: query.mention ?? null,
+    replyToId: query.replyToId ?? null
+  });
+  return logs
+    .map(toProjectChatMessageSummary)
+    .filter((message): message is ProjectChatMessageSummary => message !== null)
+    .filter((message) => !query.actionableOnly || message.actionable);
+}
+
 export async function updateProjectAutonomy(
   projectId: string,
   update: ProjectAutonomyUpdateInput
@@ -3835,7 +4101,7 @@ export async function planProject(projectId: string): Promise<ProjectSummary | n
   }
 
   const inspection = await inspectProjectConstitution(project);
-  const operatorGuidance = guidanceForPlanning(project, await loadRecentOperatorGuidance(project.id, 6));
+  const operatorGuidance = guidanceForPlanning(project, await loadRecentActionableGuidance(project.id, 8));
   const planningContext = await loadPlanningContext(asProjectInput(project), inspection, operatorGuidance);
   const context = await createInitialPlan(planningContext);
 

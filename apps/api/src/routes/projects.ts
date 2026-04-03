@@ -21,6 +21,7 @@ import {
   listGlobalJobs,
   listGlobalMissions,
   listGlobalTasks,
+  listProjectChatMessages,
   readProjectJobLog,
   listProjectApprovals,
   refreshProjectActiveJobs,
@@ -714,6 +715,38 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to load project activity"
+      });
+    }
+  });
+
+  app.get("/projects/:projectId/chat", async (request, reply) => {
+    const { projectId } = request.params as { projectId: string };
+    const query = request.query as {
+      take?: number;
+      actor?: string;
+      mention?: string;
+      replyToId?: string;
+      actionableOnly?: boolean | string;
+    };
+
+    try {
+      const messages = await listProjectChatMessages(projectId, {
+        take: typeof query.take === "number" && Number.isFinite(query.take) ? query.take : undefined,
+        actor: typeof query.actor === "string" ? query.actor : null,
+        mention: typeof query.mention === "string" ? query.mention : null,
+        replyToId: typeof query.replyToId === "string" ? query.replyToId : null,
+        actionableOnly:
+          typeof query.actionableOnly === "boolean"
+            ? query.actionableOnly
+            : typeof query.actionableOnly === "string"
+              ? ["1", "true", "yes", "on"].includes(query.actionableOnly.trim().toLowerCase())
+              : false
+      });
+      return reply.code(200).send({ messages });
+    } catch (error) {
+      request.log.error({ err: error }, "failed to list project chat");
+      return reply.code(500).send({
+        message: "Unable to load project chat"
       });
     }
   });

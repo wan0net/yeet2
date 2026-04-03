@@ -657,12 +657,15 @@ Shows:
 - `@role` and `@staff-member` addressing so both agents and humans can direct the next turn clearly
 - reply threading or reply references sufficient to preserve conversation context
 - durable message history in Postgres rather than ephemeral prompt state or repo files
+- targeted messages should be able to drive action selection or agent attention when addressed to a specific role or staff member
+- broadcast messages may be visible to the whole project, but they should not automatically cause every agent to respond or change behavior
 
 The intended interaction model is that team chat acts as the handoff surface between agents.
 For example, an implementer should be able to summarize work completed, tag QA or Reviewer, and leave the next actor with clear context, artifacts, and expectations.
 Operators should be able to interject into that same handoff stream without breaking the workflow trail.
 The same thread should also support "working chat" while an agent is active, so the operator can see short progress notes, discoveries, uncertainties, and requests for input before the handoff happens.
 In practice, yeet2 should support both in-progress working messages and clearer final handoff messages within one durable conversation trail.
+Only the explicitly addressed role, staff member, or reply target should treat a targeted message as actionable by default.
 
 ### Mission Detail Page
 

@@ -496,6 +496,22 @@ export interface ProjectChatMessageInput {
   replyToId?: string | null;
 }
 
+export interface ProjectChatMessageSummary {
+  id: string;
+  projectId: string;
+  missionId?: string | null;
+  taskId?: string | null;
+  jobId?: string | null;
+  actor: string;
+  content: string;
+  source: "operator" | "agent" | "system";
+  messageMode: "working" | "handoff" | "directive" | "comment";
+  mentions: string[];
+  replyToId?: string | null;
+  actionable: boolean;
+  createdAt: string;
+}
+
 export interface Job {
   id: string;
   taskId: string;

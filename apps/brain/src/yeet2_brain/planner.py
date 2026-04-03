@@ -362,11 +362,11 @@ def _operator_guidance_summary(planning_input: PlanningInput) -> str:
         return ""
 
     latest = guidance[0]
-    actor = _clean_text(latest.get("actor")) or "operator"
+    actor = _clean_text(latest.get("actor")) or "team"
     content = _clean_text(latest.get("content"))
     if not content:
         return ""
-    return f"Latest operator guidance from {actor}: {content}"
+    return f"Latest team guidance from {actor}: {content}"
 
 
 def _summarize_text(text: str) -> str:
