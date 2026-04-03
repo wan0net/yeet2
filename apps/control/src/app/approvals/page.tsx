@@ -99,9 +99,9 @@ async function fetchProjects(): Promise<ProjectRecord[]> {
 export default async function ApprovalsPage({
   searchParams
 }: {
-  searchParams?: Record<string, string | string[] | undefined> | Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
+  const resolvedSearchParams = (await searchParams) ?? {};
   const projects = await fetchProjects();
   const approvals = flattenProjectApprovals(projects);
   const openApprovals = approvals.filter((entry) => isOpenApproval(entry.blocker.status));
