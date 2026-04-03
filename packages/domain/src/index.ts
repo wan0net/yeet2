@@ -27,7 +27,7 @@ export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "fa
 export type ProjectApprovalAction = "approve" | "reject";
 export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
-export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval";
+export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message";
 
 export interface WorkerLeaseSummary {
   projectId?: string | null;
@@ -52,6 +52,12 @@ export interface ProjectDecisionLogSummary {
   summary: string;
   detail?: unknown | null;
   createdAt: string;
+}
+
+export interface ModelCostSummary {
+  promptCostPerMillionUsd?: number | null;
+  completionCostPerMillionUsd?: number | null;
+  requestCostUsd?: number | null;
 }
 
 export interface ConstitutionFileState {
@@ -148,6 +154,8 @@ export interface TaskSummary {
   title: string;
   description: string;
   agentRole: AgentRole;
+  assignedRoleDefinitionId?: string | null;
+  assignedRoleDefinitionLabel?: string | null;
   status: TaskStatus;
   priority: number;
   acceptanceCriteria: string[];
@@ -271,6 +279,8 @@ export interface PlanningTaskDraft {
   title: string;
   description: string;
   agentRole: AgentRole;
+  assignedRoleDefinitionId?: string | null;
+  assignedRoleDefinitionLabel?: string | null;
   priority: number;
   acceptanceCriteria: string[];
 }
@@ -292,6 +302,7 @@ export interface ProjectRoleDefinition {
   id: string;
   projectId: string;
   roleKey: ProjectRoleKey;
+  visualName: string;
   label: string;
   goal: string;
   backstory: string;
@@ -331,11 +342,18 @@ export interface Task {
   title: string;
   description: string;
   agentRole: AgentRole;
+  assignedRoleDefinitionId?: string | null;
+  assignedRoleDefinitionLabel?: string | null;
   status: TaskStatus;
   priority: number;
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason?: string | null;
+}
+
+export interface ProjectChatMessageInput {
+  content: string;
+  replyToId?: string | null;
 }
 
 export interface Job {

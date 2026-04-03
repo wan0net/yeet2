@@ -7,6 +7,9 @@ export interface OpenRouterModelCatalogItem {
   modality: string | null;
   inputModalities: string[];
   outputModalities: string[];
+  promptCostPerMillionUsd: number | null;
+  completionCostPerMillionUsd: number | null;
+  requestCostUsd: number | null;
 }
 
 export class OpenRouterModelCatalogError extends Error {
@@ -29,6 +32,11 @@ interface OpenRouterModelRecord {
   name?: unknown;
   description?: unknown;
   context_length?: unknown;
+  pricing?: {
+    prompt?: unknown;
+    completion?: unknown;
+    request?: unknown;
+  };
   architecture?: {
     modality?: unknown;
     input_modalities?: unknown;
@@ -84,6 +92,30 @@ function toContextLength(record: OpenRouterModelRecord): number | null {
   return typeof record.context_length === "number" && Number.isFinite(record.context_length) ? Math.trunc(record.context_length) : null;
 }
 
+function toPositiveNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function toUsdPerMillionTokens(value: unknown): number | null {
+  const perToken = toPositiveNumber(value);
+  if (perToken === null) {
+    return null;
+  }
+
+  return perToken * 1_000_000;
+}
+
 function toModelItem(record: OpenRouterModelRecord): OpenRouterModelCatalogItem {
   const id = cleanText(record.id);
   const name = cleanText(record.name);
@@ -103,7 +135,10 @@ function toModelItem(record: OpenRouterModelRecord): OpenRouterModelCatalogItem 
     provider: id.includes("/") ? id.split("/", 1)[0]?.trim() || null : null,
     modality: modality || null,
     inputModalities,
-    outputModalities
+    outputModalities,
+    promptCostPerMillionUsd: toUsdPerMillionTokens(record.pricing?.prompt),
+    completionCostPerMillionUsd: toUsdPerMillionTokens(record.pricing?.completion),
+    requestCostUsd: toPositiveNumber(record.pricing?.request)
   };
 }
 

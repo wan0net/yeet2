@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 
-import type { ProjectRoleDefinition } from "../../../lib/projects";
+import type { ProjectModelCatalogOption, ProjectRoleDefinition } from "../../../lib/projects";
 
 interface ProjectRolesEditorProps {
   projectId: string;
@@ -14,7 +14,7 @@ interface ProjectRolesEditorProps {
 }
 
 interface RoleModelCatalogResponse {
-  models?: Array<string | { id?: unknown; name?: unknown; label?: unknown; value?: unknown }>;
+  models?: Array<ProjectModelCatalogOption | string | { id?: unknown; name?: unknown; label?: unknown; value?: unknown }>;
   error?: string;
   detail?: unknown;
   message?: string;
@@ -26,6 +26,7 @@ function createRoleDraft(roleKey: string, count: number): ProjectRoleDefinition 
     id: `draft-${roleKey}-${count}-${Date.now()}`,
     roleKey,
     sortOrder: count,
+    visualName: count > 1 ? `${baseLabel} ${count}` : baseLabel,
     label: count > 1 ? `${baseLabel} ${count}` : baseLabel,
     enabled: true,
     model: null,
@@ -35,14 +36,15 @@ function createRoleDraft(roleKey: string, count: number): ProjectRoleDefinition 
 }
 
 function cloneRoles(roleDefinitions: ProjectRoleDefinition[]): ProjectRoleDefinition[] {
-  return roleDefinitions.map((role) => ({ ...role }));
+  return roleDefinitions.map((role) => ({ ...role, visualName: role.visualName ?? role.label, label: role.visualName ?? role.label }));
 }
 
-function serializeRoles(roleDefinitions: ProjectRoleDefinition[]): Array<Pick<ProjectRoleDefinition, "roleKey" | "sortOrder" | "label" | "enabled" | "model" | "goal" | "backstory">> {
+function serializeRoles(roleDefinitions: ProjectRoleDefinition[]): Array<Pick<ProjectRoleDefinition, "roleKey" | "sortOrder" | "visualName" | "label" | "enabled" | "model" | "goal" | "backstory">> {
   return roleDefinitions.map((role, index) => ({
     roleKey: role.roleKey || role.id,
     sortOrder: role.sortOrder ?? index,
-    label: role.label,
+    visualName: role.visualName,
+    label: role.visualName,
     enabled: role.enabled,
     model: role.model?.trim() || null,
     goal: role.goal,
@@ -85,10 +87,44 @@ function normalizeModelOption(value: unknown): string | null {
   return null;
 }
 
+function formatUsd(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (value === 0) {
+    return "$0";
+  }
+
+  if (value >= 1) {
+    return `$${value.toFixed(2)}`;
+  }
+
+  if (value >= 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+
+  return `$${value.toPrecision(2)}`;
+}
+
+function modelCostCopy(model: ProjectModelCatalogOption | null): string | null {
+  if (!model) {
+    return null;
+  }
+
+  const parts = [
+    model.promptCostPerMillionUsd !== null ? `in ${formatUsd(model.promptCostPerMillionUsd)}/1M` : null,
+    model.completionCostPerMillionUsd !== null ? `out ${formatUsd(model.completionCostPerMillionUsd)}/1M` : null,
+    model.requestCostUsd !== null ? `req ${formatUsd(model.requestCostUsd)}` : null
+  ].filter((entry): entry is string => entry !== null);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: ProjectRolesEditorProps) {
   const router = useRouter();
   const [draftRoles, setDraftRoles] = useState<ProjectRoleDefinition[]>(() => cloneRoles(roleDefinitions));
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<ProjectModelCatalogOption[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -117,7 +153,41 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
           throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to load available models"));
         }
 
-        setAvailableModels(Array.isArray(payload?.models) ? [...new Set(payload.models.map(normalizeModelOption).filter((entry): entry is string => entry !== null))] : []);
+        setAvailableModels(
+          Array.isArray(payload?.models)
+            ? payload.models
+                .map((entry) => {
+                  if (typeof entry === "string") {
+                    return {
+                      value: entry,
+                      label: entry,
+                      description: null,
+                      provider: null,
+                      promptCostPerMillionUsd: null,
+                      completionCostPerMillionUsd: null,
+                      requestCostUsd: null
+                    } satisfies ProjectModelCatalogOption;
+                  }
+
+                  const value = normalizeModelOption(entry);
+                  if (!value) {
+                    return null;
+                  }
+
+                  const raw = entry as ProjectModelCatalogOption;
+                  return {
+                    value,
+                    label: typeof raw.label === "string" && raw.label.trim() ? raw.label.trim() : value,
+                    description: typeof raw.description === "string" && raw.description.trim() ? raw.description.trim() : null,
+                    provider: typeof raw.provider === "string" && raw.provider.trim() ? raw.provider.trim() : null,
+                    promptCostPerMillionUsd: typeof raw.promptCostPerMillionUsd === "number" ? raw.promptCostPerMillionUsd : null,
+                    completionCostPerMillionUsd: typeof raw.completionCostPerMillionUsd === "number" ? raw.completionCostPerMillionUsd : null,
+                    requestCostUsd: typeof raw.requestCostUsd === "number" ? raw.requestCostUsd : null
+                  } satisfies ProjectModelCatalogOption;
+                })
+                .filter((entry): entry is ProjectModelCatalogOption => entry !== null)
+            : []
+        );
       } catch (catalogError) {
         if (controller.signal.aborted) {
           return;
@@ -157,6 +227,7 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
         ...source,
         id: `draft-${source.roleKey}-${sameRoleCount}-${Date.now()}`,
         label: `${source.label} ${sameRoleCount}`.trim(),
+        visualName: `${source.visualName} ${sameRoleCount}`.trim(),
         sortOrder: current.length
       };
 
@@ -278,11 +349,11 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
 
               <div className="mt-3 space-y-3">
                 <label className="block space-y-1">
-                  <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Label</span>
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Visual name</span>
                   <input
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
-                    onChange={(event) => updateRole(index, { label: event.currentTarget.value })}
-                    value={role.label}
+                    onChange={(event) => updateRole(index, { visualName: event.currentTarget.value, label: event.currentTarget.value })}
+                    value={role.visualName}
                   />
                 </label>
 
@@ -297,7 +368,7 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
                   />
                   <datalist id={`project-role-models-${projectId}`}>
                     {availableModels.map((model) => (
-                      <option key={model} value={model} />
+                      <option key={model.value} value={model.value} />
                     ))}
                   </datalist>
                   <div className="text-xs text-slate-500">
@@ -305,6 +376,20 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
                     {modelsLoading ? " Loading available models..." : null}
                     {modelsError ? ` Catalog unavailable: ${modelsError}` : null}
                   </div>
+                  {(() => {
+                    const selectedModel = availableModels.find((entry) => entry.value === (role.model ?? ""));
+                    const costCopy = modelCostCopy(selectedModel ?? null);
+                    if (!selectedModel && !costCopy) {
+                      return null;
+                    }
+
+                    return (
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        <div className="font-medium text-slate-800">{selectedModel?.label ?? role.model}</div>
+                        {costCopy ? <div className="mt-1">{costCopy}</div> : null}
+                      </div>
+                    );
+                  })()}
                 </label>
 
                 <label className="block space-y-1">

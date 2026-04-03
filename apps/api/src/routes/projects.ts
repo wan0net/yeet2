@@ -30,6 +30,7 @@ import {
   ProjectAutonomyError,
   ProjectRoleDefinitionError,
   ProjectPullRequestError,
+  createProjectMessage,
   replaceProjectRoleDefinitions,
   updateProjectAutonomy,
   type ProjectRegistrationInput
@@ -86,7 +87,7 @@ function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrati
   };
 }
 
-function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKey: ProjectRoleKey; label: string; goal: string; backstory: string; model: string | null; enabled: boolean; sortOrder: number }> | null; error: string | null } {
+function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKey: ProjectRoleKey; visualName: string; label: string; goal: string; backstory: string; model: string | null; enabled: boolean; sortOrder: number }> | null; error: string | null } {
   if (typeof body !== "object" || body === null) {
     return {
       input: null,
@@ -111,7 +112,14 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
 
       const raw = definition as Record<string, unknown>;
       const roleKey = typeof raw.roleKey === "string" ? (raw.roleKey.trim() as ProjectRoleKey) : "";
-      const label = typeof raw.label === "string" ? raw.label.trim() : "";
+      const visualName =
+        typeof raw.visualName === "string"
+          ? raw.visualName.trim()
+          : typeof raw.visual_name === "string"
+            ? raw.visual_name.trim()
+            : typeof raw.label === "string"
+              ? raw.label.trim()
+              : "";
       const goal = typeof raw.goal === "string" ? raw.goal.trim() : "";
       const backstory = typeof raw.backstory === "string" ? raw.backstory.trim() : "";
       const model = typeof raw.model === "string" ? raw.model.trim() : null;
@@ -129,13 +137,14 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
         return null;
       }
 
-      if (!label || !goal || !backstory) {
+      if (!visualName || !goal || !backstory) {
         return null;
       }
 
       return {
         roleKey,
-        label,
+        visualName,
+        label: visualName,
         goal,
         backstory,
         model: model ? model : null,
@@ -154,6 +163,44 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
 
   return {
     input: parsedDefinitions,
+    error: null
+  };
+}
+
+function parseProjectMessageBody(body: unknown): { input: { content: string; replyToId: string | null } | null; error: string | null } {
+  if (typeof body !== "object" || body === null) {
+    return {
+      input: null,
+      error: "Request body must be an object"
+    };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const content =
+    typeof candidate.content === "string"
+      ? candidate.content.trim()
+      : typeof candidate.message === "string"
+        ? candidate.message.trim()
+        : "";
+  const replyToId =
+    typeof candidate.replyToId === "string"
+      ? candidate.replyToId.trim()
+      : typeof candidate.reply_to_id === "string"
+        ? candidate.reply_to_id.trim()
+        : "";
+
+  if (!content) {
+    return {
+      input: null,
+      error: "content is required"
+    };
+  }
+
+  return {
+    input: {
+      content,
+      replyToId: replyToId || null
+    },
     error: null
   };
 }
@@ -677,6 +724,42 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to update project role definitions"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/messages", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const parsedBody = parseProjectMessageBody(request.body);
+    if (!parsedBody.input) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: parsedBody.error ?? "Invalid message body"
+      });
+    }
+
+    try {
+      const message = await createProjectMessage(projectId, parsedBody.input);
+      return reply.code(201).send({ message });
+    } catch (error) {
+      if (error instanceof ProjectRegistrationError || error instanceof ProjectRoleDefinitionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to create project message"
       });
     }
   });

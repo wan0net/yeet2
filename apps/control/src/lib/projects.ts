@@ -25,6 +25,8 @@ export interface ProjectTaskRecord {
   title: string;
   description: string;
   agentRole: string;
+  assignedRoleDefinitionId: string | null;
+  assignedRoleDefinitionLabel: string | null;
   status: string;
   priority: number;
   acceptanceCriteria: string[];
@@ -85,12 +87,16 @@ export interface ProjectModelCatalogOption {
   label: string;
   description: string | null;
   provider: string | null;
+  promptCostPerMillionUsd: number | null;
+  completionCostPerMillionUsd: number | null;
+  requestCostUsd: number | null;
 }
 
 export interface ProjectRoleDefinition {
   id: string;
   roleKey: string;
   sortOrder: number;
+  visualName: string;
   label: string;
   enabled: boolean;
   model: string | null;
@@ -117,6 +123,7 @@ export interface ProjectDecisionLogRecord {
   title: string;
   summary: string | null;
   actor: string | null;
+  detail: Record<string, unknown> | null;
   createdAt: string | null;
   projectId: string | null;
   missionId: string | null;
@@ -482,6 +489,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "planner",
       roleKey: "planner",
       sortOrder: 0,
+      visualName: "Planner",
       label: "Planner",
       enabled: enabled.has("planner"),
       model: null,
@@ -492,6 +500,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "architect",
       roleKey: "architect",
       sortOrder: 1,
+      visualName: "Architect",
       label: "Architect",
       enabled: enabled.has("architect"),
       model: null,
@@ -502,6 +511,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "implementer",
       roleKey: "implementer",
       sortOrder: 2,
+      visualName: "Implementer",
       label: "Implementer",
       enabled: enabled.has("implementer") || dispatchableRoles.length === 0,
       model: null,
@@ -512,6 +522,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "qa",
       roleKey: "qa",
       sortOrder: 3,
+      visualName: "QA",
       label: "QA",
       enabled: enabled.has("qa") || dispatchableRoles.length === 0,
       model: null,
@@ -522,6 +533,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "reviewer",
       roleKey: "reviewer",
       sortOrder: 4,
+      visualName: "Reviewer",
       label: "Reviewer",
       enabled: enabled.has("reviewer") || dispatchableRoles.length === 0,
       model: null,
@@ -532,6 +544,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       id: "visual",
       roleKey: "visual",
       sortOrder: 5,
+      visualName: "Visual",
       label: "Visual",
       enabled: enabled.has("visual"),
       model: null,
@@ -543,17 +556,18 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
 
 function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): ProjectRoleDefinition | null {
   if (typeof value === "string") {
-    const label = value.trim();
-    if (!label) {
+    const visualName = value.trim();
+    if (!visualName) {
       return null;
     }
 
-    const id = normalizeRoleId(label);
+    const id = normalizeRoleId(visualName);
     return {
       id,
       roleKey: id,
       sortOrder: fallbackIndex,
-      label: formatRoleLabel(label),
+      visualName: formatRoleLabel(visualName),
+      label: formatRoleLabel(visualName),
       enabled: false,
       model: null,
       goal: "",
@@ -562,21 +576,22 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
   }
 
   const raw = asRecord(value);
-  const label = stringValue(raw.label, raw.name, raw.title, raw.role, raw.id, raw.key);
+  const visualName = stringValue(raw.visualName, raw.visual_name, raw.label, raw.name, raw.title, raw.role, raw.id, raw.key);
   const goal = stringValue(raw.goal, raw.objective, raw.summary);
   const backstory = stringValue(raw.backstory, raw.description, raw.story);
 
-  if (!label && !goal && !backstory) {
+  if (!visualName && !goal && !backstory) {
     return null;
   }
 
-  const id = normalizeRoleId(stringValue(raw.id, raw.key, raw.role, raw.slug) || label || "role");
+  const id = normalizeRoleId(stringValue(raw.id, raw.key, raw.role, raw.slug) || visualName || "role");
 
   return {
     id,
     roleKey: normalizeRoleId(stringValue(raw.roleKey, raw.role_key, raw.id, raw.key, raw.slug, raw.role) || id),
     sortOrder: numberValue(raw.sortOrder, raw.sort_order, raw.order) ?? fallbackIndex,
-    label: label || formatRoleLabel(id),
+    visualName: visualName || formatRoleLabel(id),
+    label: visualName || formatRoleLabel(id),
     enabled: booleanValue(raw.enabled, raw.isEnabled, raw.active, raw.is_active),
     model: stringValue(raw.model, raw.modelName, raw.model_name) || null,
     goal,
@@ -674,6 +689,9 @@ export function decisionLogLabel(value: string): string {
     case "blocker":
     case "blocked":
       return "Blocker";
+    case "message":
+    case "chat":
+      return "Chat";
     default:
       return value || "Event";
   }
@@ -706,6 +724,9 @@ export function decisionLogTone(value: string): string {
     case "blocker":
     case "blocked":
       return "border-orange-200 bg-orange-50 text-orange-800";
+    case "message":
+    case "chat":
+      return "border-violet-200 bg-violet-50 text-violet-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";
   }
@@ -986,6 +1007,8 @@ function normalizeTaskRecord(value: unknown): ProjectTaskRecord | null {
     title: title || agentRole || "Task",
     description,
     agentRole: agentRole || "implementer",
+    assignedRoleDefinitionId: stringValue(raw.assignedRoleDefinitionId, raw.assigned_role_definition_id) || null,
+    assignedRoleDefinitionLabel: stringValue(raw.assignedRoleDefinitionLabel, raw.assigned_role_definition_label) || null,
     status: stringValue(raw.status) || "ready",
     priority: numberValue(raw.priority) ?? 0,
     acceptanceCriteria: stringArrayValue(raw.acceptanceCriteria ?? raw.acceptance_criteria),
@@ -1136,6 +1159,7 @@ function normalizeDecisionLogRecord(value: unknown): ProjectDecisionLogRecord | 
     title: title || decisionLogLabel(eventType || "unknown"),
     summary,
     actor,
+    detail: Object.keys(asRecord(raw.detail)).length > 0 ? asRecord(raw.detail) : null,
     createdAt,
     projectId: stringValue(raw.projectId, raw.project_id, metadata.projectId, metadata.project_id) || null,
     missionId: stringValue(raw.missionId, raw.mission_id, metadata.missionId, metadata.mission_id) || null,
@@ -1548,7 +1572,10 @@ function normalizeModelCatalogItem(value: unknown): ProjectModelCatalogOption | 
       value: trimmed,
       label: trimmed,
       description: null,
-      provider: null
+      provider: null,
+      promptCostPerMillionUsd: null,
+      completionCostPerMillionUsd: null,
+      requestCostUsd: null
     };
   }
 
@@ -1561,12 +1588,18 @@ function normalizeModelCatalogItem(value: unknown): ProjectModelCatalogOption | 
   const label = stringOrNull(raw.label) ?? stringOrNull(raw.name) ?? valueId;
   const description = stringOrNull(raw.description);
   const provider = stringOrNull(raw.provider);
+  const promptCostPerMillionUsd = numberValue(raw.promptCostPerMillionUsd, raw.prompt_cost_per_million_usd);
+  const completionCostPerMillionUsd = numberValue(raw.completionCostPerMillionUsd, raw.completion_cost_per_million_usd);
+  const requestCostUsd = numberValue(raw.requestCostUsd, raw.request_cost_usd);
 
   return {
     value: valueId,
     label,
     description,
-    provider
+    provider,
+    promptCostPerMillionUsd: promptCostPerMillionUsd ?? null,
+    completionCostPerMillionUsd: completionCostPerMillionUsd ?? null,
+    requestCostUsd: requestCostUsd ?? null
   };
 }
 
@@ -1599,6 +1632,36 @@ export function normalizeProjectModelCatalog(payload: unknown): ProjectModelCata
 
     return left.value.localeCompare(right.value, undefined, { sensitivity: "base" });
   });
+}
+
+export function formatUsdAmount(value: number | null | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (value === 0) {
+    return "$0";
+  }
+
+  if (value >= 1) {
+    return `$${value.toFixed(2)}`;
+  }
+
+  if (value >= 0.01) {
+    return `$${value.toFixed(4)}`;
+  }
+
+  return `$${value.toPrecision(2)}`;
+}
+
+export function projectModelCostSummary(model: Pick<ProjectModelCatalogOption, "promptCostPerMillionUsd" | "completionCostPerMillionUsd" | "requestCostUsd">): string | null {
+  const parts = [
+    model.promptCostPerMillionUsd !== null ? `in ${formatUsdAmount(model.promptCostPerMillionUsd)}/1M` : null,
+    model.completionCostPerMillionUsd !== null ? `out ${formatUsdAmount(model.completionCostPerMillionUsd)}/1M` : null,
+    model.requestCostUsd !== null ? `req ${formatUsdAmount(model.requestCostUsd)}` : null
+  ].filter((entry): entry is string => entry !== null);
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export function missingRegistrationFields(input: ProjectRegistrationInput | null): string[] {

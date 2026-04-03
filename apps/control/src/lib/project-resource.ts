@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
-import type { ProjectMissionRecord, ProjectRecord } from "./projects";
+import type { ProjectMissionRecord, ProjectModelCatalogOption, ProjectRecord } from "./projects";
+import { normalizeProjectModelCatalog } from "./projects";
 
 export async function controlBaseUrl(): Promise<string> {
   const headerStore = await headers();
@@ -39,6 +40,20 @@ export async function fetchProject(projectId: string): Promise<ProjectRecord | n
 
   const payload = (await response.json()) as { project?: ProjectRecord };
   return payload.project ?? null;
+}
+
+export async function fetchProjectRoleModels(projectId: string): Promise<ProjectModelCatalogOption[]> {
+  const baseUrl = await controlBaseUrl();
+  const response = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}/role-models`, {
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json().catch(() => null)) as unknown;
+  return normalizeProjectModelCatalog(payload);
 }
 
 export async function fetchMissionDetail(

@@ -20,6 +20,8 @@ export interface PlanningMissionHistoryTask {
   title: string;
   description: string;
   agentRole: "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+  assignedRoleDefinitionId: string | null;
+  assignedRoleDefinitionLabel: string | null;
   status: "queued" | "pending" | "ready" | "running" | "in_progress" | "blocked" | "done" | "complete" | "failed";
   priority: number;
   acceptanceCriteria: string[];
@@ -54,6 +56,8 @@ export interface PlanningTaskDraft {
   title: string;
   description: string;
   agentRole: "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+  assignedRoleDefinitionId?: string | null;
+  assignedRoleDefinitionLabel?: string | null;
   status: "ready";
   priority: number;
   acceptanceCriteria: string[];
@@ -110,12 +114,14 @@ interface BrainPlanningRequest {
     task_count: number;
     completed_task_count: number;
     blocked_task_count: number;
-    tasks: Array<{
-      id: string;
-      title: string;
-      description: string;
-      agent_role: string;
-      status: string;
+      tasks: Array<{
+        id: string;
+        title: string;
+        description: string;
+        agent_role: string;
+        assigned_role_definition_id: string | null;
+        assigned_role_definition_label: string | null;
+        status: string;
       priority: number;
       acceptance_criteria: string[];
       attempts: number;
@@ -267,6 +273,8 @@ function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainR
       title: task.title,
       description: task.description,
       agent_role: task.agentRole,
+      assigned_role_definition_id: task.assignedRoleDefinitionId,
+      assigned_role_definition_label: task.assignedRoleDefinitionLabel,
       status: task.status,
       priority: task.priority,
       acceptance_criteria: task.acceptanceCriteria,
@@ -463,6 +471,8 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
     title,
     description,
     agentRole,
+    assignedRoleDefinitionId: cleanText(typeof raw.assignedRoleDefinitionId === "string" ? raw.assignedRoleDefinitionId : typeof raw.assigned_role_definition_id === "string" ? raw.assigned_role_definition_id : undefined) || null,
+    assignedRoleDefinitionLabel: cleanText(typeof raw.assignedRoleDefinitionLabel === "string" ? raw.assignedRoleDefinitionLabel : typeof raw.assigned_role_definition_label === "string" ? raw.assigned_role_definition_label : undefined) || null,
     status: raw.status === "ready" ? "ready" : "ready",
     priority: typeof raw.priority === "number" && Number.isFinite(raw.priority) ? raw.priority : fallbackPriority,
     acceptanceCriteria,

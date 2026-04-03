@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { normalizeProjectModelCatalog } from "../../../../../lib/projects";
-
 export const dynamic = "force-dynamic";
 
 function apiBaseUrl(): string {
@@ -26,7 +24,7 @@ function upstreamUrl(path: string): string {
   return `${apiBaseUrl()}${path}`;
 }
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
   const projectId = resolvedParams.id?.trim();
 
@@ -40,12 +38,28 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     );
   }
 
+  let body: unknown;
   try {
-    const response = await fetch(upstreamUrl("/projects/models"), {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      {
+        error: "invalid_json",
+        message: "request body must be valid JSON"
+      },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const response = await fetch(upstreamUrl(`/projects/${projectId}/messages`), {
+      method: "POST",
       cache: "no-store",
       headers: {
+        "Content-Type": "application/json",
         Accept: "application/json"
-      }
+      },
+      body: JSON.stringify(body)
     });
     const payload = await readJsonResponse(response);
 
@@ -60,12 +74,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       );
     }
 
-    return NextResponse.json(
-      {
-        models: normalizeProjectModelCatalog(payload)
-      },
-      { status: 200 }
-    );
+    return NextResponse.json((payload as Record<string, unknown>) ?? {}, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       {

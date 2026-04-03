@@ -216,6 +216,8 @@ model Task {
   title              String
   description        String
   agentRole          String     @map("agent_role")
+  assignedRoleDefinitionId String? @map("assigned_role_definition_id")
+  assignedRoleDefinitionLabel String? @map("assigned_role_definition_label")
   status             TaskStatus @default(pending)
   priority           Int        @default(0)
   acceptanceCriteria Json       @map("acceptance_criteria")

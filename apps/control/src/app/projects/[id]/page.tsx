@@ -25,6 +25,7 @@ import { fetchProject } from "../../../lib/project-resource";
 import {
   branchCleanupLifecycleLabel,
   branchCleanupLifecycleTone,
+  formatUsdAmount,
   emptyConstitutionFiles,
   formatConstitutionFiles,
   githubBranchUrl,
@@ -37,11 +38,13 @@ import {
   decisionLogTone,
   planningProvenanceLabel,
   planningProvenanceTone,
+  projectModelCostSummary,
   projectGitHubRepoInfo
 } from "../../../lib/projects";
-import { controlBaseUrl } from "../../../lib/project-resource";
+import { controlBaseUrl, fetchProjectRoleModels } from "../../../lib/project-resource";
 import { ProjectAutonomyPanel } from "./project-autonomy-panel";
 import { ProjectRolesEditor } from "./project-roles-editor";
+import { ProjectTeamChat } from "./project-team-chat";
 
 type LoadedProject = NonNullable<Awaited<ReturnType<typeof fetchProject>>>;
 
@@ -94,6 +97,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   }
 
   const files = project.constitution.files ?? emptyConstitutionFiles();
+  const modelCatalog = await fetchProjectRoleModels(project.id);
   const blockers = sortBlockers(project.blockers);
   const jobs = recentJobs(project).slice(0, 8);
   const taskGroups = groupTasksByState(project);
@@ -104,6 +108,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const openBlockers = blockers.filter((blocker) => blocker.status.toLowerCase() === "open").length;
   const presentRequiredFiles = project.constitution.presentRequiredFiles ?? [];
   const missingRequiredFiles = project.constitution.missingRequiredFiles ?? [];
+  const enabledRoleCostRows = project.roleDefinitions
+    .filter((role) => role.enabled)
+    .map((role) => ({
+      role,
+      model: role.model ? modelCatalog.find((entry) => entry.value === role.model) ?? null : null
+    }));
 
   return (
     <main className="mt-8 space-y-6">
@@ -220,6 +230,55 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
       <ProjectAutonomyPanel projectId={project.id} projectName={project.name} autonomy={project.autonomy} />
 
+      <SectionCard title="Cost analysis">
+        {enabledRoleCostRows.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+            No enabled staff members are configured yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Enabled staff</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{enabledRoleCostRows.length}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Distinct models</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{new Set(enabledRoleCostRows.map((entry) => entry.role.model).filter(Boolean)).size}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Estimated input rate</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">
+                  {formatUsdAmount(
+                    enabledRoleCostRows.reduce((sum, entry) => sum + (entry.model?.promptCostPerMillionUsd ?? 0), 0)
+                  ) ?? "Unknown"}{" "}
+                  / 1M tokens
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-2">
+              {enabledRoleCostRows.map(({ role, model }) => (
+                <article key={role.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{role.visualName}</div>
+                      <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-500">{role.roleKey}</div>
+                    </div>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                      {role.model ?? "Brain default"}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-sm text-slate-600">
+                    {model ? projectModelCostSummary(model) ?? "OpenRouter catalog has no published pricing for this model yet." : "No catalog pricing found for the configured model yet."}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
       <SectionCard title="Active mission">
         {currentMission ? (
           <div className="space-y-4">
@@ -260,88 +319,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         )}
       </SectionCard>
 
-      <SectionCard title="Recent decisions">
-        {project.decisionLogs.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
-            No decision log entries are recorded for this project yet.
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Recent entries</div>
-                <div className="mt-1 text-2xl font-semibold text-slate-900">{project.decisionLogs.length}</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Latest event</div>
-                <div className="mt-1 text-sm font-medium text-slate-900">{decisionLogLabel(project.decisionLogs[0]?.eventType ?? "unknown")}</div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Most recent time</div>
-                <div className="mt-1 text-sm font-medium text-slate-900">{formatTimestamp(project.decisionLogs[0]?.createdAt) ?? "Unknown"}</div>
-              </div>
-            </div>
-            {project.decisionLogs.slice(0, 6).map((entry) => (
-              <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-base font-semibold text-slate-900">{entry.title}</h2>
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${decisionLogTone(entry.eventType)}`}>
-                        {decisionLogLabel(entry.eventType)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                      {entry.createdAt ? <span>Recorded {formatTimestamp(entry.createdAt)}</span> : null}
-                      {entry.actor ? <span>Actor: <span className="font-medium text-slate-700">{entry.actor}</span></span> : null}
-                      {entry.projectId ? <span>Project ref: <span className="font-medium text-slate-700">{entry.projectId}</span></span> : null}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
-                    <div className="font-medium text-slate-800">Decision ID</div>
-                    <div className="mt-1 break-all font-mono">{entry.id}</div>
-                  </div>
-                </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Summary</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-700">{entry.summary ?? "No summary captured."}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
-                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Links</div>
-                    <div className="mt-2 space-y-2 text-sm text-slate-700">
-                      {entry.missionId ? (
-                        <div>
-                          <span className="font-medium text-slate-800">Mission:</span> {entry.missionId}
-                        </div>
-                      ) : null}
-                      {entry.taskId ? (
-                        <div>
-                          <span className="font-medium text-slate-800">Task:</span> {entry.taskId}
-                        </div>
-                      ) : null}
-                      {entry.jobId ? (
-                        <div>
-                          <span className="font-medium text-slate-800">Job:</span> {entry.jobId}
-                        </div>
-                      ) : null}
-                      {entry.blockerId ? (
-                        <div>
-                          <span className="font-medium text-slate-800">Blocker:</span> {entry.blockerId}
-                        </div>
-                      ) : null}
-                      {entry.referenceUrl ? (
-                        <a className="inline-flex font-medium text-slate-700 underline-offset-4 hover:underline" href={entry.referenceUrl} rel="noreferrer" target="_blank">
-                          Open reference
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
+      <SectionCard title="Team chat">
+        <ProjectTeamChat entries={project.decisionLogs} projectId={project.id} />
       </SectionCard>
 
       <SectionCard title="Agent board">
@@ -399,14 +378,18 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Now handling</div>
                       <div className="mt-2 text-sm font-medium text-slate-900">{currentTask?.title || "No active handoff"}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {currentTask ? `${stageLabel(currentTask.agentRole)} · ${currentTask.status}` : "Waiting for this lane to light up"}
+                        {currentTask
+                          ? `${currentTask.assignedRoleDefinitionLabel || stageLabel(currentTask.agentRole)} · ${currentTask.status}`
+                          : "Waiting for this lane to light up"}
                       </div>
                     </div>
                     <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-3 py-3">
                       <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Up next</div>
                       <div className="mt-2 text-sm font-medium text-slate-800">{nextTask?.title || "Queue is clear"}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        {nextTask ? `${nextTask.status} · priority ${nextTask.priority}` : "Nothing dispatchable for this role right now"}
+                        {nextTask
+                          ? `${nextTask.assignedRoleDefinitionLabel || stageLabel(nextTask.agentRole)} · ${nextTask.status} · priority ${nextTask.priority}`
+                          : "Nothing dispatchable for this role right now"}
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs">
@@ -534,6 +517,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                                 </Link>
                               </span>
                               <span>Role: <span className="font-medium text-slate-700">{stageLabel(task.agentRole)}</span></span>
+                              {task.assignedRoleDefinitionLabel ? <span>Staff: <span className="font-medium text-slate-700">{task.assignedRoleDefinitionLabel}</span></span> : null}
                               <span>Priority {task.priority}</span>
                             </div>
                           </div>

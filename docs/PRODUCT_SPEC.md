@@ -617,18 +617,32 @@ Shows:
 - tasks by state
 - recent jobs
 - blockers
+- cost analysis for configured staff/models and the current project operating mix
+- team chat/activity thread combining agent workflow chatter and operator interjections
 
 ### Agent View
 
 Shows:
 
 - specialist agent role
+- stable staff key and a separate visual display name
 - current or last-known task
 - agent status such as running, idle, blocked, or completed
 - recent output or activity summary
 - project-level grouping so the operator can quickly see the crew at work
+- support for multiple staff members within the same functional role
+- model selection and associated cost visibility for each configured staff member
 
 This view should feel fun and alive, but still fit the internal tool tone of yeet2.
+
+### Team Chat View
+
+Shows:
+
+- workflow messages from planner, architect, implementer, QA, reviewer, visual, and system actors
+- operator messages in the same thread
+- `@reply` and mention support so humans can steer active work in context
+- reply threading or reply references sufficient to preserve conversation context
 
 ### Mission Detail Page
 

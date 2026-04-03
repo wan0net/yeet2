@@ -80,6 +80,7 @@ export interface ProjectRoleDefinitionSummary {
   id: string;
   projectId: string;
   roleKey: ProjectRoleKey;
+  visualName: string;
   label: string;
   goal: string;
   backstory: string;
@@ -96,6 +97,8 @@ export interface ProjectTaskSummary {
   title: string;
   description: string;
   agentRole: string;
+  assignedRoleDefinitionId: string | null;
+  assignedRoleDefinitionLabel: string | null;
   status: ProjectTaskStatus;
   priority: number;
   acceptanceCriteria: string[];
@@ -192,6 +195,7 @@ export interface ProjectApprovalResult {
 
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
+  visualName: string;
   label: string;
   goal: string;
   backstory: string;
@@ -214,6 +218,11 @@ export interface ProjectAutonomyRunUpdateInput {
   lastAutonomyMessage?: string | null;
   lastAutonomyActor?: string | null;
   nextAutonomyRunAt?: Date | null;
+}
+
+interface ProjectMessageInput {
+  content: string;
+  replyToId?: string | null;
 }
 
 export class ProjectDispatchError extends Error {
@@ -359,6 +368,7 @@ const execFileAsync = promisify(execFile);
 const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder"> & { sortOrder: number }> = [
   {
     roleKey: "planner",
+    visualName: "Planner",
     label: "Planner",
     goal: "Turn the constitution into a crisp project plan.",
     backstory: "You frame the first durable slice and keep the team aligned on direction.",
@@ -368,6 +378,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   },
   {
     roleKey: "architect",
+    visualName: "Architect",
     label: "Architect",
     goal: "Define the system boundaries and the highest-risk dependencies.",
     backstory: "You map the shape of the work and reduce uncertainty before implementation starts.",
@@ -377,6 +388,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   },
   {
     roleKey: "implementer",
+    visualName: "Implementer",
     label: "Implementer",
     goal: "Deliver the smallest shippable slice of the plan.",
     backstory: "You focus on executable changes that move the project forward quickly.",
@@ -386,6 +398,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   },
   {
     roleKey: "qa",
+    visualName: "QA",
     label: "QA",
     goal: "Verify the slice and surface regressions or missing coverage.",
     backstory: "You design checks and acceptance coverage that make the change trustworthy.",
@@ -395,6 +408,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   },
   {
     roleKey: "reviewer",
+    visualName: "Reviewer",
     label: "Reviewer",
     goal: "Review the work against the constitution and call out follow-up needs.",
     backstory: "You protect quality and ensure the plan is understandable to operators.",
@@ -404,6 +418,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   },
   {
     roleKey: "visual",
+    visualName: "Visual",
     label: "Visual",
     goal: "Assess the user-facing presentation and interaction surface.",
     backstory: "You watch for layout, motion, and visual consistency risks.",
@@ -693,6 +708,8 @@ function asProjectInput(
             title: task.title,
             description: task.description,
             agentRole: task.agentRole as "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual",
+            assignedRoleDefinitionId: (task as DbTask & { assignedRoleDefinitionId?: string | null }).assignedRoleDefinitionId ?? null,
+            assignedRoleDefinitionLabel: (task as DbTask & { assignedRoleDefinitionLabel?: string | null }).assignedRoleDefinitionLabel ?? null,
             status: task.status,
             priority: task.priority,
             acceptanceCriteria: Array.isArray(task.acceptanceCriteria)
@@ -712,6 +729,7 @@ function asProjectInput(
         id: definition.id,
         projectId: definition.projectId,
         roleKey: definition.roleKey,
+        visualName: definition.label,
         label: definition.label,
         goal: definition.goal,
         backstory: definition.backstory,
@@ -727,6 +745,7 @@ function asProjectInput(
 function defaultProjectRoleDefinitions(): ProjectRoleDefinitionInput[] {
   return PROJECT_ROLE_DEFAULTS.map((definition) => ({
     roleKey: definition.roleKey,
+    visualName: definition.visualName,
     label: definition.label,
     goal: definition.goal,
     backstory: definition.backstory,
@@ -741,6 +760,7 @@ function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord)
     id: definition.id,
     projectId: definition.projectId,
     roleKey: definition.roleKey,
+    visualName: definition.label,
     label: definition.label,
     goal: definition.goal,
     backstory: definition.backstory,
@@ -882,6 +902,56 @@ function roleDefinitionSortKey(definition: ProjectRoleDefinitionRecord): number 
   return definition.sortOrder;
 }
 
+function roleDefinitionsForAgentRole(roleDefinitions: ProjectRoleDefinitionRecord[], agentRole: string): ProjectRoleDefinitionRecord[] {
+  return [...roleDefinitions]
+    .filter((definition) => definition.enabled && definition.roleKey === agentRole)
+    .sort((left, right) => roleDefinitionSortKey(left) - roleDefinitionSortKey(right));
+}
+
+function resolveAssignedRoleDefinitionForTaskDraft(
+  roleDefinitions: ProjectRoleDefinitionRecord[],
+  draftTask: PlanningDraft["tasks"][number],
+  roleUsageCounts: Map<string, number>
+): { assignedRoleDefinitionId: string | null; assignedRoleDefinitionLabel: string | null } {
+  if (draftTask.assignedRoleDefinitionId) {
+    const byId = roleDefinitions.find((definition) => definition.id === draftTask.assignedRoleDefinitionId) ?? null;
+    if (byId) {
+      return {
+        assignedRoleDefinitionId: byId.id,
+        assignedRoleDefinitionLabel: byId.label
+      };
+    }
+  }
+
+  if (draftTask.assignedRoleDefinitionLabel) {
+    const normalizedLabel = draftTask.assignedRoleDefinitionLabel.trim().toLowerCase();
+    const byLabel = roleDefinitions.find((definition) => definition.label.trim().toLowerCase() === normalizedLabel) ?? null;
+    if (byLabel) {
+      return {
+        assignedRoleDefinitionId: byLabel.id,
+        assignedRoleDefinitionLabel: byLabel.label
+      };
+    }
+  }
+
+  const matchingDefinitions = roleDefinitionsForAgentRole(roleDefinitions, draftTask.agentRole);
+  if (matchingDefinitions.length === 0) {
+    return {
+      assignedRoleDefinitionId: null,
+      assignedRoleDefinitionLabel: null
+    };
+  }
+
+  const currentIndex = roleUsageCounts.get(draftTask.agentRole) ?? 0;
+  const chosen = matchingDefinitions[currentIndex % matchingDefinitions.length] ?? matchingDefinitions[0];
+  roleUsageCounts.set(draftTask.agentRole, currentIndex + 1);
+
+  return {
+    assignedRoleDefinitionId: chosen.id,
+    assignedRoleDefinitionLabel: chosen.label
+  };
+}
+
 function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["tasks"][number]): ProjectTaskSummary {
   const acceptanceCriteria = Array.isArray(task.acceptanceCriteria)
     ? (task.acceptanceCriteria as unknown[])
@@ -898,6 +968,8 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
     title: task.title,
     description: task.description,
     agentRole: task.agentRole,
+    assignedRoleDefinitionId: (task as DbTask & { assignedRoleDefinitionId?: string | null }).assignedRoleDefinitionId ?? null,
+    assignedRoleDefinitionLabel: (task as DbTask & { assignedRoleDefinitionLabel?: string | null }).assignedRoleDefinitionLabel ?? null,
     status: task.status,
     priority: task.priority,
     acceptanceCriteria,
@@ -1055,7 +1127,7 @@ function toProjectSummary(
 async function hydrateProject(project: ProjectWithRelations): Promise<ProjectSummary> {
   const constitution = await inspectProjectConstitution(project);
   const roleDefinitions = await ensureProjectRoleDefinitions(project.id, project.roleDefinitions);
-  const decisionLogs = await loadRecentDecisionLogs(project.id, 5);
+  const decisionLogs = await loadRecentDecisionLogs(project.id, 20);
   return toProjectSummary(project, constitution, roleDefinitions, decisionLogs);
 }
 
@@ -2630,8 +2702,10 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
   }
 
   if (existingMission && existingMission.tasks.length === 0) {
+    const roleUsageCounts = new Map<string, number>();
     await prisma.task.createMany({
       data: draft.tasks.map((task) => ({
+        ...resolveAssignedRoleDefinitionForTaskDraft(project.roleDefinitions, task, roleUsageCounts),
         missionId: existingMission.id,
         title: task.title,
         description: task.description,
@@ -2666,16 +2740,20 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
       createdBy,
       startedAt: new Date(),
       tasks: {
-        create: draft.tasks.map((task) => ({
-          title: task.title,
-          description: task.description,
-          agentRole: task.agentRole,
-          status: task.status,
-          priority: task.priority,
-          acceptanceCriteria: task.acceptanceCriteria,
-          attempts: task.attempts,
-          blockerReason: task.blockerReason
-        }))
+        create: (() => {
+          const roleUsageCounts = new Map<string, number>();
+          return draft.tasks.map((task) => ({
+            ...resolveAssignedRoleDefinitionForTaskDraft(project.roleDefinitions, task, roleUsageCounts),
+            title: task.title,
+            description: task.description,
+            agentRole: task.agentRole,
+            status: task.status,
+            priority: task.priority,
+            acceptanceCriteria: task.acceptanceCriteria,
+            attempts: task.attempts,
+            blockerReason: task.blockerReason
+          }));
+        })()
       }
     },
     select: { id: true, title: true }
@@ -2788,6 +2866,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         id: `seed-${project.id}-${definition.roleKey}-${index}`,
         projectId: project.id,
         roleKey: definition.roleKey,
+        visualName: definition.visualName,
         label: definition.label,
         goal: definition.goal,
         backstory: definition.backstory,
@@ -2828,8 +2907,8 @@ function validateProjectRoleDefinitionSet(definitions: ProjectRoleDefinitionInpu
       throw new ProjectRoleDefinitionError("invalid_role_definition", `Unknown roleKey "${definition.roleKey}" is not allowed.`, 400);
     }
 
-    if (!definition.label.trim() || !definition.goal.trim() || !definition.backstory.trim()) {
-      throw new ProjectRoleDefinitionError("invalid_role_definition", `Role definition "${definition.roleKey}" must include label, goal, and backstory.`, 400);
+    if (!definition.visualName.trim() || !definition.goal.trim() || !definition.backstory.trim()) {
+      throw new ProjectRoleDefinitionError("invalid_role_definition", `Role definition "${definition.roleKey}" must include visualName, goal, and backstory.`, 400);
     }
 
     seenKeys.add(definition.roleKey);
@@ -2870,7 +2949,7 @@ export async function replaceProjectRoleDefinitions(
       data: definitions.map((definition, index) => ({
         projectId,
         roleKey: definition.roleKey,
-        label: definition.label,
+        label: definition.visualName,
         goal: definition.goal,
         backstory: definition.backstory,
         model: definition.model || null,
@@ -2886,6 +2965,39 @@ export async function replaceProjectRoleDefinitions(
   }
 
   return updatedProject;
+}
+
+function extractMessageMentions(content: string): string[] {
+  const matches = [...content.matchAll(/(^|\s)@([a-z0-9][a-z0-9._-]{1,63})/gi)];
+  return [...new Set(matches.map((match) => match[2]?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+export async function createProjectMessage(projectId: string, input: ProjectMessageInput): Promise<ProjectDecisionLogSummary> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true }
+  });
+
+  if (!project) {
+    throw new ProjectRoleDefinitionError("project_not_found", "Project not found", 404);
+  }
+
+  const content = input.content.trim();
+  if (!content) {
+    throw new ProjectRoleDefinitionError("invalid_role_definition", "Message content is required", 400);
+  }
+
+  return recordDecisionLog({
+    projectId,
+    kind: "message",
+    actor: "operator",
+    summary: content,
+    detail: {
+      source: "operator",
+      replyToId: input.replyToId ?? null,
+      mentions: extractMessageMentions(content)
+    }
+  });
 }
 
 export async function updateProjectAutonomy(

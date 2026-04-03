@@ -382,6 +382,17 @@ function sortRoleDefinitions(roleDefinitions: ProjectRoleDefinition[]): ProjectR
 }
 
 function roleMatchesTask(task: ProjectTaskRecord, definition: ProjectRoleDefinition): boolean {
+  if (task.assignedRoleDefinitionId && task.assignedRoleDefinitionId === definition.id) {
+    return true;
+  }
+
+  if (
+    task.assignedRoleDefinitionLabel &&
+    task.assignedRoleDefinitionLabel.trim().toLowerCase() === definition.label.trim().toLowerCase()
+  ) {
+    return true;
+  }
+
   const taskRole = normalizedRole(task.agentRole);
   const roleKey = normalizedRole(definition.roleKey);
   const definitionId = normalizedRole(definition.id);
