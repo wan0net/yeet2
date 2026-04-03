@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import type { ProjectRoleKey } from "@yeet2/domain";
+import type { ProjectAutonomyMode, ProjectRoleKey } from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
 import {
@@ -15,8 +15,10 @@ import {
   ProjectDispatchError,
   ProjectGitHubIssueError,
   ProjectRegistrationError,
+  ProjectAutonomyError,
   ProjectRoleDefinitionError,
   replaceProjectRoleDefinitions,
+  updateProjectAutonomy,
   type ProjectRegistrationInput
 } from "../projects";
 
@@ -141,6 +143,39 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
   };
 }
 
+function parseProjectAutonomyBody(body: unknown): { input: { autonomyMode: ProjectAutonomyMode } | null; error: string | null } {
+  if (typeof body !== "object" || body === null) {
+    return {
+      input: null,
+      error: "Request body must be an object"
+    };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const rawMode = candidate.autonomyMode ?? candidate.autonomy_mode;
+  if (typeof rawMode !== "string") {
+    return {
+      input: null,
+      error: "autonomyMode is required"
+    };
+  }
+
+  const autonomyMode = rawMode.trim().toLowerCase();
+  if (autonomyMode !== "manual" && autonomyMode !== "supervised" && autonomyMode !== "autonomous") {
+    return {
+      input: null,
+      error: "autonomyMode must be manual, supervised, or autonomous"
+    };
+  }
+
+  return {
+    input: {
+      autonomyMode
+    },
+    error: null
+  };
+}
+
 export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get("/projects", async () => {
     return listRegisteredProjects();
@@ -164,6 +199,42 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
     }
 
     return project;
+  });
+
+  app.put("/projects/:projectId/autonomy", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const parsedBody = parseProjectAutonomyBody(request.body);
+    if (!parsedBody.input) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: parsedBody.error ?? "Invalid project autonomy body"
+      });
+    }
+
+    try {
+      const project = await updateProjectAutonomy(projectId, parsedBody.input.autonomyMode);
+      return reply.code(200).send({ project });
+    } catch (error) {
+      if (error instanceof ProjectAutonomyError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to update project autonomy"
+      });
+    }
   });
 
   app.post("/projects", async (request, reply) => {

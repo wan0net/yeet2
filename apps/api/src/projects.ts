@@ -11,7 +11,7 @@ import type {
   Project as DbProject,
   Task as DbTask
 } from "@yeet2/db";
-import type { PlanningProvenance, ProjectRoleKey } from "@yeet2/domain";
+import type { PlanningProvenance, ProjectAutonomyMode, ProjectRoleKey } from "@yeet2/domain";
 
 import { prisma } from "./db";
 import {
@@ -116,6 +116,12 @@ export interface ProjectSummary {
   githubRepoName: string | null;
   githubRepoUrl: string | null;
   roleDefinitions: ProjectRoleDefinitionSummary[];
+  autonomyMode: ProjectAutonomyMode;
+  lastAutonomyRunAt: string | null;
+  lastAutonomyStatus: string | null;
+  lastAutonomyMessage: string | null;
+  lastAutonomyActor: string | null;
+  nextAutonomyRunAt: string | null;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionInspection["status"];
@@ -144,6 +150,18 @@ export interface ProjectRoleDefinitionInput {
   backstory: string;
   enabled: boolean;
   sortOrder: number;
+}
+
+export interface ProjectAutonomyUpdateInput {
+  autonomyMode: ProjectAutonomyMode;
+}
+
+export interface ProjectAutonomyRunUpdateInput {
+  lastAutonomyRunAt: Date;
+  lastAutonomyStatus: string;
+  lastAutonomyMessage?: string | null;
+  lastAutonomyActor?: string | null;
+  nextAutonomyRunAt?: Date | null;
 }
 
 export class ProjectDispatchError extends Error {
@@ -204,6 +222,17 @@ export class ProjectRoleDefinitionError extends Error {
   ) {
     super(message);
     this.name = "ProjectRoleDefinitionError";
+  }
+}
+
+export class ProjectAutonomyError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "invalid_autonomy_mode",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectAutonomyError";
   }
 }
 
@@ -596,6 +625,30 @@ function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord)
   };
 }
 
+function normalizeProjectAutonomyMode(value: unknown): ProjectAutonomyMode | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "manual" || normalized === "supervised" || normalized === "autonomous") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function toAutonomySummary(project: Pick<ProjectWithRelations, "autonomyMode" | "lastAutonomyRunAt" | "lastAutonomyStatus" | "lastAutonomyMessage" | "lastAutonomyActor" | "nextAutonomyRunAt">) {
+  return {
+    autonomyMode: project.autonomyMode ?? "manual",
+    lastAutonomyRunAt: project.lastAutonomyRunAt?.toISOString() ?? null,
+    lastAutonomyStatus: project.lastAutonomyStatus ?? null,
+    lastAutonomyMessage: project.lastAutonomyMessage ?? null,
+    lastAutonomyActor: project.lastAutonomyActor ?? null,
+    nextAutonomyRunAt: project.nextAutonomyRunAt?.toISOString() ?? null
+  };
+}
+
 async function ensureProjectRoleDefinitions(projectId: string, definitions: ProjectRoleDefinitionRecord[]): Promise<ProjectRoleDefinitionRecord[]> {
   if (definitions.length > 0) {
     return definitions;
@@ -815,6 +868,7 @@ function toProjectSummary(
     githubRepoName: project.githubRepoName ?? null,
     githubRepoUrl: project.githubRepoUrl ?? null,
     roleDefinitions: sortedRoleDefinitions.map(toProjectRoleDefinitionSummary),
+    ...toAutonomySummary(project),
     defaultBranch: project.defaultBranch,
     localPath: project.localPath,
     constitutionStatus: constitution.status,
@@ -1728,6 +1782,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         createdAt: project.createdAt.toISOString(),
         updatedAt: project.updatedAt.toISOString()
       })),
+      ...toAutonomySummary(project),
       defaultBranch: project.defaultBranch,
       localPath: project.localPath,
       constitutionStatus: inspection.status,
@@ -1842,6 +1897,59 @@ export async function replaceProjectRoleDefinitions(
   }
 
   return updatedProject;
+}
+
+export async function updateProjectAutonomy(
+  projectId: string,
+  autonomyMode: ProjectAutonomyMode
+): Promise<ProjectSummary> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true }
+  });
+
+  if (!project) {
+    throw new ProjectAutonomyError("project_not_found", "Project not found", 404);
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      autonomyMode
+    }
+  });
+
+  const updatedProject = await loadProjectById(projectId);
+  if (!updatedProject) {
+    throw new ProjectAutonomyError("project_not_found", "Project not found", 404);
+  }
+
+  return updatedProject;
+}
+
+export async function recordProjectAutonomyRun(
+  projectId: string,
+  update: ProjectAutonomyRunUpdateInput
+): Promise<void> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true }
+  });
+
+  if (!project) {
+    throw new ProjectAutonomyError("project_not_found", "Project not found", 404);
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      lastAutonomyRunAt: update.lastAutonomyRunAt,
+      lastAutonomyStatus: update.lastAutonomyStatus,
+      lastAutonomyMessage: update.lastAutonomyMessage ?? null,
+      lastAutonomyActor: update.lastAutonomyActor ?? null,
+      nextAutonomyRunAt: update.nextAutonomyRunAt ?? null
+    }
+  });
 }
 
 export async function planProject(projectId: string): Promise<ProjectSummary | null> {

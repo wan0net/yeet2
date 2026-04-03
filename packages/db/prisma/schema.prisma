@@ -27,6 +27,12 @@ enum ProjectStatus {
   archived
 }
 
+enum ProjectAutonomyMode {
+  manual
+  supervised
+  autonomous
+}
+
 enum ProjectRoleKey {
   planner
   architect
@@ -74,6 +80,12 @@ model Project {
   githubRepoUrl      String?             @map("github_repo_url")
   defaultBranch      String              @default("main") @map("default_branch")
   localPath          String              @unique @map("local_path")
+  autonomyMode       ProjectAutonomyMode @default(manual) @map("autonomy_mode")
+  lastAutonomyRunAt  DateTime?           @map("last_autonomy_run_at")
+  lastAutonomyStatus String?             @map("last_autonomy_status")
+  lastAutonomyMessage String?            @map("last_autonomy_message")
+  lastAutonomyActor  String?             @map("last_autonomy_actor")
+  nextAutonomyRunAt  DateTime?           @map("next_autonomy_run_at")
   constitutionStatus ConstitutionStatus  @default(pending) @map("constitution_status")
   status             ProjectStatus       @default(active)
   createdAt          DateTime            @default(now()) @map("created_at")

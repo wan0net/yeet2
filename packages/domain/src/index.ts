@@ -18,6 +18,7 @@ export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture"
 export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
 export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -50,6 +51,12 @@ export interface Project {
   githubRepoName?: string | null;
   githubRepoUrl?: string | null;
   roleDefinitions?: ProjectRoleDefinition[];
+  autonomyMode?: ProjectAutonomyMode | null;
+  lastAutonomyRunAt?: string | null;
+  lastAutonomyStatus?: string | null;
+  lastAutonomyMessage?: string | null;
+  lastAutonomyActor?: string | null;
+  nextAutonomyRunAt?: string | null;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionStatus;

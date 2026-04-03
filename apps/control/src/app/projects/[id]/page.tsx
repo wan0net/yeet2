@@ -31,6 +31,7 @@ import {
   planningProvenanceTone,
   projectGitHubRepoInfo
 } from "../../../lib/projects";
+import { ProjectAutonomyPanel } from "./project-autonomy-panel";
 import { ProjectRolesEditor } from "./project-roles-editor";
 
 export const dynamic = "force-dynamic";
@@ -201,6 +202,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       </SectionCard>
 
       <ProjectRolesEditor projectId={project.id} projectName={project.name} roleDefinitions={project.roleDefinitions} />
+
+      <ProjectAutonomyPanel projectId={project.id} projectName={project.name} autonomy={project.autonomy} />
 
       <SectionCard title="Active mission">
         {currentMission ? (

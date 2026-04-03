@@ -51,6 +51,16 @@ export interface ProjectJobRecord {
 
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
 
+export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous" | "unknown";
+
+export interface ProjectAutonomyState {
+  mode: ProjectAutonomyMode;
+  lastRunStatus: string | null;
+  lastRunMessage: string | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+}
+
 export interface ProjectRoleDefinition {
   id: string;
   roleKey: string;
@@ -98,6 +108,7 @@ export interface ProjectRecord {
   localPath: string;
   constitutionStatus: ConstitutionStatus;
   constitution: ConstitutionSummary;
+  autonomy: ProjectAutonomyState;
   roleDefinitions: ProjectRoleDefinition[];
   missions: ProjectMissionRecord[];
   dispatchableRoles?: string[];
@@ -175,6 +186,77 @@ function stringArrayValue(value: unknown): string[] {
 
 function normalizeRoleId(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+function normalizeAutonomyMode(value: unknown): ProjectAutonomyMode {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "manual":
+    case "supervised":
+    case "autonomous":
+      return normalized;
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
+function autonomySource(raw: RawRecord): RawRecord {
+  return asRecord(raw.autonomy ?? raw.autonomyState ?? raw.autonomy_state ?? raw.loop ?? raw.loopState ?? raw.loop_state);
+}
+
+function normalizeAutonomyState(raw: RawRecord): ProjectAutonomyState {
+  const autonomy = autonomySource(raw);
+  return {
+    mode: normalizeAutonomyMode(
+      raw.autonomyMode ??
+        raw.autonomy_mode ??
+        raw.mode ??
+        raw.loopMode ??
+        raw.loop_mode ??
+        autonomy.mode ??
+        autonomy.autonomyMode ??
+        autonomy.autonomy_mode
+    ),
+    lastRunStatus: stringValue(
+      raw.lastRunStatus,
+      raw.last_run_status,
+      raw.loopStatus,
+      raw.loop_status,
+      autonomy.lastRunStatus,
+      autonomy.last_run_status
+    ) || null,
+    lastRunMessage: stringValue(
+      raw.lastRunMessage,
+      raw.last_run_message,
+      raw.loopMessage,
+      raw.loop_message,
+      autonomy.lastRunMessage,
+      autonomy.last_run_message
+    ) || null,
+    lastRunAt: stringValue(
+      raw.lastRunAt,
+      raw.last_run_at,
+      raw.loopRunAt,
+      raw.loop_run_at,
+      raw.lastRunTime,
+      raw.last_run_time,
+      autonomy.lastRunAt,
+      autonomy.last_run_at
+    ) || null,
+    nextRunAt: stringValue(
+      raw.nextRunAt,
+      raw.next_run_at,
+      raw.loopNextRunAt,
+      raw.loop_next_run_at,
+      raw.nextRunTime,
+      raw.next_run_time,
+      autonomy.nextRunAt,
+      autonomy.next_run_at
+    ) || null
+  };
 }
 
 function formatRoleLabel(value: string): string {
@@ -731,6 +813,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
   const id = stringValue(raw.id, raw.projectId, raw.project_id) || `project-${fallbackIndex}`;
   const missions = normalizeMissions(raw);
   const constitution = normalizeConstitutionSummary(raw);
+  const autonomy = normalizeAutonomyState(raw);
   const blockers = normalizeBlockers(raw);
 
   if (!name && !repoUrl && !localPath) {
@@ -754,6 +837,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
         constitutionSource(raw).status
     ),
     constitution,
+    autonomy,
     roleDefinitions: normalizeProjectRoleDefinitions(raw),
     missions,
     dispatchableRoles: stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles),
@@ -835,6 +919,32 @@ export function planningProvenanceTone(value: PlanningProvenance | string | null
       return "border-indigo-200 bg-indigo-50 text-indigo-800";
     case "fallback":
       return "border-amber-200 bg-amber-50 text-amber-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function autonomyModeLabel(value: ProjectAutonomyMode | string | null | undefined): string {
+  switch (normalizeAutonomyMode(value)) {
+    case "manual":
+      return "Manual";
+    case "supervised":
+      return "Supervised";
+    case "autonomous":
+      return "Autonomous";
+    default:
+      return "Unknown";
+  }
+}
+
+export function autonomyModeTone(value: ProjectAutonomyMode | string | null | undefined): string {
+  switch (normalizeAutonomyMode(value)) {
+    case "manual":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    case "supervised":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "autonomous":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";
   }
