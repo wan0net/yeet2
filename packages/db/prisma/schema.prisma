@@ -165,18 +165,21 @@ model Task {
 }
 
 model Job {
-  id              String    @id @default(cuid())
-  taskId          String    @map("task_id")
-  executorType    String    @map("executor_type")
-  workspacePath   String    @map("workspace_path")
-  branchName      String    @map("branch_name")
+  id               String    @id @default(cuid())
+  taskId           String    @map("task_id")
+  executorType     String    @map("executor_type")
+  workspacePath    String    @map("workspace_path")
+  branchName       String    @map("branch_name")
   githubCompareUrl String?   @map("github_compare_url")
-  status          JobStatus @default(queued)
-  logPath         String?   @map("log_path")
-  artifactSummary String?   @map("artifact_summary")
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
-  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  githubPrNumber   Int?      @map("github_pr_number")
+  githubPrUrl      String?   @map("github_pr_url")
+  githubPrTitle    String?   @map("github_pr_title")
+  status           JobStatus @default(queued)
+  logPath          String?   @map("log_path")
+  artifactSummary  String?   @map("artifact_summary")
+  startedAt        DateTime? @map("started_at")
+  completedAt      DateTime? @map("completed_at")
+  task             Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@map("jobs")
 }

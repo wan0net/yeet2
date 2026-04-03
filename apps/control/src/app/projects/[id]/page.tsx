@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Route } from "next";
+import { redirect } from "next/navigation";
 import { notFound } from "next/navigation";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
@@ -26,11 +27,13 @@ import {
   formatConstitutionFiles,
   githubBranchUrl,
   jobGitHubCompareUrl,
+  jobGitHubPullRequestLabel,
   parseGitHubRepoUrl,
   planningProvenanceLabel,
   planningProvenanceTone,
   projectGitHubRepoInfo
 } from "../../../lib/projects";
+import { controlBaseUrl } from "../../../lib/project-resource";
 import { ProjectAutonomyPanel } from "./project-autonomy-panel";
 import { ProjectRolesEditor } from "./project-roles-editor";
 
@@ -80,6 +83,25 @@ function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): strin
     default:
       return "Standing by";
   }
+}
+
+async function createProjectJobPullRequest(projectId: string, jobId: string): Promise<void> {
+  "use server";
+
+  const baseUrl = await controlBaseUrl();
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}/jobs/${jobId}/pull-request`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to create pull request");
+  }
+
+  redirect(`/projects/${projectId}`);
 }
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -535,9 +557,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         </a>
                       ) : (
                         job.branchName || "—"
-                      )}
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                        <span className="uppercase tracking-[0.16em] text-slate-400">PR</span>
+                        {job.githubPrUrl ? (
+                          <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={job.githubPrUrl} rel="noreferrer" target="_blank">
+                            {jobGitHubPullRequestLabel(job)}
+                          </a>
+                        ) : githubRepo && job.branchName ? (
+                          <form action={createProjectJobPullRequest.bind(null, project.id, job.id)}>
+                            <button className="rounded-full border border-slate-300 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100" type="submit">
+                              Create PR
+                            </button>
+                          </form>
+                        ) : (
+                          <span className="text-slate-500">Not available</span>
+                        )}
+                      </div>
+                      {job.githubPrTitle ? <div className="mt-2 text-xs text-slate-500">{job.githubPrTitle}</div> : null}
                     </div>
-                  </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>
                     <div className="mt-2 text-xs text-slate-600">Started {formatTimestamp(job.startedAt) ?? "Unknown"}</div>

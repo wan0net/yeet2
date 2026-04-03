@@ -17,6 +17,21 @@ export interface GitHubIssueResult {
   htmlUrl: string;
 }
 
+export interface GitHubPullRequestInput {
+  token: string | undefined;
+  repository: GitHubRepositoryRef;
+  title: string;
+  body: string;
+  headBranch: string;
+  baseBranch: string;
+}
+
+export interface GitHubPullRequestResult {
+  number: number;
+  htmlUrl: string;
+  title: string;
+}
+
 export class GitHubIssueError extends Error {
   constructor(
     public readonly code: "missing_token" | "invalid_repository_url" | "issue_create_failed",
@@ -25,6 +40,17 @@ export class GitHubIssueError extends Error {
   ) {
     super(message);
     this.name = "GitHubIssueError";
+  }
+}
+
+export class GitHubPullRequestError extends Error {
+  constructor(
+    public readonly code: "missing_token" | "invalid_repository_url" | "pull_request_create_failed",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "GitHubPullRequestError";
   }
 }
 
@@ -166,6 +192,87 @@ export function buildGitHubIssueBody(input: {
   }
 
   return sections.join("\n");
+}
+
+export function buildGitHubPullRequestBody(input: {
+  project: { id: string; name: string; defaultBranch: string; localPath: string; repoUrl: string };
+  task: { id: string; title: string; agentRole: string };
+  job: { id: string; branchName: string; compareUrl: string | null; executorType: string };
+}): string {
+  const compareUrl = input.job.compareUrl ?? "Not available";
+  return [
+    "# yeet2 pull request",
+    "",
+    "## Project",
+    `- Project: ${input.project.name} (${input.project.id})`,
+    `- Default branch: ${input.project.defaultBranch}`,
+    `- Local path: ${input.project.localPath}`,
+    `- Repository: ${input.project.repoUrl}`,
+    "",
+    "## Task",
+    `- Task: ${input.task.title} (${input.task.id})`,
+    `- Agent role: ${input.task.agentRole}`,
+    "",
+    "## Job",
+    `- Job: ${input.job.id}`,
+    `- Executor type: ${input.job.executorType}`,
+    `- Branch: ${input.job.branchName}`,
+    `- Compare URL: ${compareUrl}`
+  ].join("\n");
+}
+
+export async function createGitHubPullRequest(input: GitHubPullRequestInput): Promise<GitHubPullRequestResult> {
+  if (!input.token) {
+    throw new GitHubPullRequestError("missing_token", "GITHUB_TOKEN is required to create GitHub pull requests.", 503);
+  }
+
+  const response = await fetch(`${input.repository.apiBaseUrl}/repos/${input.repository.owner}/${input.repository.repo}/pulls`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({
+      title: input.title,
+      body: input.body,
+      head: input.headBranch,
+      base: input.baseBranch,
+      maintainer_can_modify: true
+    })
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new GitHubPullRequestError("pull_request_create_failed", `GitHub returned invalid JSON (${response.status}).`, 502);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new GitHubPullRequestError("pull_request_create_failed", message || "Unable to create GitHub pull request.", 502);
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new GitHubPullRequestError("pull_request_create_failed", "GitHub returned an empty pull request payload.", 502);
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  if (typeof candidate.number !== "number" || typeof candidate.html_url !== "string" || typeof candidate.title !== "string") {
+    throw new GitHubPullRequestError("pull_request_create_failed", "GitHub returned an incomplete pull request payload.", 502);
+  }
+
+  return {
+    number: candidate.number,
+    htmlUrl: candidate.html_url,
+    title: candidate.title
+  };
 }
 
 export async function createGitHubIssue(input: GitHubIssueInput & { repository: GitHubRepositoryRef }): Promise<GitHubIssueResult> {

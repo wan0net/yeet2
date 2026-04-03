@@ -6,6 +6,7 @@ import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../ope
 import {
   advanceProject,
   createProjectBlockerGitHubIssue,
+  createProjectPullRequest,
   dispatchTask,
   getRegisteredProject,
   listRegisteredProjects,
@@ -18,6 +19,7 @@ import {
   ProjectRegistrationError,
   ProjectAutonomyError,
   ProjectRoleDefinitionError,
+  ProjectPullRequestError,
   replaceProjectRoleDefinitions,
   updateProjectAutonomy,
   type ProjectRegistrationInput
@@ -354,6 +356,34 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to dispatch task"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/jobs/:jobId/pull-request", async (request, reply) => {
+    const { projectId, jobId } = request.params as { projectId?: string; jobId?: string };
+    if (!projectId || !jobId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and jobId are required"
+      });
+    }
+
+    try {
+      const result = await createProjectPullRequest(projectId, jobId);
+      return reply.code(result.created ? 201 : 200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectPullRequestError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to create a pull request for this job"
       });
     }
   });

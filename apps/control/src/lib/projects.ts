@@ -47,6 +47,9 @@ export interface ProjectJobRecord {
   startedAt: string | null;
   completedAt: string | null;
   githubCompareUrl?: string;
+  githubPrNumber: number | null;
+  githubPrUrl: string | null;
+  githubPrTitle: string | null;
 }
 
 export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
@@ -534,6 +537,18 @@ export function jobGitHubCompareUrl(job: Pick<ProjectJobRecord, "githubCompareUr
   return job.githubCompareUrl ?? githubBranchUrl(repoUrl, branchName);
 }
 
+export function jobGitHubPullRequestLabel(job: Pick<ProjectJobRecord, "githubPrNumber" | "githubPrTitle">): string {
+  if (job.githubPrNumber != null) {
+    return `PR #${job.githubPrNumber}`;
+  }
+
+  if (job.githubPrTitle) {
+    return job.githubPrTitle;
+  }
+
+  return "Pull request";
+}
+
 function booleanValue(...values: unknown[]): boolean {
   for (const value of values) {
     if (typeof value === "boolean") {
@@ -708,7 +723,10 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     artifactSummary: stringValue(raw.artifactSummary, raw.artifact_summary) || null,
     startedAt: stringValue(raw.startedAt, raw.started_at) || null,
     completedAt: stringValue(raw.completedAt, raw.completed_at) || null,
-    githubCompareUrl: stringValue(raw.githubCompareUrl, raw.github_compare_url, raw.compareUrl, raw.compare_url) || undefined
+    githubCompareUrl: stringValue(raw.githubCompareUrl, raw.github_compare_url, raw.compareUrl, raw.compare_url) || undefined,
+    githubPrNumber: numberValue(raw.githubPrNumber, raw.github_pr_number, raw.pullRequestNumber, raw.pull_request_number) ?? null,
+    githubPrUrl: stringValue(raw.githubPrUrl, raw.github_pr_url, raw.pullRequestUrl, raw.pull_request_url) || null,
+    githubPrTitle: stringValue(raw.githubPrTitle, raw.github_pr_title, raw.pullRequestTitle, raw.pull_request_title) || null
   };
 }
 

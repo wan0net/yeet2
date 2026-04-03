@@ -1,11 +1,13 @@
 import Link from "next/link";
 import type { Route } from "next";
+import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectJobs } from "../../lib/jobs";
-import { jobGitHubCompareUrl, parseGitHubRepoUrl, projectGitHubRepoInfo } from "../../lib/projects";
+import { jobGitHubCompareUrl, jobGitHubPullRequestLabel, parseGitHubRepoUrl, projectGitHubRepoInfo } from "../../lib/projects";
 import type { ProjectRecord } from "../../lib/projects";
+import { controlBaseUrl } from "../../lib/project-resource";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,25 @@ function summarizeLogPath(logPath: string | null): string {
 
   const segments = logPath.split("/").filter(Boolean);
   return segments.at(-1) ?? logPath;
+}
+
+async function createProjectJobPullRequest(projectId: string, jobId: string): Promise<void> {
+  "use server";
+
+  const baseUrl = await controlBaseUrl();
+  const response = await fetch(`${baseUrl}/api/projects/${projectId}/jobs/${jobId}/pull-request`, {
+    method: "POST",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("Unable to create pull request");
+  }
+
+  redirect("/jobs");
 }
 
 async function fetchProjects(): Promise<ProjectRecord[]> {
@@ -125,6 +146,7 @@ export default async function JobsPage() {
             {jobs.map(({ job, project, mission, task }) => {
               const githubRepo = projectGitHubRepoInfo(project) ?? parseGitHubRepoUrl(project.repoUrl);
               const githubBranchLink = jobGitHubCompareUrl(job, project.repoUrl, job.branchName);
+              const canCreatePullRequest = Boolean(githubRepo && job.branchName && !job.githubPrUrl);
 
               return (
                 <article key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -221,6 +243,27 @@ export default async function JobsPage() {
                         <div>
                           <dt className="font-medium text-slate-800">Log</dt>
                           <dd className="break-all font-mono text-xs text-slate-600">{summarizeLogPath(job.logPath)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium text-slate-800">Pull request</dt>
+                          <dd className="flex flex-wrap items-center gap-2">
+                            {job.githubPrUrl ? (
+                              <>
+                                <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={job.githubPrUrl} rel="noreferrer" target="_blank">
+                                  {jobGitHubPullRequestLabel(job)}
+                                </a>
+                                {job.githubPrTitle ? <span className="text-slate-500">{job.githubPrTitle}</span> : null}
+                              </>
+                            ) : canCreatePullRequest ? (
+                              <form action={createProjectJobPullRequest.bind(null, project.id, job.id)}>
+                                <button className="rounded-full border border-slate-300 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-slate-700 transition hover:bg-slate-100" type="submit">
+                                  Create PR
+                                </button>
+                              </form>
+                            ) : (
+                              <span className="text-slate-500">Not available</span>
+                            )}
+                          </dd>
                         </div>
                       </dl>
                     </div>

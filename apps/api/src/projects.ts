@@ -16,10 +16,13 @@ import type { PlanningProvenance, ProjectAutonomyMode, ProjectRoleKey } from "@y
 import { prisma } from "./db";
 import {
   buildGitHubCompareUrl,
+  buildGitHubPullRequestBody,
   buildGitHubIssueBody,
   createGitHubIssue,
+  createGitHubPullRequest,
   parseGitHubRepositoryUrl,
-  GitHubIssueError
+  GitHubIssueError,
+  GitHubPullRequestError
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
@@ -41,6 +44,9 @@ export interface ProjectJobSummary {
   workspacePath: string;
   branchName: string;
   githubCompareUrl: string | null;
+  githubPrNumber: number | null;
+  githubPrUrl: string | null;
+  githubPrTitle: string | null;
   status: ProjectJobStatus;
   logPath: string | null;
   artifactSummary: string | null;
@@ -144,6 +150,12 @@ export interface DispatchTaskResult {
   job: ProjectJobSummary;
 }
 
+export interface ProjectPullRequestResult {
+  project: ProjectSummary;
+  job: ProjectJobSummary;
+  created: boolean;
+}
+
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
   label: string;
@@ -202,6 +214,23 @@ export class ProjectGitHubIssueError extends Error {
   ) {
     super(message);
     this.name = "ProjectGitHubIssueError";
+  }
+}
+
+export class ProjectPullRequestError extends Error {
+  constructor(
+    public readonly code:
+      | "project_not_found"
+      | "job_not_found"
+      | "invalid_repo_url"
+      | "missing_branch_name"
+      | "github_not_configured"
+      | "github_pull_request_failed",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectPullRequestError";
   }
 }
 
@@ -705,6 +734,9 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     workspacePath: job.workspacePath,
     branchName: job.branchName,
     githubCompareUrl: job.githubCompareUrl ?? null,
+    githubPrNumber: job.githubPrNumber ?? null,
+    githubPrUrl: job.githubPrUrl ?? null,
+    githubPrTitle: job.githubPrTitle ?? null,
     status: job.status,
     logPath: job.logPath ?? null,
     artifactSummary: job.artifactSummary ?? null,
@@ -1006,6 +1038,32 @@ function resolveProjectGitHubCompareUrl(project: ProjectWithRelations, branchNam
     baseBranch: project.defaultBranch,
     compareBranch: branchName
   });
+}
+
+function resolveProjectGitHubRepository(project: Pick<ProjectWithRelations, "repoUrl" | "githubRepoUrl">) {
+  const repository = project.repoUrl ? parseGitHubRepositoryUrl(project.repoUrl) : null;
+  if (repository) {
+    return repository;
+  }
+
+  return project.githubRepoUrl ? parseGitHubRepositoryUrl(project.githubRepoUrl) : null;
+}
+
+function findProjectJob(project: ProjectWithRelations, jobId: string): { task: ProjectTaskWithRelations; job: DbJob } | null {
+  for (const mission of project.missions) {
+    for (const task of mission.tasks) {
+      const job = task.jobs.find((candidate) => candidate.id === jobId);
+      if (job) {
+        return { task, job };
+      }
+    }
+  }
+
+  return null;
+}
+
+function buildProjectPullRequestTitle(task: Pick<ProjectTaskWithRelations, "title">): string {
+  return `yeet2: ${task.title}`;
 }
 
 function isPlanningComplete(missions: ProjectMissionSummary[]): boolean {
@@ -1378,6 +1436,110 @@ async function persistDispatchedJob(
   return toProjectJobSummary(createdJob);
 }
 
+async function createProjectJobPullRequest(
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  job: DbJob
+): Promise<ProjectPullRequestResult> {
+  if (job.githubPrNumber !== null || job.githubPrUrl !== null || job.githubPrTitle !== null) {
+    const hydratedProject = await loadProjectById(project.id);
+    if (!hydratedProject) {
+      throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
+    }
+
+    return {
+      project: hydratedProject,
+      job: toProjectJobSummary(job),
+      created: false
+    };
+  }
+
+  const repository = resolveProjectGitHubRepository(project);
+  if (!repository) {
+    throw new ProjectPullRequestError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  const branchName = normalizeOptionalString(job.branchName);
+  if (!branchName) {
+    throw new ProjectPullRequestError("missing_branch_name", "Job branchName is required before a pull request can be created.", 400);
+  }
+
+  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  if (!token) {
+    throw new ProjectPullRequestError("github_not_configured", "GITHUB_TOKEN is required to create GitHub pull requests.", 503);
+  }
+
+  const compareUrl = job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, branchName);
+  let pullRequest;
+  try {
+    pullRequest = await createGitHubPullRequest({
+      token,
+      repository,
+      title: buildProjectPullRequestTitle(task),
+      body: buildGitHubPullRequestBody({
+        project: {
+          id: project.id,
+          name: project.name,
+          defaultBranch: project.defaultBranch,
+          localPath: project.localPath,
+          repoUrl: project.repoUrl ?? project.githubRepoUrl ?? ""
+        },
+        task: {
+          id: task.id,
+          title: task.title,
+          agentRole: task.agentRole
+        },
+        job: {
+          id: job.id,
+          branchName,
+          compareUrl,
+          executorType: job.executorType
+        }
+      }),
+      headBranch: branchName,
+      baseBranch: project.defaultBranch
+    });
+  } catch (error) {
+    if (error instanceof GitHubPullRequestError) {
+      if (error.code === "missing_token") {
+        throw new ProjectPullRequestError("github_not_configured", error.message, error.statusCode);
+      }
+
+      throw new ProjectPullRequestError("github_pull_request_failed", error.message, error.statusCode);
+    }
+
+    throw error;
+  }
+
+  await prisma.job.update({
+    where: { id: job.id },
+    data: {
+      githubCompareUrl: compareUrl ?? job.githubCompareUrl ?? null,
+      githubPrNumber: pullRequest.number,
+      githubPrUrl: pullRequest.htmlUrl,
+      githubPrTitle: pullRequest.title
+    }
+  });
+
+  const hydratedProject = await loadProjectById(project.id);
+  if (!hydratedProject) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found after pull request creation", 404);
+  }
+
+  const updatedJob = await prisma.job.findUnique({
+    where: { id: job.id }
+  });
+  if (!updatedJob) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found after pull request creation", 404);
+  }
+
+  return {
+    project: hydratedProject,
+    job: toProjectJobSummary(updatedJob),
+    created: true
+  };
+}
+
 async function dispatchTaskFromProject(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number]
@@ -1463,6 +1625,20 @@ export async function dispatchFirstImplementerTask(projectId: string): Promise<D
   }
 
   return dispatchTaskFromProject(project, task);
+}
+
+export async function createProjectPullRequest(projectId: string, jobId: string): Promise<ProjectPullRequestResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
+  }
+
+  const match = findProjectJob(project, jobId);
+  if (!match) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found", 404);
+  }
+
+  return createProjectJobPullRequest(project, match.task, match.job);
 }
 
 export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
