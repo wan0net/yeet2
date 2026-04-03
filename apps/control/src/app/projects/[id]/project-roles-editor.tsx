@@ -14,7 +14,7 @@ interface ProjectRolesEditorProps {
 }
 
 interface RoleModelCatalogResponse {
-  models?: string[];
+  models?: Array<string | { id?: unknown; name?: unknown; label?: unknown; value?: unknown }>;
   error?: string;
   detail?: unknown;
   message?: string;
@@ -53,6 +53,24 @@ function detailMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+function normalizeModelOption(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as { id?: unknown; value?: unknown; label?: unknown; name?: unknown };
+    for (const candidate of [record.id, record.value, record.label, record.name]) {
+      if (typeof candidate === "string" && candidate.trim().length > 0) {
+        return candidate.trim();
+      }
+    }
+  }
+
+  return null;
+}
+
 export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: ProjectRolesEditorProps) {
   const router = useRouter();
   const [draftRoles, setDraftRoles] = useState<ProjectRoleDefinition[]>(() => cloneRoles(roleDefinitions));
@@ -85,11 +103,7 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
           throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to load available models"));
         }
 
-        setAvailableModels(
-          Array.isArray(payload?.models)
-            ? [...new Set(payload.models.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0))]
-            : []
-        );
+        setAvailableModels(Array.isArray(payload?.models) ? [...new Set(payload.models.map(normalizeModelOption).filter((entry): entry is string => entry !== null))] : []);
       } catch (catalogError) {
         if (controller.signal.aborted) {
           return;
