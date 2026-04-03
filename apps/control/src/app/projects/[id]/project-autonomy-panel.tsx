@@ -67,8 +67,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
     setBranchCleanupMode(autonomy.branchCleanupMode);
   }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode, autonomy.mergeApprovalMode, autonomy.branchCleanupMode]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function persistAutonomy(nextMode: ProjectAutonomyMode = mode) {
     setIsSaving(true);
     setError(null);
     setMessage(null);
@@ -81,8 +80,8 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
           Accept: "application/json"
         },
         body: JSON.stringify({
-          mode,
-          autonomyMode: mode,
+          mode: nextMode,
+          autonomyMode: nextMode,
           pullRequestMode,
           pullRequestDraftMode,
           mergeApprovalMode,
@@ -95,6 +94,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to update autonomy mode"));
       }
 
+      setMode(nextMode);
       setMessage(`Updated autonomy settings for ${projectName}.`);
       router.refresh();
     } catch (saveError) {
@@ -104,11 +104,58 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
     }
   }
 
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await persistAutonomy(mode);
+  }
+
   return (
     <SectionCard title="Autonomy">
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
           <div className="space-y-3">
+            <div className="rounded-[28px] border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="yeet-mono text-[10px] uppercase tracking-[0.22em] text-[var(--muted)]">Run control</div>
+                  <div className="mt-1 text-base font-semibold text-[var(--foreground)]">
+                    {autonomy.mode === "autonomous" ? "Agents are allowed to keep running." : "Agents are paused or gated."}
+                  </div>
+                  <div className="mt-1 text-sm text-[var(--muted)]">
+                    Use the quick controls below to start or stop the project loop immediately.
+                  </div>
+                </div>
+                <span className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${autonomyModeTone(autonomy.mode)}`}>
+                  {autonomyModeLabel(autonomy.mode)}
+                </span>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  className="rounded-full border border-emerald-300 bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving || autonomy.mode === "autonomous"}
+                  onClick={() => void persistAutonomy("autonomous")}
+                  type="button"
+                >
+                  {isSaving && mode === "autonomous" ? "Starting..." : "Start AI"}
+                </button>
+                <button
+                  className="rounded-full border border-rose-300 bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving || autonomy.mode === "manual"}
+                  onClick={() => void persistAutonomy("manual")}
+                  type="button"
+                >
+                  {isSaving && mode === "manual" ? "Stopping..." : "Stop AI"}
+                </button>
+                <button
+                  className="rounded-full border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-medium text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isSaving || autonomy.mode === "supervised"}
+                  onClick={() => void persistAutonomy("supervised")}
+                  type="button"
+                >
+                  Supervised mode
+                </button>
+              </div>
+            </div>
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Control how {projectName} runs its planning loop, PR automation, merge gating, and branch cleanup. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, start as draft or ready, merge approval can stay with a human or be handed off, and branches can be kept or cleaned up after merge.
             </div>

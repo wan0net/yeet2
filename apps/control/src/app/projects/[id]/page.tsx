@@ -43,6 +43,8 @@ import { controlBaseUrl } from "../../../lib/project-resource";
 import { ProjectAutonomyPanel } from "./project-autonomy-panel";
 import { ProjectRolesEditor } from "./project-roles-editor";
 
+type LoadedProject = NonNullable<Awaited<ReturnType<typeof fetchProject>>>;
+
 export const dynamic = "force-dynamic";
 
 function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): string {
@@ -56,6 +58,12 @@ function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): strin
     default:
       return "Standing by";
   }
+}
+
+function roleConfiguredModel(project: LoadedProject, roleKey: string): string | null {
+  const definition = project.roleDefinitions.find((entry) => entry.roleKey === roleKey);
+  const model = definition?.model?.trim();
+  return model && model.length > 0 ? model : null;
 }
 
 async function createProjectJobPullRequest(projectId: string, jobId: string): Promise<void> {
@@ -360,6 +368,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 const currentTask = role.currentTask?.task ?? null;
                 const nextTask = role.nextTask?.task ?? null;
                 const latestJobLink = latestJob ? jobGitHubCompareUrl(latestJob, project.repoUrl, latestJob.branchName) ?? githubRepo?.webUrl ?? null : null;
+                const configuredModel = roleConfiguredModel(project, role.roleKey);
 
                 return (
                   <article key={role.roleKey} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
@@ -378,6 +387,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                       </span>
                     </div>
                     <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Configured model</div>
+                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-slate-600">
+                          {configuredModel ? "Role override" : "Brain default"}
+                        </span>
+                      </div>
+                      <div className="mt-2 break-all text-sm font-medium text-slate-900">{configuredModel || "Uses the project Brain default model"}</div>
+                    </div>
+                    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
                       <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Now handling</div>
                       <div className="mt-2 text-sm font-medium text-slate-900">{currentTask?.title || "No active handoff"}</div>
                       <div className="mt-1 text-xs text-slate-500">
@@ -450,6 +468,9 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                         </div>
                         <div className="mt-1 truncate text-xs text-slate-500">
                           {(role.currentTask?.task.title || role.nextTask?.task.title || "No assignment staged yet")}
+                        </div>
+                        <div className="mt-2 truncate text-[11px] uppercase tracking-[0.14em] text-slate-400">
+                          {roleConfiguredModel(project, role.roleKey) || "brain default model"}
                         </div>
                       </div>
                     </div>
