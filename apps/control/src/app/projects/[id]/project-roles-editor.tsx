@@ -13,6 +13,13 @@ interface ProjectRolesEditorProps {
   roleDefinitions: ProjectRoleDefinition[];
 }
 
+interface RoleModelCatalogResponse {
+  models?: string[];
+  error?: string;
+  detail?: unknown;
+  message?: string;
+}
+
 function cloneRoles(roleDefinitions: ProjectRoleDefinition[]): ProjectRoleDefinition[] {
   return roleDefinitions.map((role) => ({ ...role }));
 }
@@ -49,6 +56,9 @@ function detailMessage(detail: unknown, fallback: string): string {
 export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: ProjectRolesEditorProps) {
   const router = useRouter();
   const [draftRoles, setDraftRoles] = useState<ProjectRoleDefinition[]>(() => cloneRoles(roleDefinitions));
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,6 +66,50 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
   useEffect(() => {
     setDraftRoles(cloneRoles(roleDefinitions));
   }, [roleDefinitions]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadModelCatalog() {
+      setModelsLoading(true);
+      setModelsError(null);
+
+      try {
+        const response = await fetch(`/api/projects/${projectId}/role-models`, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+        const payload = (await response.json().catch(() => null)) as RoleModelCatalogResponse | null;
+
+        if (!response.ok) {
+          throw new Error(detailMessage(payload?.detail ?? payload?.message ?? payload?.error, "Unable to load available models"));
+        }
+
+        setAvailableModels(
+          Array.isArray(payload?.models)
+            ? [...new Set(payload.models.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0))]
+            : []
+        );
+      } catch (catalogError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        setAvailableModels([]);
+        setModelsError(catalogError instanceof Error ? catalogError.message : "Unable to load available models");
+      } finally {
+        if (!controller.signal.aborted) {
+          setModelsLoading(false);
+        }
+      }
+    }
+
+    void loadModelCatalog();
+
+    return () => {
+      controller.abort();
+    };
+  }, [projectId]);
 
   function updateRole(index: number, patch: Partial<ProjectRoleDefinition>) {
     setDraftRoles((current) =>
@@ -134,10 +188,20 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
                   <input
                     className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
                     onChange={(event) => updateRole(index, { model: event.currentTarget.value })}
-                    placeholder="Optional model name"
+                    list={`project-role-models-${projectId}`}
+                    placeholder="Select or type a model"
                     value={role.model ?? ""}
                   />
-                  <div className="text-xs text-slate-500">Leave blank to use the Brain default model.</div>
+                  <datalist id={`project-role-models-${projectId}`}>
+                    {availableModels.map((model) => (
+                      <option key={model} value={model} />
+                    ))}
+                  </datalist>
+                  <div className="text-xs text-slate-500">
+                    Leave blank to use the Brain default model.
+                    {modelsLoading ? " Loading available models..." : null}
+                    {modelsError ? ` Catalog unavailable: ${modelsError}` : null}
+                  </div>
                 </label>
 
                 <label className="block space-y-1">

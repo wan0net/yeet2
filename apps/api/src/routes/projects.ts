@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import type { ProjectAutonomyMode, ProjectRoleKey } from "@yeet2/domain";
 
 import { RepositoryPathError } from "../constitution";
+import { fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
 import {
   advanceProject,
   createProjectBlockerGitHubIssue,
@@ -181,6 +182,26 @@ function parseProjectAutonomyBody(body: unknown): { input: { autonomyMode: Proje
 export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get("/projects", async () => {
     return listRegisteredProjects();
+  });
+
+  app.get("/projects/models", async (_request, reply) => {
+    try {
+      const models = await fetchOpenRouterModelCatalog();
+      return reply.code(200).send({ models });
+    } catch (error) {
+      if (error instanceof OpenRouterModelCatalogError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to load the model catalog"
+      });
+    }
   });
 
   app.get("/projects/:projectId", async (request, reply) => {

@@ -61,6 +61,13 @@ export interface ProjectAutonomyState {
   nextRunAt: string | null;
 }
 
+export interface ProjectModelCatalogOption {
+  value: string;
+  label: string;
+  description: string | null;
+  provider: string | null;
+}
+
 export interface ProjectRoleDefinition {
   id: string;
   roleKey: string;
@@ -183,6 +190,10 @@ function stringArrayValue(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 function normalizeRoleId(value: string): string {
@@ -957,6 +968,76 @@ export function autonomyModeTone(value: ProjectAutonomyMode | string | null | un
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";
   }
+}
+
+export function projectRoleModelValues(project: Pick<ProjectRecord, "roleDefinitions">): string[] {
+  return [...new Set(project.roleDefinitions.map((definition) => definition.model?.trim() ?? "").filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right)
+  );
+}
+
+function normalizeModelCatalogItem(value: unknown): ProjectModelCatalogOption | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    return {
+      value: trimmed,
+      label: trimmed,
+      description: null,
+      provider: null
+    };
+  }
+
+  const raw = asRecord(value);
+  const valueId = stringOrNull(raw.value) ?? stringOrNull(raw.id) ?? stringOrNull(raw.model) ?? stringOrNull(raw.name);
+  if (!valueId) {
+    return null;
+  }
+
+  const label = stringOrNull(raw.label) ?? stringOrNull(raw.name) ?? valueId;
+  const description = stringOrNull(raw.description);
+  const provider = stringOrNull(raw.provider);
+
+  return {
+    value: valueId,
+    label,
+    description,
+    provider
+  };
+}
+
+export function normalizeProjectModelCatalog(payload: unknown): ProjectModelCatalogOption[] {
+  const raw = asRecord(payload);
+  const candidates = Array.isArray(payload)
+    ? payload
+    : Array.isArray(raw.models)
+      ? raw.models
+      : Array.isArray(raw.data)
+        ? raw.data
+        : Array.isArray(raw.items)
+          ? raw.items
+          : [];
+
+  const normalized = candidates.map(normalizeModelCatalogItem).filter((entry): entry is ProjectModelCatalogOption => entry !== null);
+  const unique = new Map<string, ProjectModelCatalogOption>();
+
+  for (const option of normalized) {
+    if (!unique.has(option.value)) {
+      unique.set(option.value, option);
+    }
+  }
+
+  return [...unique.values()].sort((left, right) => {
+    const labelCompare = left.label.localeCompare(right.label, undefined, { sensitivity: "base" });
+    if (labelCompare !== 0) {
+      return labelCompare;
+    }
+
+    return left.value.localeCompare(right.value, undefined, { sensitivity: "base" });
+  });
 }
 
 export function missingRegistrationFields(input: ProjectRegistrationInput | null): string[] {
