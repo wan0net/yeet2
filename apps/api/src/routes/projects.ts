@@ -18,6 +18,7 @@ import {
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
   readProjectJobLog,
+  listProjectApprovals,
   refreshProjectActiveJobs,
   refreshProjectJob,
   applyProjectBlockerApproval,
@@ -376,6 +377,38 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
   app.get("/projects", async () => {
     return listRegisteredProjects();
+  });
+
+  app.get("/approvals", async (request, reply) => {
+    const query = (request.query ?? {}) as {
+      projectId?: string;
+      project_id?: string;
+      status?: string;
+    };
+
+    const status =
+      typeof query.status === "string" && query.status.trim()
+        ? query.status.trim().toLowerCase()
+        : "all";
+
+    if (status !== "all" && status !== "open" && status !== "resolved" && status !== "dismissed") {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "status must be all, open, resolved, or dismissed"
+      });
+    }
+
+    return reply.code(200).send(
+      await listProjectApprovals({
+        projectId:
+          typeof query.projectId === "string"
+            ? query.projectId
+            : typeof query.project_id === "string"
+              ? query.project_id
+              : null,
+        status
+      })
+    );
   });
 
   app.get("/projects/models", async (_request, reply) => {

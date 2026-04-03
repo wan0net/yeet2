@@ -69,6 +69,21 @@ export function shouldRequireApiAuth(request: FastifyRequest): boolean {
   return true;
 }
 
+export function describeApiAuth(): {
+  enabled: boolean;
+  requireAuthForReads: boolean;
+  mode: "open" | "write_protected" | "full";
+} {
+  const enabled = Boolean(readConfiguredApiToken());
+  const requireAuthForReads = readRequireAuthForReads();
+
+  return {
+    enabled,
+    requireAuthForReads,
+    mode: !enabled ? "open" : requireAuthForReads ? "full" : "write_protected"
+  };
+}
+
 export async function requireApiAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const configuredToken = readConfiguredApiToken();
   if (!configuredToken || !shouldRequireApiAuth(request)) {
@@ -85,4 +100,3 @@ export async function requireApiAuth(request: FastifyRequest, reply: FastifyRepl
     message: "A valid bearer token is required for this API route."
   });
 }
-

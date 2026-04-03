@@ -13,6 +13,7 @@ import type {
 } from "@yeet2/db";
 import type {
   ProjectCostAnalysisSummary,
+  ProjectApprovalQueueItem,
   OperatorGuidanceSummary,
   PlanningProvenance,
   ProjectApprovalAction,
@@ -98,6 +99,10 @@ export interface ProjectRoleDefinitionSummary {
 }
 
 export interface ProjectCostAnalysisResponse extends ProjectCostAnalysisSummary {}
+
+export interface ProjectApprovalQueueResponse {
+  approvals: ProjectApprovalQueueItem[];
+}
 
 export interface ProjectTaskSummary {
   id: string;
@@ -2891,6 +2896,10 @@ function buildGitHubIssueTitle(project: ProjectWithRelations, task: ProjectWithR
   return `[yeet2] ${project.name}: ${blocker.title || task.title}`;
 }
 
+function isHumanReviewApprovalBlocker(blocker: Pick<DbBlocker, "title">): boolean {
+  return blocker.title.trim().toLowerCase().startsWith("human review required");
+}
+
 export async function applyProjectBlockerApproval(
   projectId: string,
   blockerId: string,
@@ -3099,6 +3108,63 @@ export async function createProjectBlockerGitHubIssue(projectId: string, blocker
   }
 
   return { project: updatedProject };
+}
+
+export async function listProjectApprovals(input: { projectId?: string | null; status?: "open" | "resolved" | "dismissed" | "all" | null } = {}): Promise<ProjectApprovalQueueResponse> {
+  const blockers = await prisma.blocker.findMany({
+    where: {
+      ...(input.projectId ? { task: { mission: { projectId: input.projectId } } } : {}),
+      ...(input.status && input.status !== "all" ? { status: input.status } : {})
+    },
+    include: {
+      task: {
+        include: {
+          mission: {
+            include: {
+              project: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: [
+      {
+        createdAt: "desc"
+      }
+    ]
+  });
+
+  const approvals = blockers
+    .filter(isHumanReviewApprovalBlocker)
+    .map((blocker) => ({
+      blockerId: blocker.id,
+      blockerTitle: blocker.title,
+      blockerStatus: blocker.status,
+      blockerCreatedAt: blocker.createdAt.toISOString(),
+      blockerResolvedAt: blocker.resolvedAt?.toISOString() ?? null,
+      blockerContext: blocker.context,
+      blockerRecommendation: blocker.recommendation ?? null,
+      projectId: blocker.task.mission.project.id,
+      projectName: blocker.task.mission.project.name,
+      projectRepoUrl: blocker.task.mission.project.repoUrl ?? null,
+      projectGitHubUrl: blocker.task.mission.project.githubRepoUrl ?? null,
+      missionId: blocker.task.mission.id,
+      missionTitle: blocker.task.mission.title,
+      taskId: blocker.task.id,
+      taskTitle: blocker.task.title,
+      taskAgentRole: blocker.task.agentRole as ProjectApprovalQueueItem["taskAgentRole"]
+    }))
+    .sort((left, right) => {
+      const leftOpen = left.blockerStatus === "open";
+      const rightOpen = right.blockerStatus === "open";
+      if (leftOpen !== rightOpen) {
+        return leftOpen ? -1 : 1;
+      }
+
+      return right.blockerCreatedAt.localeCompare(left.blockerCreatedAt);
+    });
+
+  return { approvals };
 }
 
 async function persistPlannedMission(project: ProjectWithRelations, draft: PlanningDraft): Promise<void> {

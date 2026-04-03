@@ -92,6 +92,25 @@ export interface ProjectCostAnalysisSummary {
   requestCostUsdTotal?: number | null;
 }
 
+export interface ProjectApprovalQueueItem {
+  blockerId: string;
+  blockerTitle: string;
+  blockerStatus: BlockerStatus;
+  blockerCreatedAt: string;
+  blockerResolvedAt?: string | null;
+  blockerContext: string;
+  blockerRecommendation?: string | null;
+  projectId: string;
+  projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
+  missionId: string;
+  missionTitle: string;
+  taskId: string;
+  taskTitle: string;
+  taskAgentRole: AgentRole;
+}
+
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;

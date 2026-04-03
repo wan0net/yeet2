@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 
 import { createAutonomyLoopManager } from "./autonomy-loop";
-import { requireApiAuth } from "./auth";
+import { describeApiAuth, requireApiAuth } from "./auth";
 import { registerProjectRoutes } from "./routes/projects";
 import { registerWorkerRoutes } from "./routes/workers";
 import { seedLocalWorkerFromEnv } from "./workers";
@@ -14,6 +14,12 @@ app.get("/health", async () => {
   return {
     status: "ok",
     service: "yeet2-api"
+  };
+});
+
+app.get("/auth/status", async () => {
+  return {
+    auth: describeApiAuth()
   };
 });
 
