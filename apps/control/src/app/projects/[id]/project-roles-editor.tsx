@@ -17,12 +17,13 @@ function cloneRoles(roleDefinitions: ProjectRoleDefinition[]): ProjectRoleDefini
   return roleDefinitions.map((role) => ({ ...role }));
 }
 
-function serializeRoles(roleDefinitions: ProjectRoleDefinition[]): Array<Pick<ProjectRoleDefinition, "roleKey" | "sortOrder" | "label" | "enabled" | "goal" | "backstory">> {
+function serializeRoles(roleDefinitions: ProjectRoleDefinition[]): Array<Pick<ProjectRoleDefinition, "roleKey" | "sortOrder" | "label" | "enabled" | "model" | "goal" | "backstory">> {
   return roleDefinitions.map((role, index) => ({
     roleKey: role.roleKey || role.id,
     sortOrder: role.sortOrder ?? index,
     label: role.label,
     enabled: role.enabled,
+    model: role.model?.trim() || null,
     goal: role.goal,
     backstory: role.backstory
   }));
@@ -126,6 +127,17 @@ export function ProjectRolesEditor({ projectId, projectName, roleDefinitions }: 
                     onChange={(event) => updateRole(index, { label: event.currentTarget.value })}
                     value={role.label}
                   />
+                </label>
+
+                <label className="block space-y-1">
+                  <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Model</span>
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-400"
+                    onChange={(event) => updateRole(index, { model: event.currentTarget.value })}
+                    placeholder="Optional model name"
+                    value={role.model ?? ""}
+                  />
+                  <div className="text-xs text-slate-500">Leave blank to use the Brain default model.</div>
                 </label>
 
                 <label className="block space-y-1">

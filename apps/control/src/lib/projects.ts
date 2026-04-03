@@ -67,6 +67,7 @@ export interface ProjectRoleDefinition {
   sortOrder: number;
   label: string;
   enabled: boolean;
+  model: string | null;
   goal: string;
   backstory: string;
 }
@@ -284,6 +285,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 0,
       label: "Planner",
       enabled: enabled.has("planner"),
+      model: null,
       goal: "Turn the constitution into a crisp planning brief.",
       backstory: "Grounds the team in project intent and the first durable slice."
     },
@@ -293,6 +295,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 1,
       label: "Architect",
       enabled: enabled.has("architect"),
+      model: null,
       goal: "Refine the plan into concrete structural boundaries.",
       backstory: "Identifies the shape of the system and the dependencies that matter first."
     },
@@ -302,6 +305,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 2,
       label: "Implementer",
       enabled: enabled.has("implementer") || dispatchableRoles.length === 0,
+      model: null,
       goal: "Convert the plan into the smallest shippable implementation slice.",
       backstory: "Focuses on direct, executable steps that move the project forward."
     },
@@ -311,6 +315,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 3,
       label: "QA",
       enabled: enabled.has("qa") || dispatchableRoles.length === 0,
+      model: null,
       goal: "Add verification and acceptance coverage for the slice.",
       backstory: "Looks for missing checks, edge cases, and review gates."
     },
@@ -320,6 +325,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 4,
       label: "Reviewer",
       enabled: enabled.has("reviewer") || dispatchableRoles.length === 0,
+      model: null,
       goal: "Produce an operator-ready review and handoff.",
       backstory: "Checks readability, grounding, and follow-up readiness."
     },
@@ -329,6 +335,7 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       sortOrder: 5,
       label: "Visual",
       enabled: enabled.has("visual"),
+      model: null,
       goal: "Polish the presentation and any UI-facing details.",
       backstory: "Tunes surfaces and keeps the experience legible."
     }
@@ -349,6 +356,7 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
       sortOrder: fallbackIndex,
       label: formatRoleLabel(label),
       enabled: false,
+      model: null,
       goal: "",
       backstory: ""
     };
@@ -371,6 +379,7 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
     sortOrder: numberValue(raw.sortOrder, raw.sort_order, raw.order) ?? fallbackIndex,
     label: label || formatRoleLabel(id),
     enabled: booleanValue(raw.enabled, raw.isEnabled, raw.active, raw.is_active),
+    model: stringValue(raw.model, raw.modelName, raw.model_name) || null,
     goal,
     backstory
   };

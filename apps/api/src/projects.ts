@@ -55,6 +55,7 @@ export interface ProjectRoleDefinitionSummary {
   label: string;
   goal: string;
   backstory: string;
+  model: string | null;
   enabled: boolean;
   sortOrder: number;
   createdAt: string;
@@ -148,6 +149,7 @@ export interface ProjectRoleDefinitionInput {
   label: string;
   goal: string;
   backstory: string;
+  model: string | null;
   enabled: boolean;
   sortOrder: number;
 }
@@ -253,6 +255,7 @@ type ProjectWithRelations = DbProject & {
     label: string;
     goal: string;
     backstory: string;
+    model: string | null;
     enabled: boolean;
     sortOrder: number;
     createdAt: Date;
@@ -280,6 +283,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "Planner",
     goal: "Turn the constitution into a crisp project plan.",
     backstory: "You frame the first durable slice and keep the team aligned on direction.",
+    model: null,
     enabled: true,
     sortOrder: 0
   },
@@ -288,6 +292,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "Architect",
     goal: "Define the system boundaries and the highest-risk dependencies.",
     backstory: "You map the shape of the work and reduce uncertainty before implementation starts.",
+    model: null,
     enabled: true,
     sortOrder: 1
   },
@@ -296,6 +301,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "Implementer",
     goal: "Deliver the smallest shippable slice of the plan.",
     backstory: "You focus on executable changes that move the project forward quickly.",
+    model: null,
     enabled: true,
     sortOrder: 2
   },
@@ -304,6 +310,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "QA",
     goal: "Verify the slice and surface regressions or missing coverage.",
     backstory: "You design checks and acceptance coverage that make the change trustworthy.",
+    model: null,
     enabled: true,
     sortOrder: 3
   },
@@ -312,6 +319,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "Reviewer",
     goal: "Review the work against the constitution and call out follow-up needs.",
     backstory: "You protect quality and ensure the plan is understandable to operators.",
+    model: null,
     enabled: true,
     sortOrder: 4
   },
@@ -320,6 +328,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     label: "Visual",
     goal: "Assess the user-facing presentation and interaction surface.",
     backstory: "You watch for layout, motion, and visual consistency risks.",
+    model: null,
     enabled: true,
     sortOrder: 5
   }
@@ -591,6 +600,7 @@ function asProjectInput(project: Pick<ProjectWithRelations, "id" | "name" | "rep
         label: definition.label,
         goal: definition.goal,
         backstory: definition.backstory,
+        model: definition.model ?? null,
         enabled: definition.enabled,
         sortOrder: definition.sortOrder,
         createdAt: definition.createdAt.toISOString(),
@@ -605,6 +615,7 @@ function defaultProjectRoleDefinitions(): ProjectRoleDefinitionInput[] {
     label: definition.label,
     goal: definition.goal,
     backstory: definition.backstory,
+    model: definition.model,
     enabled: definition.enabled,
     sortOrder: definition.sortOrder
   }));
@@ -618,6 +629,7 @@ function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord)
     label: definition.label,
     goal: definition.goal,
     backstory: definition.backstory,
+    model: definition.model,
     enabled: definition.enabled,
     sortOrder: definition.sortOrder,
     createdAt: definition.createdAt.toISOString(),
@@ -1777,6 +1789,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         label: definition.label,
         goal: definition.goal,
         backstory: definition.backstory,
+        model: null,
         enabled: definition.enabled,
         sortOrder: definition.sortOrder,
         createdAt: project.createdAt.toISOString(),
@@ -1868,6 +1881,7 @@ export async function replaceProjectRoleDefinitions(
           label: definition.label,
           goal: definition.goal,
           backstory: definition.backstory,
+          model: definition.model || null,
           enabled: definition.enabled,
           sortOrder: definition.sortOrder
         },
@@ -1875,6 +1889,7 @@ export async function replaceProjectRoleDefinitions(
           label: definition.label,
           goal: definition.goal,
           backstory: definition.backstory,
+          model: definition.model || null,
           enabled: definition.enabled,
           sortOrder: definition.sortOrder
         }

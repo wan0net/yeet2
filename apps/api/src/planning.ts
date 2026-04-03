@@ -77,6 +77,7 @@ interface BrainPlanningRequest {
     label: string;
     goal: string;
     backstory: string;
+    model: string | null;
     enabled: boolean;
     sort_order: number;
   }>;
@@ -230,6 +231,7 @@ function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainR
       label: definition.label,
       goal: definition.goal,
       backstory: definition.backstory,
+      model: definition.model ?? null,
       enabled: definition.enabled,
       sort_order: definition.sortOrder
     }))

@@ -184,11 +184,14 @@ def _crewai_ready() -> bool:
     return all((Agent, Crew, Process, Task))
 
 
-def _crewai_llm() -> object | None:
-    model_name = _crewai_model_name()
+def _crewai_llm_for_model(model_name: str | None) -> object | None:
     if not model_name or LLM is None:
         return None
     return LLM(model=model_name, temperature=0.2)
+
+
+def _crewai_llm() -> object | None:
+    return _crewai_llm_for_model(_crewai_model_name())
 
 
 def _normalize_role_key(value: object) -> str | None:
@@ -522,11 +525,6 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     if not _crewai_ready():
         raise RuntimeError("CrewAI is not installed")
 
-    llm = _crewai_llm()
-    llm_kwargs: dict[str, object] = {}
-    if llm is not None:
-        llm_kwargs["llm"] = llm
-
     project_name = planning_input.project_name
     constitution_summary = summary or f"Plan the first durable slice for {project_name}."
     constitution_themes = themes or [project_name]
@@ -541,7 +539,11 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
             goal=definition.goal,
             backstory=definition.backstory,
             allow_delegation=allow_delegation_for(definition.key),
-            **llm_kwargs,
+            **(
+                {"llm": _crewai_llm_for_model(definition.model or _crewai_model_name())}
+                if (definition.model or _crewai_model_name())
+                else {}
+            ),
         )
         for definition in role_definitions
     ]

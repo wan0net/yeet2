@@ -200,6 +200,7 @@ export interface ProjectRoleDefinition {
   label: string;
   goal: string;
   backstory: string;
+  model?: string | null;
   enabled: boolean;
   sortOrder: number;
   createdAt: string;

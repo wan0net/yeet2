@@ -104,6 +104,7 @@ model ProjectRoleDefinition {
   label       String
   goal        String
   backstory   String
+  model       String?      @map("model")
   enabled     Boolean      @default(true)
   sortOrder   Int          @default(0) @map("sort_order")
   createdAt   DateTime     @default(now()) @map("created_at")

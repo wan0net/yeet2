@@ -21,6 +21,7 @@ class PlanningRoleDefinition:
     label: str
     goal: str
     backstory: str
+    model: str | None = None
     enabled: bool = True
     sort_order: int = 0
 
@@ -132,6 +133,7 @@ def normalize_planning_role_definition(value: object, fallback_sort_order: int =
         label=label,
         goal=goal,
         backstory=backstory,
+        model=_clean_text(raw.get("model")) or None,
         enabled=_coerce_bool(raw.get("enabled"), True),
         sort_order=_coerce_int(sort_order_value, fallback_sort_order),
     )

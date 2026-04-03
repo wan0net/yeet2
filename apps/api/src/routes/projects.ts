@@ -73,7 +73,7 @@ function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrati
   };
 }
 
-function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKey: ProjectRoleKey; label: string; goal: string; backstory: string; enabled: boolean; sortOrder: number }> | null; error: string | null } {
+function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKey: ProjectRoleKey; label: string; goal: string; backstory: string; model: string | null; enabled: boolean; sortOrder: number }> | null; error: string | null } {
   if (typeof body !== "object" || body === null) {
     return {
       input: null,
@@ -101,6 +101,7 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
       const label = typeof raw.label === "string" ? raw.label.trim() : "";
       const goal = typeof raw.goal === "string" ? raw.goal.trim() : "";
       const backstory = typeof raw.backstory === "string" ? raw.backstory.trim() : "";
+      const model = typeof raw.model === "string" ? raw.model.trim() : null;
       const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
       const sortOrder = typeof raw.sortOrder === "number" && Number.isFinite(raw.sortOrder) ? Math.trunc(raw.sortOrder) : 0;
 
@@ -124,6 +125,7 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
         label,
         goal,
         backstory,
+        model: model ? model : null,
         enabled,
         sortOrder
       };
