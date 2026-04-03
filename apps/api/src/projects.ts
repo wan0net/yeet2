@@ -13,6 +13,7 @@ import type {
 } from "@yeet2/db";
 import type {
   PlanningProvenance,
+  ProjectApprovalAction,
   ProjectDecisionLogSummary,
   ProjectBranchCleanupMode,
   ProjectBranchCleanupState,
@@ -183,6 +184,12 @@ export interface ProjectPullRequestResult {
   merged?: boolean;
 }
 
+export interface ProjectApprovalResult {
+  project: ProjectSummary;
+  action: ProjectApprovalAction;
+  job?: ProjectJobSummary;
+}
+
 export interface ProjectRoleDefinitionInput {
   roleKey: ProjectRoleKey;
   label: string;
@@ -262,6 +269,17 @@ export class ProjectPullRequestError extends Error {
   ) {
     super(message);
     this.name = "ProjectPullRequestError";
+  }
+}
+
+export class ProjectApprovalError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "blocker_not_found",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectApprovalError";
   }
 }
 
@@ -2229,8 +2247,177 @@ function findProjectBlocker(
   return null;
 }
 
+function buildProjectApprovalRejectionMessage(blocker: DbBlocker, task: ProjectWithRelations["missions"][number]["tasks"][number]): string {
+  return `Human review was rejected for blocker "${blocker.title || task.title}". The task remains blocked until the underlying issue is addressed.`;
+}
+
+function hasApprovablePullRequestMetadata(job: DbJob): boolean {
+  return job.githubPrNumber !== null && job.githubPrUrl !== null && job.githubPrDraft !== true && job.githubPrState !== "closed" && job.githubPrState !== "merged";
+}
+
+async function findApprovableImplementerJob(
+  project: ProjectWithRelations,
+  mission: ProjectMissionWithRelations
+): Promise<{ task: ProjectWithRelations["missions"][number]["tasks"][number]; job: DbJob } | null> {
+  const repository = resolveProjectGitHubRepository(project);
+  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  if (!repository || !token) {
+    return null;
+  }
+
+  const candidates = mission.tasks
+    .filter((task) => task.agentRole === "implementer")
+    .flatMap((task) =>
+      task.jobs
+        .filter((job) => job.status === "complete" && hasApprovablePullRequestMetadata(job))
+        .map((job) => ({ task, job }))
+    )
+    .sort((left, right) => jobSortKey(right.job) - jobSortKey(left.job));
+
+  for (const candidate of candidates) {
+    if (candidate.job.githubPrNumber === null) {
+      continue;
+    }
+
+    try {
+      const pullRequest = await fetchGitHubPullRequest({
+        token,
+        repository,
+        pullRequestNumber: candidate.job.githubPrNumber
+      });
+
+      if (pullRequest.merged || pullRequest.state !== "open" || pullRequest.draft) {
+        continue;
+      }
+
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 function buildGitHubIssueTitle(project: ProjectWithRelations, task: ProjectWithRelations["missions"][number]["tasks"][number], blocker: DbBlocker): string {
   return `[yeet2] ${project.name}: ${blocker.title || task.title}`;
+}
+
+export async function applyProjectBlockerApproval(
+  projectId: string,
+  blockerId: string,
+  action: ProjectApprovalAction
+): Promise<ProjectApprovalResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectApprovalError("project_not_found", "Project not found", 404);
+  }
+
+  const located = findProjectBlocker(project, blockerId);
+  if (!located) {
+    throw new ProjectApprovalError("blocker_not_found", "Blocker not found", 404);
+  }
+
+  const { blocker, task, mission } = located;
+  const actor = "human";
+
+  if (action === "reject") {
+    const rejectionMessage = buildProjectApprovalRejectionMessage(blocker, task);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.blocker.update({
+        where: { id: blocker.id },
+        data: {
+          status: "dismissed",
+          resolvedAt: new Date()
+        }
+      });
+
+      await tx.task.update({
+        where: { id: task.id },
+        data: {
+          status: "blocked",
+          blockerReason: rejectionMessage
+        }
+      });
+    });
+
+    const updatedProject = await loadProjectById(projectId);
+    if (!updatedProject) {
+      throw new ProjectApprovalError("project_not_found", "Project not found", 404);
+    }
+
+    await recordDecisionLog({
+      projectId,
+      missionId: mission.id,
+      taskId: task.id,
+      blockerId: blocker.id,
+      kind: "approval",
+      actor,
+      summary: `Rejected blocker "${blocker.title || task.title}"`,
+      detail: {
+        action,
+        blockerId: blocker.id,
+        blockerStatus: "dismissed",
+        missionId: mission.id,
+        taskId: task.id,
+        taskStatus: "blocked",
+        message: rejectionMessage
+      }
+    });
+
+    return {
+      project: updatedProject,
+      action
+    };
+  }
+
+  await resolveProjectBlocker(projectId, blockerId);
+  const resolvedProject = await loadProjectById(projectId);
+  if (!resolvedProject) {
+    throw new ProjectApprovalError("project_not_found", "Project not found", 404);
+  }
+
+  let mergedJob: ProjectJobSummary | undefined;
+  let mergeMessage = "No matching implementer PR was available to merge.";
+
+  const approvableJob = await findApprovableImplementerJob(project, mission);
+  if (approvableJob) {
+    try {
+      const merged = await mergeProjectPullRequest(projectId, approvableJob.job.id);
+      mergedJob = merged.job;
+      mergeMessage = `Merged pull request #${mergedJob.githubPrNumber ?? approvableJob.job.githubPrNumber} for job ${approvableJob.job.id}.`;
+    } catch (error) {
+      mergeMessage = error instanceof Error ? error.message : "Unable to merge the related pull request.";
+    }
+  }
+
+  await recordDecisionLog({
+    projectId,
+    missionId: mission.id,
+    taskId: task.id,
+    blockerId: blocker.id,
+    jobId: mergedJob?.id ?? approvableJob?.job.id ?? null,
+    kind: "approval",
+    actor,
+    summary: `Approved blocker "${blocker.title || task.title}"`,
+    detail: {
+      action,
+      blockerId: blocker.id,
+      blockerStatus: "resolved",
+      missionId: mission.id,
+      taskId: task.id,
+      mergedJobId: mergedJob?.id ?? null,
+      mergeMessage
+    }
+  });
+
+  const refreshedProject = mergedJob ? ((await loadProjectById(projectId)) ?? resolvedProject) : resolvedProject;
+  return {
+    project: refreshedProject,
+    action,
+    ...(mergedJob ? { job: mergedJob } : {})
+  };
 }
 
 export async function createProjectBlockerGitHubIssue(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {

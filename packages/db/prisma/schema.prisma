@@ -104,6 +104,7 @@ enum JobStatus {
 enum BlockerStatus {
   open
   resolved
+  dismissed
 }
 
 model Project {

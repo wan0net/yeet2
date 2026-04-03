@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
 import type {
+  ProjectApprovalAction,
   ProjectAutonomyMode,
   ProjectBranchCleanupMode,
   ProjectPullRequestDraftMode,
@@ -13,6 +14,7 @@ import {
   advanceProject,
   createProjectBlockerGitHubIssue,
   createProjectPullRequest,
+  applyProjectBlockerApproval,
   dispatchTask,
   getRegisteredProject,
   listRegisteredProjects,
@@ -21,6 +23,7 @@ import {
   resolveProjectBlocker,
   ProjectBlockerError,
   ProjectDispatchError,
+  ProjectApprovalError,
   ProjectGitHubIssueError,
   ProjectRegistrationError,
   ProjectAutonomyError,
@@ -243,6 +246,37 @@ function parseProjectAutonomyBody(body: unknown): {
       ...(mergeApprovalMode ? { mergeApprovalMode: mergeApprovalMode as import("@yeet2/domain").ProjectMergeApprovalMode } : {}),
       ...(branchCleanupMode ? { branchCleanupMode: branchCleanupMode as ProjectBranchCleanupMode } : {})
     },
+    error: null
+  };
+}
+
+function parseProjectApprovalBody(body: unknown): { input: { action: ProjectApprovalAction } | null; error: string | null } {
+  if (typeof body !== "object" || body === null) {
+    return {
+      input: null,
+      error: "Request body must be an object"
+    };
+  }
+
+  const candidate = body as Record<string, unknown>;
+  const rawAction = candidate.action ?? candidate.approvalAction ?? candidate.approval_action;
+  if (typeof rawAction !== "string") {
+    return {
+      input: null,
+      error: "action is required"
+    };
+  }
+
+  const action = rawAction.trim().toLowerCase();
+  if (action !== "approve" && action !== "reject") {
+    return {
+      input: null,
+      error: "action must be approve or reject"
+    };
+  }
+
+  return {
+    input: { action: action as ProjectApprovalAction },
     error: null
   };
 }
@@ -506,6 +540,42 @@ export const registerProjectRoutes: FastifyPluginAsync = async (app: FastifyInst
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to resolve blocker"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/blockers/:blockerId/approval", async (request, reply) => {
+    const { projectId, blockerId } = request.params as { projectId?: string; blockerId?: string };
+    if (!projectId || !blockerId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and blockerId are required"
+      });
+    }
+
+    const parsedBody = parseProjectApprovalBody(request.body);
+    if (!parsedBody.input) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: parsedBody.error ?? "Invalid blocker approval body"
+      });
+    }
+
+    try {
+      const result = await applyProjectBlockerApproval(projectId, blockerId, parsedBody.input.action);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectApprovalError || error instanceof ProjectBlockerError || error instanceof ProjectPullRequestError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to apply blocker approval"
       });
     }
   });

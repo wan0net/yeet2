@@ -1,16 +1,82 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectApprovals } from "../../lib/approvals";
 import { blockerStatusLabel, blockerStatusTone, formatTimestamp } from "../../lib/project-detail";
 import type { ProjectRecord } from "../../lib/projects";
+import { controlBaseUrl } from "../../lib/project-resource";
 
 export const dynamic = "force-dynamic";
 
 function isOpenApproval(status: string): boolean {
   return status.trim().toLowerCase() === "open";
+}
+
+function readSearchParam(searchParams: Record<string, string | string[] | undefined> | undefined, key: string): string | null {
+  const value = searchParams?.[key];
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    const first = value.find((item) => typeof item === "string" && item.trim());
+    return first?.trim() ?? null;
+  }
+
+  return null;
+}
+
+async function readJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return { raw: text };
+  }
+}
+
+async function submitBlockerApproval(projectId: string, blockerId: string, action: "approve" | "reject"): Promise<void> {
+  "use server";
+
+  const baseUrl = await controlBaseUrl();
+
+  try {
+    const response = await fetch(`${baseUrl}/api/projects/${projectId}/blockers/${blockerId}/approval`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ action })
+    });
+    const payload = await readJsonResponse(response);
+
+    if (!response.ok) {
+      const message =
+        typeof payload === "object" && payload !== null && "message" in payload
+          ? String((payload as Record<string, unknown>).message ?? "Unable to update approval")
+          : "Unable to update approval";
+      throw new Error(message);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : `Unable to ${action} approval`;
+    const searchParams = new URLSearchParams({
+      approval_error: message,
+      approval_blocker: blockerId,
+      approval_action: action
+    });
+    redirect(`/approvals?${searchParams.toString()}` as Route);
+  }
+
+  redirect("/approvals" as Route);
 }
 
 async function fetchProjects(): Promise<ProjectRecord[]> {
@@ -30,12 +96,20 @@ async function fetchProjects(): Promise<ProjectRecord[]> {
   return Array.isArray(payload.projects) ? payload.projects : [];
 }
 
-export default async function ApprovalsPage() {
+export default async function ApprovalsPage({
+  searchParams
+}: {
+  searchParams?: Record<string, string | string[] | undefined> | Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
   const projects = await fetchProjects();
   const approvals = flattenProjectApprovals(projects);
   const openApprovals = approvals.filter((entry) => isOpenApproval(entry.blocker.status));
   const resolvedApprovals = approvals.filter((entry) => !isOpenApproval(entry.blocker.status));
   const projectsWithApprovals = new Set(approvals.map((entry) => entry.projectId)).size;
+  const approvalError = readSearchParam(resolvedSearchParams, "approval_error");
+  const approvalErrorBlocker = readSearchParam(resolvedSearchParams, "approval_blocker");
+  const approvalErrorAction = readSearchParam(resolvedSearchParams, "approval_action");
 
   return (
     <main className="mt-10 space-y-6">
@@ -78,6 +152,9 @@ export default async function ApprovalsPage() {
           <div className="space-y-3">
             {openApprovals.map(({ blocker, projectId, projectName, projectGitHubWebUrl, taskTitle }) => {
               const createdAt = formatTimestamp(blocker.createdAt);
+              const isErrored = approvalError && approvalErrorBlocker === blocker.id;
+              const approveAction = submitBlockerApproval.bind(null, projectId, blocker.id, "approve");
+              const rejectAction = submitBlockerApproval.bind(null, projectId, blocker.id, "reject");
               return (
                 <article key={blocker.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -136,6 +213,36 @@ export default async function ApprovalsPage() {
                       </div>
                     </div>
                   </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                    <div className="text-sm text-slate-600">
+                      Human approval required before the blocker can be cleared.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <form action={approveAction}>
+                        <button
+                          className="rounded-full border border-emerald-300 bg-white px-4 py-2 text-sm font-medium text-emerald-900 transition hover:bg-emerald-50"
+                          type="submit"
+                        >
+                          Approve
+                        </button>
+                      </form>
+                      <form action={rejectAction}>
+                        <button
+                          className="rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-medium text-rose-900 transition hover:bg-rose-50"
+                          type="submit"
+                        >
+                          Reject
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {isErrored ? (
+                    <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                      {approvalErrorAction ? `${approvalErrorAction[0].toUpperCase()}${approvalErrorAction.slice(1)}` : "Approval"} failed: {approvalError}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}

@@ -24,9 +24,10 @@ export type ProjectPullRequestDraftMode = "draft" | "ready";
 export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval";
 export type ProjectBranchCleanupMode = "manual" | "after_merge";
 export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "failed";
+export type ProjectApprovalAction = "approve" | "reject";
 export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
-export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy";
+export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval";
 
 export interface WorkerLeaseSummary {
   projectId?: string | null;
