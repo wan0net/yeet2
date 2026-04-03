@@ -60,6 +60,9 @@ model Project {
   id                 String              @id @default(cuid())
   name               String
   repoUrl            String?             @map("repo_url")
+  githubRepoOwner    String?             @map("github_repo_owner")
+  githubRepoName     String?             @map("github_repo_name")
+  githubRepoUrl      String?             @map("github_repo_url")
   defaultBranch      String              @default("main") @map("default_branch")
   localPath          String              @unique @map("local_path")
   constitutionStatus ConstitutionStatus  @default(pending) @map("constitution_status")
@@ -127,6 +130,7 @@ model Job {
   executorType    String    @map("executor_type")
   workspacePath   String    @map("workspace_path")
   branchName      String    @map("branch_name")
+  githubCompareUrl String?   @map("github_compare_url")
   status          JobStatus @default(queued)
   logPath         String?   @map("log_path")
   artifactSummary String?   @map("artifact_summary")

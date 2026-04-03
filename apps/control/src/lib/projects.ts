@@ -46,6 +46,7 @@ export interface ProjectJobRecord {
   artifactSummary: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  githubCompareUrl?: string;
 }
 
 export interface ProjectBlockerRecord {
@@ -77,6 +78,9 @@ export interface ProjectRecord {
   id: string;
   name: string;
   repoUrl: string;
+  githubRepoOwner?: string;
+  githubRepoName?: string;
+  githubRepoUrl?: string;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionStatus;
@@ -199,6 +203,29 @@ export function githubBranchUrl(repoUrl: string, branchName: string): string | n
   }
 
   return `${repo.webUrl}/tree/${encodeURIComponent(branch)}`;
+}
+
+export function projectGitHubRepoInfo(
+  project: Pick<ProjectRecord, "repoUrl" | "githubRepoOwner" | "githubRepoName" | "githubRepoUrl">
+): GitHubRepoInfo | null {
+  const parsed = parseGitHubRepoUrl(project.repoUrl);
+  const owner = stringValue(project.githubRepoOwner, parsed?.owner);
+  const repo = stringValue(project.githubRepoName, parsed?.repo);
+  const webUrl = stringValue(project.githubRepoUrl, parsed?.webUrl);
+
+  if (!owner && !repo && !webUrl) {
+    return null;
+  }
+
+  return {
+    owner,
+    repo,
+    webUrl: webUrl || (owner && repo ? `https://github.com/${owner}/${repo}` : "")
+  };
+}
+
+export function jobGitHubCompareUrl(job: Pick<ProjectJobRecord, "githubCompareUrl">, repoUrl: string, branchName: string): string | null {
+  return job.githubCompareUrl ?? githubBranchUrl(repoUrl, branchName);
 }
 
 function booleanValue(...values: unknown[]): boolean {
@@ -374,7 +401,8 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     logPath: stringValue(raw.logPath, raw.log_path) || null,
     artifactSummary: stringValue(raw.artifactSummary, raw.artifact_summary) || null,
     startedAt: stringValue(raw.startedAt, raw.started_at) || null,
-    completedAt: stringValue(raw.completedAt, raw.completed_at) || null
+    completedAt: stringValue(raw.completedAt, raw.completed_at) || null,
+    githubCompareUrl: stringValue(raw.githubCompareUrl, raw.github_compare_url, raw.compareUrl, raw.compare_url) || undefined
   };
 }
 
@@ -481,6 +509,9 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
   const raw = asRecord(value);
   const name = stringValue(raw.name);
   const repoUrl = stringValue(raw.repoUrl, raw.repo_url, raw.repoURL);
+  const githubRepoOwner = stringValue(raw.githubRepoOwner, raw.github_repo_owner) || undefined;
+  const githubRepoName = stringValue(raw.githubRepoName, raw.github_repo_name) || undefined;
+  const githubRepoUrl = stringValue(raw.githubRepoUrl, raw.github_repo_url) || undefined;
   const defaultBranch = stringValue(raw.defaultBranch, raw.default_branch);
   const localPath = stringValue(raw.localPath, raw.local_path);
   const id = stringValue(raw.id, raw.projectId, raw.project_id) || `project-${fallbackIndex}`;
@@ -496,6 +527,9 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     id,
     name: name || repoUrl || id,
     repoUrl,
+    githubRepoOwner,
+    githubRepoName,
+    githubRepoUrl,
     defaultBranch,
     localPath,
     constitutionStatus: normalizeConstitutionStatus(

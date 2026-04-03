@@ -69,3 +69,13 @@ No implementation deviations recorded yet.
 - Chosen Approach: `Project registration now accepts either an explicit localPath attachment or a repoUrl that the API clones into a managed base directory controlled by YEET2_PROJECTS_DIR`
 - Reason: `Local attachment remains useful for existing checkouts, but repoUrl-first registration is needed to make onboarding smoother and align the API with the product expectation that yeet2 can prepare a local working copy itself`
 - Consequences: `The registration surface now branches between attach and clone flows while keeping the same upsert and constitution-inspection behavior. Clone targets are derived from a safe repo-based directory name, reused only when the existing checkout matches the same repo remote, and never overwritten in place. Operators can relocate managed clones with YEET2_PROJECTS_DIR, which defaults to /tmp/yeet2-projects`
+
+### DECISION-005: Persist GitHub References On Write
+
+- Date: `2026-04-03`
+- Status: `accepted`
+- Area: `api`
+- Spec Default: `GitHub references may be derived when needed`
+- Chosen Approach: `Project registration now stores GitHub repo owner, repo name, and canonical web URL when repoUrl targets GitHub, and dispatched jobs store a canonical compare URL for the branch they ran on`
+- Reason: `The API already had enough context at write time to persist stable artifact links, which reduces repeated URL derivation at render time and keeps the stored records closer to the engineering artifact they represent`
+- Consequences: `Existing rows will retain null GitHub metadata until they are rewritten or backfilled, but new and updated records now preserve the canonical GitHub references alongside the project/job data`

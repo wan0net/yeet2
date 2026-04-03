@@ -21,7 +21,14 @@ import {
   groupTasksByState
 } from "../../../lib/project-detail";
 import { fetchProject } from "../../../lib/project-resource";
-import { emptyConstitutionFiles, formatConstitutionFiles, githubBranchUrl, parseGitHubRepoUrl } from "../../../lib/projects";
+import {
+  emptyConstitutionFiles,
+  formatConstitutionFiles,
+  githubBranchUrl,
+  jobGitHubCompareUrl,
+  parseGitHubRepoUrl,
+  projectGitHubRepoInfo
+} from "../../../lib/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -85,8 +92,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const taskGroups = groupTasksByState(project);
   const currentMission = activeMission(project);
   const agentView = agentPresenceOverview(project);
-  const githubRepo = parseGitHubRepoUrl(project.repoUrl);
-  const githubDefaultBranchLink = githubRepo ? githubBranchUrl(project.repoUrl, project.defaultBranch) : null;
+  const githubRepo = projectGitHubRepoInfo(project) ?? parseGitHubRepoUrl(project.repoUrl);
+  const githubDefaultBranchLink = githubBranchUrl(project.repoUrl, project.defaultBranch) ?? githubRepo?.webUrl ?? null;
   const openBlockers = blockers.filter((blocker) => blocker.status.toLowerCase() === "open").length;
   const presentRequiredFiles = project.constitution.presentRequiredFiles ?? [];
   const missingRequiredFiles = project.constitution.missingRequiredFiles ?? [];
@@ -134,7 +141,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <span className="font-medium text-slate-800">Repo:</span>{" "}
               {githubRepo ? (
                 <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubRepo.webUrl} rel="noreferrer" target="_blank">
-                  {githubRepo.owner}/{githubRepo.repo}
+                  {githubRepo.owner && githubRepo.repo ? `${githubRepo.owner}/${githubRepo.repo}` : project.repoUrl || "—"}
                 </a>
               ) : (
                 project.repoUrl || "—"
@@ -250,6 +257,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                 const latestJob = role.latestJob?.job ?? null;
                 const currentTask = role.currentTask?.task ?? null;
                 const nextTask = role.nextTask?.task ?? null;
+                const latestJobLink = latestJob ? jobGitHubCompareUrl(latestJob, project.repoUrl, latestJob.branchName) ?? githubRepo?.webUrl ?? null : null;
 
                 return (
                   <article key={role.role} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
@@ -292,10 +300,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     {latestJob ? (
                       <div className="mt-3 text-xs text-slate-500">
                         Last signal {formatTimestamp(latestJob.startedAt ?? latestJob.completedAt) ?? "Unknown"} on{" "}
-                        {githubRepo && latestJob.branchName ? (
+                        {latestJobLink && latestJob.branchName ? (
                           <a
                             className="font-medium text-slate-700 underline-offset-4 hover:underline"
-                            href={githubBranchUrl(project.repoUrl, latestJob.branchName) ?? githubRepo.webUrl}
+                            href={latestJobLink}
                             rel="noreferrer"
                             target="_blank"
                           >
@@ -389,6 +397,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     const latest = task.jobs[0] ?? null;
                     const dispatchBlockedReason = taskDispatchBlockedReason(project, task);
                     const canDispatch = taskCanDispatch(project, task);
+                    const latestBranchLink = latest ? jobGitHubCompareUrl(latest, project.repoUrl, latest.branchName) ?? githubRepo?.webUrl ?? null : null;
 
                     return (
                       <article key={task.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -437,10 +446,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
                               <span>
                                 Branch:{" "}
-                                {githubRepo && latest.branchName ? (
+                                {latestBranchLink && latest.branchName ? (
                                   <a
                                     className="font-medium text-slate-700 underline-offset-4 hover:underline"
-                                    href={githubBranchUrl(project.repoUrl, latest.branchName) ?? githubRepo.webUrl}
+                                    href={latestBranchLink}
                                     rel="noreferrer"
                                     target="_blank"
                                   >
@@ -497,26 +506,26 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
                     <div className="mt-1 break-all font-mono">{job.id}</div>
                   </div>
                 </div>
-                    <div className="mt-3 grid gap-3 lg:grid-cols-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
-                        <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
-                        <div className="mt-2 break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</div>
-                        <div className="mt-2 text-xs text-slate-500">
-                          Branch{" "}
-                          {githubRepo && job.branchName ? (
-                            <a
-                              className="font-medium text-slate-700 underline-offset-4 hover:underline"
-                              href={githubBranchUrl(project.repoUrl, job.branchName) ?? githubRepo.webUrl}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              {job.branchName}
-                            </a>
-                          ) : (
-                            job.branchName || "—"
-                          )}
-                        </div>
-                      </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Execution</div>
+                    <div className="mt-2 break-all font-mono text-xs text-slate-600">{job.workspacePath || project.localPath || "Unknown"}</div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      Branch{" "}
+                      {job.branchName && (jobGitHubCompareUrl(job, project.repoUrl, job.branchName) ?? githubRepo?.webUrl) ? (
+                        <a
+                          className="font-medium text-slate-700 underline-offset-4 hover:underline"
+                          href={jobGitHubCompareUrl(job, project.repoUrl, job.branchName) ?? githubRepo?.webUrl ?? ""}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {job.branchName}
+                        </a>
+                      ) : (
+                        job.branchName || "—"
+                      )}
+                    </div>
+                  </div>
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                     <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Timestamps</div>
                     <div className="mt-2 text-xs text-slate-600">Started {formatTimestamp(job.startedAt) ?? "Unknown"}</div>

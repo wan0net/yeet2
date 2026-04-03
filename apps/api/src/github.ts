@@ -40,6 +40,14 @@ function apiBaseUrlForHost(host: string): string {
   return `https://${host}/api/v3`;
 }
 
+function htmlBaseUrlForHost(host: string): string {
+  if (host === "www.github.com") {
+    return "https://github.com";
+  }
+
+  return `https://${host}`;
+}
+
 export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositoryRef | null {
   const trimmed = repositoryUrl.trim();
   if (!trimmed) {
@@ -64,7 +72,7 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
       owner,
       repo,
       apiBaseUrl: apiBaseUrlForHost(host),
-      htmlBaseUrl: `https://${host}`
+      htmlBaseUrl: htmlBaseUrlForHost(host)
     };
   }
 
@@ -81,11 +89,24 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
       owner,
       repo,
       apiBaseUrl: apiBaseUrlForHost(url.host),
-      htmlBaseUrl: `${url.protocol}//${url.host}`
+      htmlBaseUrl: htmlBaseUrlForHost(url.host)
     };
   } catch {
     return null;
   }
+}
+
+export function buildGitHubRepositoryUrl(repository: GitHubRepositoryRef): string {
+  return `${repository.htmlBaseUrl.replace(/\/+$/g, "")}/${repository.owner}/${repository.repo}`;
+}
+
+export function buildGitHubCompareUrl(input: {
+  repository: GitHubRepositoryRef;
+  baseBranch: string;
+  compareBranch: string;
+}): string {
+  const repositoryUrl = buildGitHubRepositoryUrl(input.repository);
+  return `${repositoryUrl}/compare/${encodeURIComponent(input.baseBranch)}...${encodeURIComponent(input.compareBranch)}`;
 }
 
 export function buildGitHubIssueBody(input: {

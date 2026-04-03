@@ -13,7 +13,13 @@ import type {
 } from "@yeet2/db";
 
 import { prisma } from "./db";
-import { buildGitHubIssueBody, createGitHubIssue, parseGitHubRepositoryUrl, GitHubIssueError } from "./github";
+import {
+  buildGitHubCompareUrl,
+  buildGitHubIssueBody,
+  createGitHubIssue,
+  parseGitHubRepositoryUrl,
+  GitHubIssueError
+} from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
 
@@ -33,6 +39,7 @@ export interface ProjectJobSummary {
   executorType: string;
   workspacePath: string;
   branchName: string;
+  githubCompareUrl: string | null;
   status: ProjectJobStatus;
   logPath: string | null;
   artifactSummary: string | null;
@@ -90,6 +97,9 @@ export interface ProjectSummary {
   id: string;
   name: string;
   repoUrl: string;
+  githubRepoOwner: string | null;
+  githubRepoName: string | null;
+  githubRepoUrl: string | null;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionInspection["status"];
@@ -453,6 +463,7 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     executorType: job.executorType,
     workspacePath: job.workspacePath,
     branchName: job.branchName,
+    githubCompareUrl: job.githubCompareUrl ?? null,
     status: job.status,
     logPath: job.logPath ?? null,
     artifactSummary: job.artifactSummary ?? null,
@@ -613,6 +624,9 @@ function toProjectSummary(project: ProjectWithRelations, constitution: Constitut
     id: project.id,
     name: project.name,
     repoUrl: project.repoUrl ?? "",
+    githubRepoOwner: project.githubRepoOwner ?? null,
+    githubRepoName: project.githubRepoName ?? null,
+    githubRepoUrl: project.githubRepoUrl ?? null,
     defaultBranch: project.defaultBranch,
     localPath: project.localPath,
     constitutionStatus: constitution.status,
@@ -701,6 +715,40 @@ function buildConstitutionData(inspection: ConstitutionInspection) {
     parseStatus: inspection.status,
     lastIndexedAt: new Date()
   };
+}
+
+function resolveProjectGitHubMetadata(repoUrl: string | null | undefined): {
+  githubRepoOwner: string | null;
+  githubRepoName: string | null;
+  githubRepoUrl: string | null;
+} {
+  const repository = repoUrl ? parseGitHubRepositoryUrl(repoUrl) : null;
+  if (!repository) {
+    return {
+      githubRepoOwner: null,
+      githubRepoName: null,
+      githubRepoUrl: null
+    };
+  }
+
+  return {
+    githubRepoOwner: repository.owner,
+    githubRepoName: repository.repo,
+    githubRepoUrl: `${repository.htmlBaseUrl.replace(/\/+$/g, "")}/${repository.owner}/${repository.repo}`
+  };
+}
+
+function resolveProjectGitHubCompareUrl(project: ProjectWithRelations, branchName: string): string | null {
+  const repository = project.repoUrl ? parseGitHubRepositoryUrl(project.repoUrl) : null;
+  if (!repository) {
+    return null;
+  }
+
+  return buildGitHubCompareUrl({
+    repository,
+    baseBranch: project.defaultBranch,
+    compareBranch: branchName
+  });
 }
 
 function isPlanningComplete(missions: ProjectMissionSummary[]): boolean {
@@ -1028,6 +1076,7 @@ async function persistDispatchedJob(
   const taskStatus = taskStatusFromJobStatus(jobStatus, attempts, task.agentRole);
   const startedAt = parseDate(executorJob.started_at) ?? new Date();
   const completedAt = jobStatus === "queued" || jobStatus === "running" ? null : parseDate(executorJob.completed_at) ?? startedAt;
+  const githubCompareUrl = resolveProjectGitHubCompareUrl(project, executorJob.branch_name);
 
   const createdJob = await prisma.job.create({
     data: {
@@ -1036,6 +1085,7 @@ async function persistDispatchedJob(
       executorType: executorJob.executor_type,
       workspacePath: executorJob.workspace_path,
       branchName: executorJob.branch_name,
+      githubCompareUrl,
       status: jobStatus,
       logPath: executorJob.log_path ?? null,
       artifactSummary: executorJob.artifact_summary ?? null,
@@ -1436,6 +1486,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         data: {
           name: input.name,
           repoUrl: registration.repoUrl ?? existing.repoUrl ?? null,
+          ...resolveProjectGitHubMetadata(registration.repoUrl ?? existing.repoUrl ?? null),
           defaultBranch: input.defaultBranch,
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
@@ -1451,6 +1502,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         data: {
           name: input.name,
           repoUrl: registration.repoUrl,
+          ...resolveProjectGitHubMetadata(registration.repoUrl),
           defaultBranch: input.defaultBranch,
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
@@ -1466,6 +1518,9 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
       id: project.id,
       name: project.name,
       repoUrl: project.repoUrl ?? "",
+      githubRepoOwner: project.githubRepoOwner ?? null,
+      githubRepoName: project.githubRepoName ?? null,
+      githubRepoUrl: project.githubRepoUrl ?? null,
       defaultBranch: project.defaultBranch,
       localPath: project.localPath,
       constitutionStatus: inspection.status,

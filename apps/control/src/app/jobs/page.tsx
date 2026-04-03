@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { flattenProjectJobs } from "../../lib/jobs";
-import { githubBranchUrl, parseGitHubRepoUrl } from "../../lib/projects";
+import { jobGitHubCompareUrl, parseGitHubRepoUrl, projectGitHubRepoInfo } from "../../lib/projects";
 import type { ProjectRecord } from "../../lib/projects";
 
 export const dynamic = "force-dynamic";
@@ -123,8 +123,8 @@ export default async function JobsPage() {
         ) : (
           <div className="space-y-3">
             {jobs.map(({ job, project, mission, task }) => {
-              const githubRepo = parseGitHubRepoUrl(project.repoUrl);
-              const githubBranchLink = githubRepo ? githubBranchUrl(project.repoUrl, job.branchName) : null;
+              const githubRepo = projectGitHubRepoInfo(project) ?? parseGitHubRepoUrl(project.repoUrl);
+              const githubBranchLink = jobGitHubCompareUrl(job, project.repoUrl, job.branchName);
 
               return (
                 <article key={job.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
@@ -144,7 +144,7 @@ export default async function JobsPage() {
                           Repo:{" "}
                           {githubRepo ? (
                             <a className="font-medium text-slate-700 underline-offset-4 hover:underline" href={githubRepo.webUrl} rel="noreferrer" target="_blank">
-                              {githubRepo.owner}/{githubRepo.repo}
+                              {githubRepo.owner && githubRepo.repo ? `${githubRepo.owner}/${githubRepo.repo}` : project.repoUrl || "Unknown"}
                             </a>
                           ) : (
                             <span className="font-medium text-slate-700">{project.repoUrl || "Unknown"}</span>

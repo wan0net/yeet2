@@ -44,6 +44,9 @@ export interface Project {
   id: string;
   name: string;
   repoUrl?: string | null;
+  githubRepoOwner?: string | null;
+  githubRepoName?: string | null;
+  githubRepoUrl?: string | null;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionStatus;
@@ -217,6 +220,7 @@ export interface Job {
   executorType: string;
   workspacePath: string;
   branchName: string;
+  githubCompareUrl?: string | null;
   status: JobStatus;
   logPath?: string | null;
   artifactSummary?: string | null;
