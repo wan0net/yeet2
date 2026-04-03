@@ -1,0 +1,142 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yeet2}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yeet2}
+      POSTGRES_DB: ${POSTGRES_DB:-yeet2}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yeet2} -d ${POSTGRES_DB:-yeet2}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.node
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-yeet2}:${POSTGRES_PASSWORD:-yeet2}@postgres:5432/${POSTGRES_DB:-yeet2}?schema=public
+    command: ["/bin/sh", "/app/infra/docker/run-migrate.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  brain:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.brain
+    environment:
+      YEET2_HOST: 0.0.0.0
+      BRAIN_PORT: 3002
+      HOME: /var/lib/yeet2/brain-home
+      CREWAI_STORAGE_DIR: /var/lib/yeet2/brain-crewai
+      CREWAI_DISABLE_TELEMETRY: "true"
+      YEET2_BRAIN_PLANNER_BACKEND: ${YEET2_BRAIN_PLANNER_BACKEND:-auto}
+      YEET2_BRAIN_CREWAI_ENABLED: ${YEET2_BRAIN_CREWAI_ENABLED:-false}
+      YEET2_BRAIN_CREWAI_MODEL: ${YEET2_BRAIN_CREWAI_MODEL:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "${BRAIN_PORT:-3002}:3002"
+    volumes:
+      - brain_data:/var/lib/yeet2
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.node
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-yeet2}:${POSTGRES_PASSWORD:-yeet2}@postgres:5432/${POSTGRES_DB:-yeet2}?schema=public
+      REDIS_URL: redis://redis:6379
+      YEET2_BRAIN_BASE_URL: http://brain:3002
+      YEET2_EXECUTOR_BASE_URL: http://executor:8021
+      YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: ["pnpm", "--filter", "@yeet2/api", "start"]
+    ports:
+      - "${API_PORT:-3001}:3001"
+    volumes:
+      - projects_data:/var/lib/yeet2/projects
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      brain:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  control:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.node
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      YEET2_API_BASE_URL: http://api:3001
+    command: ["/bin/sh", "-lc", "pnpm --filter @yeet2/control start -- --hostname 0.0.0.0 --port 3000"]
+    ports:
+      - "${CONTROL_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+  executor:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.executor
+    environment:
+      YEET2_HOST: 0.0.0.0
+      EXECUTOR_PORT: 8021
+      YEET2_EXECUTOR_API_BASE_URL: http://api:3001
+      YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
+      YEET2_EXECUTOR_BASE_DIR: /var/lib/yeet2/executor
+      YEET2_EXECUTOR_MODE: ${YEET2_EXECUTOR_MODE:-openhands}
+      YEET2_EXECUTOR_SANDBOX_MODE: ${YEET2_EXECUTOR_SANDBOX_MODE:-off}
+      YEET2_EXECUTOR_SANDBOX_BIN: ${YEET2_EXECUTOR_SANDBOX_BIN:-srt}
+      YEET2_OPENHANDS_COMMAND: ${YEET2_OPENHANDS_COMMAND:-}
+      YEET2_OPENHANDS_EXTRA_ARGS: ${YEET2_OPENHANDS_EXTRA_ARGS:-}
+      YEET2_OPENHANDS_PYTHON: ${YEET2_OPENHANDS_PYTHON:-3.12}
+      YEET2_OPENHANDS_PACKAGE: ${YEET2_OPENHANDS_PACKAGE:-openhands}
+      YEET2_OPENHANDS_BIN: ${YEET2_OPENHANDS_BIN:-openhands}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    ports:
+      - "${EXECUTOR_PORT:-3003}:8021"
+    volumes:
+      - projects_data:/var/lib/yeet2/projects
+      - executor_data:/var/lib/yeet2/executor
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  redis_data:
+  projects_data:
+  executor_data:
+  brain_data:

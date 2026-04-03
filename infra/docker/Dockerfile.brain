@@ -1,0 +1,20 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY apps/brain /app/apps/brain
+
+RUN pip install --no-cache-dir -e '/app/apps/brain[crewai]'
+
+ENV HOME=/var/lib/yeet2/brain-home
+ENV CREWAI_STORAGE_DIR=/var/lib/yeet2/brain-crewai
+ENV CREWAI_DISABLE_TELEMETRY=true
+
+CMD ["python", "-m", "yeet2_brain"]
