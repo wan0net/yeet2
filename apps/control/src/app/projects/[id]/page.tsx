@@ -43,39 +43,6 @@ import { ProjectRolesEditor } from "./project-roles-editor";
 
 export const dynamic = "force-dynamic";
 
-const roleVisuals: Record<string, { accent: string; dot: string; stage: string }> = {
-  planner: {
-    accent: "border-cyan-200 bg-cyan-50 text-cyan-900",
-    dot: "bg-cyan-400",
-    stage: "Briefing"
-  },
-  architect: {
-    accent: "border-indigo-200 bg-indigo-50 text-indigo-900",
-    dot: "bg-indigo-400",
-    stage: "Blueprints"
-  },
-  implementer: {
-    accent: "border-emerald-200 bg-emerald-50 text-emerald-900",
-    dot: "bg-emerald-400",
-    stage: "Build"
-  },
-  qa: {
-    accent: "border-amber-200 bg-amber-50 text-amber-900",
-    dot: "bg-amber-400",
-    stage: "Proving"
-  },
-  reviewer: {
-    accent: "border-rose-200 bg-rose-50 text-rose-900",
-    dot: "bg-rose-400",
-    stage: "Gate"
-  },
-  visual: {
-    accent: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900",
-    dot: "bg-fuchsia-400",
-    stage: "Polish"
-  }
-};
-
 function roleStatusCopy(status: "blocked" | "active" | "queued" | "idle"): string {
   switch (status) {
     case "blocked":
@@ -291,25 +258,24 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {agentView.roles.map((role) => {
-                const visual = roleVisuals[role.role] ?? roleVisuals.implementer;
                 const latestJob = role.latestJob?.job ?? null;
                 const currentTask = role.currentTask?.task ?? null;
                 const nextTask = role.nextTask?.task ?? null;
                 const latestJobLink = latestJob ? jobGitHubCompareUrl(latestJob, project.repoUrl, latestJob.branchName) ?? githubRepo?.webUrl ?? null : null;
 
                 return (
-                  <article key={role.role} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
+                  <article key={role.roleKey} className="rounded-3xl border border-white/70 bg-white/90 p-4 shadow-sm shadow-slate-200/70">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <span className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${visual.accent}`}>
-                          <span className={`h-3 w-3 rounded-full ${visual.dot}`} />
+                        <span className={`flex h-10 w-10 items-center justify-center rounded-2xl border ${role.visual.accent}`}>
+                          <span className={`h-3 w-3 rounded-full ${role.visual.dot}`} />
                         </span>
                         <div>
                           <div className="text-sm font-semibold text-slate-900">{role.label}</div>
-                          <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{visual.stage}</div>
+                          <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{role.visual.stage}</div>
                         </div>
                       </div>
-                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${visual.accent}`}>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${role.visual.accent}`}>
                         {roleStatusCopy(role.status)}
                       </span>
                     </div>
@@ -359,7 +325,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
+              <div className="rounded-3xl border border-slate-200 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Floor pulse</div>
@@ -371,17 +337,16 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               </div>
               <div className="mt-4 space-y-3">
                 {agentView.roles.map((role, index) => {
-                  const visual = roleVisuals[role.role] ?? roleVisuals.implementer;
                   return (
-                    <div key={role.role} className="flex items-center gap-3">
+                    <div key={role.roleKey} className="flex items-center gap-3">
                       <div className="flex w-7 flex-col items-center">
-                        <span className={`h-3 w-3 rounded-full ${visual.dot}`} />
+                        <span className={`h-3 w-3 rounded-full ${role.visual.dot}`} />
                         {index < agentView.roles.length - 1 ? <span className="mt-1 h-8 w-px bg-slate-200" /> : null}
                       </div>
                       <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-sm font-medium text-slate-900">{role.label}</span>
-                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${visual.accent}`}>
+                          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] ${role.visual.accent}`}>
                             {roleStatusCopy(role.status)}
                           </span>
                         </div>

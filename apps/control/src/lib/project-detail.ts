@@ -1,4 +1,12 @@
-import type { ConstitutionStatus, ProjectBlockerRecord, ProjectJobRecord, ProjectMissionRecord, ProjectRecord, ProjectTaskRecord } from "./projects";
+import type {
+  ConstitutionStatus,
+  ProjectBlockerRecord,
+  ProjectJobRecord,
+  ProjectMissionRecord,
+  ProjectRecord,
+  ProjectRoleDefinition,
+  ProjectTaskRecord
+} from "./projects";
 
 export function statusLabel(status: ConstitutionStatus): string {
   switch (status) {
@@ -280,13 +288,20 @@ export function groupTasksByState(project: ProjectRecord): Array<{
 }
 
 export interface AgentPresenceRoleSnapshot {
-  role: string;
+  roleKey: string;
   label: string;
+  visual: AgentPresenceRoleVisuals;
   currentTask: { mission: ProjectMissionRecord; task: ProjectTaskRecord } | null;
   nextTask: { mission: ProjectMissionRecord; task: ProjectTaskRecord } | null;
   latestJob: { mission: ProjectMissionRecord; task: ProjectTaskRecord; job: ProjectJobRecord } | null;
   blockerCount: number;
   status: "blocked" | "active" | "queued" | "idle";
+}
+
+export interface AgentPresenceRoleVisuals {
+  accent: string;
+  dot: string;
+  stage: string;
 }
 
 export interface AgentPresenceOverview {
@@ -300,17 +315,41 @@ export interface AgentPresenceOverview {
   openBlockerCount: number;
 }
 
-const AGENT_ROLE_ORDER = [
-  { role: "planner", label: "Planner" },
-  { role: "architect", label: "Architect" },
-  { role: "implementer", label: "Implementer" },
-  { role: "qa", label: "QA" },
-  { role: "reviewer", label: "Reviewer" },
-  { role: "visual", label: "Visual" }
-] as const;
+const AGENT_ROLE_VISUALS: Record<string, AgentPresenceRoleVisuals> = {
+  planner: {
+    accent: "border-cyan-200 bg-cyan-50 text-cyan-900",
+    dot: "bg-cyan-400",
+    stage: "Briefing"
+  },
+  architect: {
+    accent: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    dot: "bg-indigo-400",
+    stage: "Blueprints"
+  },
+  implementer: {
+    accent: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    dot: "bg-emerald-400",
+    stage: "Build"
+  },
+  qa: {
+    accent: "border-amber-200 bg-amber-50 text-amber-900",
+    dot: "bg-amber-400",
+    stage: "Proving"
+  },
+  reviewer: {
+    accent: "border-rose-200 bg-rose-50 text-rose-900",
+    dot: "bg-rose-400",
+    stage: "Gate"
+  },
+  visual: {
+    accent: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-900",
+    dot: "bg-fuchsia-400",
+    stage: "Polish"
+  }
+};
 
 function normalizedRole(value: string): string {
-  return value.trim().toLowerCase();
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function taskSortScore(task: ProjectTaskRecord): number {
@@ -337,6 +376,19 @@ function taskSortScore(task: ProjectTaskRecord): number {
   }
 }
 
+function sortRoleDefinitions(roleDefinitions: ProjectRoleDefinition[]): ProjectRoleDefinition[] {
+  return [...roleDefinitions].sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label) || left.roleKey.localeCompare(right.roleKey));
+}
+
+function roleMatchesTask(task: ProjectTaskRecord, definition: ProjectRoleDefinition): boolean {
+  const taskRole = normalizedRole(task.agentRole);
+  const roleKey = normalizedRole(definition.roleKey);
+  const definitionId = normalizedRole(definition.id);
+  const definitionLabel = normalizedRole(definition.label);
+
+  return taskRole === roleKey || taskRole === definitionId || taskRole === definitionLabel;
+}
+
 function jobTimestamp(job: ProjectJobRecord): string {
   return job.startedAt ?? job.completedAt ?? "";
 }
@@ -345,15 +397,27 @@ function missionTaskEntries(project: ProjectRecord): Array<{ mission: ProjectMis
   return project.missions.flatMap((mission) => mission.tasks.map((task) => ({ mission, task })));
 }
 
+function agentRoleVisuals(roleKey: string, label: string): AgentPresenceRoleVisuals {
+  return AGENT_ROLE_VISUALS[normalizedRole(roleKey)] ?? {
+    accent: "border-slate-200 bg-slate-50 text-slate-800",
+    dot: "bg-slate-400",
+    stage: label || "General"
+  };
+}
+
 export function agentPresenceOverview(project: ProjectRecord): AgentPresenceOverview {
   const mission = activeMission(project);
   const missionTasks = mission?.tasks ?? [];
   const completedMissionTasks = missionTasks.filter((task) => ["completed", "done"].includes(task.status.toLowerCase())).length;
   const openBlockers = sortBlockers(project.blockers).filter((blocker) => blocker.status.toLowerCase() === "open");
   const taskEntries = missionTaskEntries(project);
+  const configuredRoleDefinitions = sortRoleDefinitions(project.roleDefinitions);
 
-  const roles = AGENT_ROLE_ORDER.map(({ role, label }) => {
-    const roleEntries = taskEntries.filter(({ task }) => normalizedRole(task.agentRole) === role);
+  const roles = configuredRoleDefinitions.map((definition) => {
+    const roleKey = normalizedRole(definition.roleKey || definition.id || definition.label);
+    const label = definition.label || definition.roleKey || definition.id || "Role";
+    const visual = agentRoleVisuals(roleKey, label);
+    const roleEntries = taskEntries.filter(({ task }) => roleMatchesTask(task, definition));
     const sortedRoleEntries = [...roleEntries].sort(
       (left, right) =>
         taskSortScore(left.task) - taskSortScore(right.task) ||
@@ -390,8 +454,9 @@ export function agentPresenceOverview(project: ProjectRecord): AgentPresenceOver
     }
 
     return {
-      role,
+      roleKey,
       label,
+      visual,
       currentTask,
       nextTask,
       latestJob: latestRoleJob,
