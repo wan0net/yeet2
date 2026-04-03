@@ -26,6 +26,7 @@ export type ProjectBranchCleanupMode = "manual" | "after_merge";
 export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "failed";
 export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
+export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy";
 
 export interface WorkerLeaseSummary {
   projectId?: string | null;
@@ -36,6 +37,20 @@ export interface WorkerLeaseSummary {
   taskTitle?: string | null;
   acquiredAt?: string | null;
   expiresAt?: string | null;
+}
+
+export interface ProjectDecisionLogSummary {
+  id: string;
+  projectId: string;
+  missionId?: string | null;
+  taskId?: string | null;
+  jobId?: string | null;
+  blockerId?: string | null;
+  kind: DecisionLogKind | string;
+  actor: string;
+  summary: string;
+  detail?: unknown | null;
+  createdAt: string;
 }
 
 export interface ConstitutionFileState {
@@ -103,6 +118,7 @@ export interface ProjectSummary {
   project: Project;
   constitution: ConstitutionSummary;
   roleDefinitions?: ProjectRoleDefinition[];
+  decisionLogs: ProjectDecisionLogSummary[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;
@@ -214,6 +230,7 @@ export interface ProjectDetailSummary {
   project: Project;
   constitution: ConstitutionSummary;
   roleDefinitions?: ProjectRoleDefinition[];
+  decisionLogs: ProjectDecisionLogSummary[];
   dispatchableRoles?: DispatchableAgentRole[];
   nextDispatchableTaskId?: string | null;
   nextDispatchableTaskRole?: DispatchableAgentRole | null;

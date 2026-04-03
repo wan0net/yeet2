@@ -9,6 +9,7 @@ import {
   recordProjectAutonomyRun,
   type ProjectSummary
 } from "./projects";
+import { recordDecisionLog } from "./decision-logs";
 
 export type AutonomyLoopMode = "manual" | "supervised" | "autonomous";
 
@@ -281,6 +282,21 @@ function buildTelemetry(
   };
 }
 
+function shouldRecordAutonomyDecisionLog(
+  lastAction: AutonomyLoopTelemetry["lastAction"],
+  lastOutcome: AutonomyLoopTelemetry["lastOutcome"]
+): boolean {
+  return (
+    lastOutcome === "planned" ||
+    lastOutcome === "advanced" ||
+    lastOutcome === "created_pr" ||
+    lastOutcome === "merged" ||
+    lastOutcome === "pr_skipped" ||
+    lastOutcome === "merge_skipped" ||
+    lastOutcome === "error"
+  );
+}
+
 class AutonomyLoopManager {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
@@ -366,6 +382,7 @@ class AutonomyLoopManager {
 
   private async processProject(project: ProjectSummary): Promise<void> {
     if (project.autonomyMode === "manual") {
+      await this.persistTelemetry(project, "skip", "skipped", "Autonomy mode is manual");
       return;
     }
 
@@ -460,6 +477,29 @@ class AutonomyLoopManager {
         lastAutonomyActor: resolveAutonomyLoopActor(),
         nextAutonomyRunAt: nextRunAt
       });
+
+      if (shouldRecordAutonomyDecisionLog(lastAction, lastOutcome)) {
+        try {
+          await recordDecisionLog({
+            projectId: project.id,
+            missionId: project.nextDispatchableTaskId ? null : project.missions[0]?.id ?? null,
+            taskId: project.nextDispatchableTaskId ?? project.missions[0]?.tasks[0]?.id ?? null,
+            kind: "autonomy",
+            actor: resolveAutonomyLoopActor(),
+            summary: `Autonomy ${lastAction} ${lastOutcome}`,
+            detail: {
+              action: lastAction,
+              outcome: lastOutcome,
+              mode: project.autonomyMode,
+              message,
+              nextDispatchableTaskId: project.nextDispatchableTaskId,
+              nextDispatchableTaskRole: project.nextDispatchableTaskRole
+            }
+          });
+        } catch (error) {
+          this.logger.error({ error, projectId: project.id }, "Decision log write failed");
+        }
+      }
 
       recordAutonomyLoopTelemetry(buildTelemetry(project, runAt, lastAction, lastOutcome, message));
     } catch (error) {

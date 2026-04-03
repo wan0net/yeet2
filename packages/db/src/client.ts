@@ -9,6 +9,7 @@ import type {
   ConstitutionSummary,
   MissionSummary,
   ProjectDetailSummary,
+  ProjectDecisionLogSummary,
   ProjectMissionTaskSummary,
   ProjectSummary,
   TaskSummary
@@ -58,6 +59,7 @@ export function toProjectSummary(
       updatedAt: project.updatedAt.toISOString()
     },
     constitution,
+    decisionLogs: [] as ProjectDecisionLogSummary[],
     ...counts
   };
 }
@@ -111,6 +113,7 @@ export function toProjectDetailSummary(
       updatedAt: project.updatedAt.toISOString()
     },
     constitution,
+    decisionLogs: [] as ProjectDecisionLogSummary[],
     missions,
     tasks,
     ...counts

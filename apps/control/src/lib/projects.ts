@@ -111,6 +111,21 @@ export interface ProjectBlockerRecord {
   resolvedAt: string | null;
 }
 
+export interface ProjectDecisionLogRecord {
+  id: string;
+  eventType: string;
+  title: string;
+  summary: string | null;
+  actor: string | null;
+  createdAt: string | null;
+  projectId: string | null;
+  missionId: string | null;
+  taskId: string | null;
+  jobId: string | null;
+  blockerId: string | null;
+  referenceUrl: string | null;
+}
+
 export interface ProjectMissionRecord {
   id: string;
   projectId: string;
@@ -138,6 +153,7 @@ export interface ProjectRecord {
   autonomy: ProjectAutonomyState;
   roleDefinitions: ProjectRoleDefinition[];
   missions: ProjectMissionRecord[];
+  decisionLogs: ProjectDecisionLogRecord[];
   dispatchableRoles?: string[];
   nextDispatchableTaskId?: string;
   nextDispatchableTaskRole?: string;
@@ -631,6 +647,70 @@ function normalizePlanningProvenanceValue(...values: unknown[]): PlanningProvena
   return "unknown";
 }
 
+export function decisionLogLabel(value: string): string {
+  switch (value.trim().toLowerCase()) {
+    case "planning":
+    case "plan":
+    case "mission_planning":
+      return "Planning";
+    case "dispatch":
+    case "dispatching":
+    case "job_dispatch":
+      return "Dispatch";
+    case "pr":
+    case "pull_request":
+    case "pullrequest":
+      return "PR";
+    case "merge":
+    case "merged":
+      return "Merge";
+    case "autonomy":
+    case "autonomous":
+      return "Autonomy";
+    case "review":
+    case "approval":
+    case "human_review":
+      return "Review";
+    case "blocker":
+    case "blocked":
+      return "Blocker";
+    default:
+      return value || "Event";
+  }
+}
+
+export function decisionLogTone(value: string): string {
+  switch (value.trim().toLowerCase()) {
+    case "planning":
+    case "plan":
+    case "mission_planning":
+      return "border-cyan-200 bg-cyan-50 text-cyan-800";
+    case "dispatch":
+    case "dispatching":
+    case "job_dispatch":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "pr":
+    case "pull_request":
+    case "pullrequest":
+      return "border-indigo-200 bg-indigo-50 text-indigo-800";
+    case "merge":
+    case "merged":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    case "autonomy":
+    case "autonomous":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "review":
+    case "approval":
+    case "human_review":
+      return "border-rose-200 bg-rose-50 text-rose-800";
+    case "blocker":
+    case "blocked":
+      return "border-orange-200 bg-orange-50 text-orange-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
 function stripGitSuffix(value: string): string {
   return value.endsWith(".git") ? value.slice(0, -4) : value;
 }
@@ -1025,6 +1105,47 @@ function normalizeBlockerRecord(value: unknown): ProjectBlockerRecord | null {
   };
 }
 
+function normalizeDecisionLogRecord(value: unknown): ProjectDecisionLogRecord | null {
+  const raw = asRecord(value);
+  const metadata = asRecord(raw.metadata ?? raw.meta ?? raw.data);
+  const eventType = stringValue(
+    raw.eventType,
+    raw.event_type,
+    raw.kind,
+    raw.category,
+    raw.type,
+    metadata.eventType,
+    metadata.event_type,
+    metadata.kind,
+    metadata.category,
+    metadata.type
+  ).toLowerCase();
+  const title = stringValue(raw.title, raw.label, raw.name, raw.eventTitle, raw.event_title, metadata.title, metadata.label);
+  const summary = stringValue(raw.summary, raw.message, raw.description, raw.details, raw.note, metadata.summary, metadata.message, metadata.description) || null;
+
+  if (!eventType && !title && !summary) {
+    return null;
+  }
+
+  const actor = stringValue(raw.actor, raw.actorName, raw.actor_name, raw.createdBy, raw.created_by, metadata.actor, metadata.actorName, metadata.actor_name) || null;
+  const createdAt = stringValue(raw.createdAt, raw.created_at, raw.timestamp, raw.time, metadata.createdAt, metadata.created_at, metadata.timestamp, metadata.time) || null;
+
+  return {
+    id: stringValue(raw.id, raw.logId, raw.log_id, raw.decisionId, raw.decision_id) || `decision-${Math.random().toString(36).slice(2, 8)}`,
+    eventType: eventType || "unknown",
+    title: title || decisionLogLabel(eventType || "unknown"),
+    summary,
+    actor,
+    createdAt,
+    projectId: stringValue(raw.projectId, raw.project_id, metadata.projectId, metadata.project_id) || null,
+    missionId: stringValue(raw.missionId, raw.mission_id, metadata.missionId, metadata.mission_id) || null,
+    taskId: stringValue(raw.taskId, raw.task_id, metadata.taskId, metadata.task_id) || null,
+    jobId: stringValue(raw.jobId, raw.job_id, metadata.jobId, metadata.job_id) || null,
+    blockerId: stringValue(raw.blockerId, raw.blocker_id, metadata.blockerId, metadata.blocker_id) || null,
+    referenceUrl: stringValue(raw.referenceUrl, raw.reference_url, raw.url, raw.link, metadata.referenceUrl, metadata.reference_url, metadata.url, metadata.link) || null
+  };
+}
+
 function normalizeMissionRecord(value: unknown): ProjectMissionRecord | null {
   const raw = asRecord(value);
   const title = stringValue(raw.title);
@@ -1074,6 +1195,25 @@ function normalizeMissions(raw: RawRecord): ProjectMissionRecord[] {
             : [];
 
   return candidates.map(normalizeMissionRecord).filter((entry): entry is ProjectMissionRecord => entry !== null);
+}
+
+function normalizeDecisionLogs(raw: RawRecord): ProjectDecisionLogRecord[] {
+  const candidates = Array.isArray(raw.decisionLogs)
+    ? raw.decisionLogs
+    : Array.isArray(raw.decision_logs)
+      ? raw.decision_logs
+      : Array.isArray(raw.decisions)
+        ? raw.decisions
+        : Array.isArray(raw.decisionHistory)
+          ? raw.decisionHistory
+          : Array.isArray(raw.decision_history)
+            ? raw.decision_history
+            : [];
+
+  return candidates
+    .map(normalizeDecisionLogRecord)
+    .filter((entry): entry is ProjectDecisionLogRecord => entry !== null)
+    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
 }
 
 function normalizeBlockers(raw: RawRecord): ProjectBlockerRecord[] {
@@ -1137,6 +1277,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     autonomy,
     roleDefinitions: normalizeProjectRoleDefinitions(raw),
     missions,
+    decisionLogs: normalizeDecisionLogs(raw),
     dispatchableRoles: stringArrayValue(raw.dispatchableRoles ?? raw.dispatchable_roles),
     nextDispatchableTaskId: stringValue(raw.nextDispatchableTaskId, raw.next_dispatchable_task_id) || undefined,
     nextDispatchableTaskRole: stringValue(raw.nextDispatchableTaskRole, raw.next_dispatchable_task_role) || undefined,

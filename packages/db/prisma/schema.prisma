@@ -131,6 +131,7 @@ model Project {
   updatedAt          DateTime            @updatedAt @map("updated_at")
   constitution      Constitution?
   roleDefinitions    ProjectRoleDefinition[]
+  decisionLogs       DecisionLog[]
   missions           Mission[]
 
   @@map("projects")
@@ -152,6 +153,28 @@ model ProjectRoleDefinition {
 
   @@unique([projectId, roleKey])
   @@map("project_role_definitions")
+}
+
+model DecisionLog {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  missionId   String?  @map("mission_id")
+  taskId      String?  @map("task_id")
+  jobId       String?  @map("job_id")
+  blockerId   String?  @map("blocker_id")
+  kind        String
+  actor       String
+  summary     String
+  detail      Json?    @map("detail")
+  createdAt   DateTime @default(now()) @map("created_at")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  mission     Mission? @relation(fields: [missionId], references: [id], onDelete: SetNull)
+  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  blocker     Blocker? @relation(fields: [blockerId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@map("decision_logs")
 }
 
 model Constitution {
@@ -181,6 +204,7 @@ model Mission {
   completedAt DateTime?     @map("completed_at")
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks       Task[]
+  decisionLogs DecisionLog[]
 
   @@map("missions")
 }
@@ -199,6 +223,7 @@ model Task {
   mission            Mission    @relation(fields: [missionId], references: [id], onDelete: Cascade)
   jobs               Job[]
   blockers           Blocker[]
+  decisionLogs       DecisionLog[]
 
   @@map("tasks")
 }
@@ -225,6 +250,7 @@ model Job {
   startedAt        DateTime? @map("started_at")
   completedAt      DateTime? @map("completed_at")
   task             Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  decisionLogs     DecisionLog[]
 
   @@map("jobs")
 }
@@ -260,6 +286,7 @@ model Blocker {
   createdAt      DateTime      @default(now()) @map("created_at")
   resolvedAt     DateTime?     @map("resolved_at")
   task           Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  decisionLogs   DecisionLog[]
 
   @@map("blockers")
 }

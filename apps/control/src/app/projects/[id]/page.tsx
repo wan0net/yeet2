@@ -33,6 +33,8 @@ import {
   jobGitHubPullRequestLifecycleTone,
   jobGitHubPullRequestLabel,
   parseGitHubRepoUrl,
+  decisionLogLabel,
+  decisionLogTone,
   planningProvenanceLabel,
   planningProvenanceTone,
   projectGitHubRepoInfo
@@ -234,6 +236,90 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
             No mission has been generated for this project yet.
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Recent decisions">
+        {project.decisionLogs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+            No decision log entries are recorded for this project yet.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Recent entries</div>
+                <div className="mt-1 text-2xl font-semibold text-slate-900">{project.decisionLogs.length}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Latest event</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">{decisionLogLabel(project.decisionLogs[0]?.eventType ?? "unknown")}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Most recent time</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">{formatTimestamp(project.decisionLogs[0]?.createdAt) ?? "Unknown"}</div>
+              </div>
+            </div>
+            {project.decisionLogs.slice(0, 6).map((entry) => (
+              <article key={entry.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-base font-semibold text-slate-900">{entry.title}</h2>
+                      <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${decisionLogTone(entry.eventType)}`}>
+                        {decisionLogLabel(entry.eventType)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      {entry.createdAt ? <span>Recorded {formatTimestamp(entry.createdAt)}</span> : null}
+                      {entry.actor ? <span>Actor: <span className="font-medium text-slate-700">{entry.actor}</span></span> : null}
+                      {entry.projectId ? <span>Project ref: <span className="font-medium text-slate-700">{entry.projectId}</span></span> : null}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-right text-xs text-slate-600">
+                    <div className="font-medium text-slate-800">Decision ID</div>
+                    <div className="mt-1 break-all font-mono">{entry.id}</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Summary</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-700">{entry.summary ?? "No summary captured."}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Links</div>
+                    <div className="mt-2 space-y-2 text-sm text-slate-700">
+                      {entry.missionId ? (
+                        <div>
+                          <span className="font-medium text-slate-800">Mission:</span> {entry.missionId}
+                        </div>
+                      ) : null}
+                      {entry.taskId ? (
+                        <div>
+                          <span className="font-medium text-slate-800">Task:</span> {entry.taskId}
+                        </div>
+                      ) : null}
+                      {entry.jobId ? (
+                        <div>
+                          <span className="font-medium text-slate-800">Job:</span> {entry.jobId}
+                        </div>
+                      ) : null}
+                      {entry.blockerId ? (
+                        <div>
+                          <span className="font-medium text-slate-800">Blocker:</span> {entry.blockerId}
+                        </div>
+                      ) : null}
+                      {entry.referenceUrl ? (
+                        <a className="inline-flex font-medium text-slate-700 underline-offset-4 hover:underline" href={entry.referenceUrl} rel="noreferrer" target="_blank">
+                          Open reference
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
         )}
       </SectionCard>

@@ -13,6 +13,7 @@ import type {
 } from "@yeet2/db";
 import type {
   PlanningProvenance,
+  ProjectDecisionLogSummary,
   ProjectBranchCleanupMode,
   ProjectBranchCleanupState,
   ProjectAutonomyMode,
@@ -23,6 +24,7 @@ import type {
 } from "@yeet2/domain";
 
 import { prisma } from "./db";
+import { loadRecentDecisionLogs, recordDecisionLog } from "./decision-logs";
 import {
   buildGitHubCompareUrl,
   buildGitHubPullRequestBody,
@@ -156,6 +158,7 @@ export interface ProjectSummary {
   localPath: string;
   constitutionStatus: ConstitutionInspection["status"];
   constitution: ConstitutionInspection;
+  decisionLogs: ProjectDecisionLogSummary[];
   missions: ProjectMissionSummary[];
   dispatchableRoles: string[];
   nextDispatchableTaskId: string | null;
@@ -994,7 +997,8 @@ async function inspectProjectConstitution(project: Pick<ProjectWithRelations, "l
 function toProjectSummary(
   project: ProjectWithRelations,
   constitution: ConstitutionInspection,
-  roleDefinitions: ProjectRoleDefinitionRecord[]
+  roleDefinitions: ProjectRoleDefinitionRecord[],
+  decisionLogs: ProjectDecisionLogSummary[]
 ): ProjectSummary {
   const missions = [...project.missions]
     .sort((left, right) => (right.startedAt?.getTime() ?? 0) - (left.startedAt?.getTime() ?? 0))
@@ -1011,6 +1015,7 @@ function toProjectSummary(
     githubRepoName: project.githubRepoName ?? null,
     githubRepoUrl: project.githubRepoUrl ?? null,
     roleDefinitions: sortedRoleDefinitions.map(toProjectRoleDefinitionSummary),
+    decisionLogs,
     ...toAutonomySummary(project),
     defaultBranch: project.defaultBranch,
     localPath: project.localPath,
@@ -1032,7 +1037,8 @@ function toProjectSummary(
 async function hydrateProject(project: ProjectWithRelations): Promise<ProjectSummary> {
   const constitution = await inspectProjectConstitution(project);
   const roleDefinitions = await ensureProjectRoleDefinitions(project.id, project.roleDefinitions);
-  return toProjectSummary(project, constitution, roleDefinitions);
+  const decisionLogs = await loadRecentDecisionLogs(project.id, 5);
+  return toProjectSummary(project, constitution, roleDefinitions, decisionLogs);
 }
 
 async function loadProjectById(projectId: string): Promise<ProjectSummary | null> {
@@ -1728,6 +1734,21 @@ async function persistDispatchedJob(
     }
   });
 
+  await recordDecisionLog({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId: createdJob.id,
+    kind: "dispatch",
+    actor: executorJob.executor_type,
+    summary: `Dispatched task "${task.title}" to job ${createdJob.id}`,
+    detail: {
+      jobStatus,
+      branchName: executorJob.branch_name,
+      attempts
+    }
+  });
+
   return toProjectJobSummary(createdJob);
 }
 
@@ -1773,6 +1794,21 @@ async function createProjectJobPullRequest(
         // Keep PR reads resilient if blocker persistence is temporarily unavailable.
       }
     }
+
+    await recordDecisionLog({
+      projectId: project.id,
+      missionId: task.missionId,
+      taskId: task.id,
+      jobId: job.id,
+      kind: "pull_request",
+      actor: "api",
+      summary: `Refreshed pull request for job ${job.id}`,
+      detail: {
+        prNumber: updatedJob.githubPrNumber,
+        prUrl: updatedJob.githubPrUrl,
+        branchName: updatedJob.branchName
+      }
+    });
 
     return {
       project: hydratedProject,
@@ -1855,6 +1891,21 @@ async function createProjectJobPullRequest(
     },
     compareUrl ?? job.githubCompareUrl ?? null
   );
+
+  await recordDecisionLog({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId: job.id,
+    kind: "pull_request",
+    actor: "api",
+    summary: `Created pull request for job ${job.id}`,
+    detail: {
+      prNumber: pullRequest.number,
+      prUrl: pullRequest.htmlUrl,
+      branchName
+    }
+  });
 
   const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
   if (mission) {
@@ -1940,6 +1991,22 @@ async function mergeProjectJobPullRequest(
   }
 
   await persistJobPullRequestState(job.id, project, pullRequest, job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName));
+
+  await recordDecisionLog({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId: job.id,
+    kind: "merge",
+    actor: "api",
+    summary: `Merged pull request for job ${job.id}`,
+    detail: {
+      prNumber: pullRequest.number,
+      prUrl: pullRequest.htmlUrl,
+      branchName: job.branchName,
+      mergedAt: pullRequest.mergedAt ?? null
+    }
+  });
 
   const hydratedProject = await loadProjectById(project.id);
   if (!hydratedProject) {
@@ -2283,10 +2350,21 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
         blockerReason: task.blockerReason
       }))
     });
+    await recordDecisionLog({
+      projectId: project.id,
+      missionId: existingMission.id,
+      kind: "planning",
+      actor: draft.mission.planningProvenance,
+      summary: `Seeded planned tasks for mission "${existingMission.title}"`,
+      detail: {
+        taskCount: draft.tasks.length,
+        mode: "follow_on"
+      }
+    });
     return;
   }
 
-  await prisma.mission.create({
+  const createdMission = await prisma.mission.create({
     data: {
       projectId: project.id,
       title: missionTitle,
@@ -2306,6 +2384,20 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
           blockerReason: task.blockerReason
         }))
       }
+    },
+    select: { id: true, title: true }
+  });
+
+  await recordDecisionLog({
+    projectId: project.id,
+    missionId: createdMission.id,
+    kind: "planning",
+    actor: draft.mission.planningProvenance,
+    summary: `Planned mission "${createdMission.title}"`,
+    detail: {
+      taskCount: draft.tasks.length,
+      objective: missionObjective,
+      mode: "bootstrap"
     }
   });
 }
@@ -2412,6 +2504,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         createdAt: project.createdAt.toISOString(),
         updatedAt: project.updatedAt.toISOString()
       })),
+      decisionLogs: [],
       ...toAutonomySummary(project),
       defaultBranch: project.defaultBranch,
       localPath: project.localPath,
