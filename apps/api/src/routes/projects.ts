@@ -11,6 +11,7 @@ import type {
 import { RepositoryPathError } from "../constitution";
 import type { AutonomyLoopManager } from "../autonomy-loop";
 import { prisma } from "../db";
+import { listProjectDecisionLogs } from "../decision-logs";
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
 import {
   advanceProject,
@@ -38,6 +39,7 @@ import {
   ProjectPullRequestError,
   createProjectMessage,
   replaceProjectRoleDefinitions,
+  readProjectCostAnalysis,
   updateProjectAutonomy,
   type ProjectRegistrationInput
 } from "../projects";
@@ -453,6 +455,82 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
     }
 
     return project;
+  });
+
+  app.get("/projects/:projectId/cost-analysis", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    try {
+      const analysis = await readProjectCostAnalysis(projectId);
+      return reply.code(200).send({ analysis });
+    } catch (error) {
+      if (error instanceof ProjectRegistrationError || error instanceof ProjectRoleDefinitionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to load project cost analysis"
+      });
+    }
+  });
+
+  app.get("/projects/:projectId/activity", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const query = (request.query ?? {}) as {
+      take?: string | number;
+      kind?: string;
+      actor?: string;
+      mention?: string;
+      replyToId?: string;
+      reply_to_id?: string;
+    };
+
+    const take =
+      typeof query.take === "number"
+        ? query.take
+        : typeof query.take === "string" && query.take.trim()
+          ? Number(query.take)
+          : undefined;
+
+    try {
+      const activity = await listProjectDecisionLogs(projectId, {
+        take: Number.isFinite(take) ? Number(take) : undefined,
+        kind: typeof query.kind === "string" ? query.kind : null,
+        actor: typeof query.actor === "string" ? query.actor : null,
+        mention: typeof query.mention === "string" ? query.mention : null,
+        replyToId:
+          typeof query.replyToId === "string"
+            ? query.replyToId
+            : typeof query.reply_to_id === "string"
+              ? query.reply_to_id
+              : null
+      });
+      return reply.code(200).send({ activity });
+    } catch (error) {
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to load project activity"
+      });
+    }
   });
 
   app.put("/projects/:projectId/autonomy", async (request, reply) => {

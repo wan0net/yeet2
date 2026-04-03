@@ -12,6 +12,7 @@ import type {
   Task as DbTask
 } from "@yeet2/db";
 import type {
+  ProjectCostAnalysisSummary,
   OperatorGuidanceSummary,
   PlanningProvenance,
   ProjectApprovalAction,
@@ -42,6 +43,7 @@ import {
   type GitHubPullRequestDetails
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
+import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "./openrouter-models";
 import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
 
 export interface ProjectRegistrationInput {
@@ -94,6 +96,8 @@ export interface ProjectRoleDefinitionSummary {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ProjectCostAnalysisResponse extends ProjectCostAnalysisSummary {}
 
 export interface ProjectTaskSummary {
   id: string;
@@ -485,6 +489,35 @@ function recommendedRoleModel(roleKey: ProjectRoleKey): string | null {
   const envName = `YEET2_ROLE_MODEL_DEFAULT_${roleKey.toUpperCase()}`;
   const configured = normalizeOptionalString(process.env[envName]);
   return configured ?? RECOMMENDED_ROLE_MODELS[roleKey] ?? null;
+}
+
+async function loadProjectModelCatalog(project: Pick<ProjectWithRelations, "roleDefinitions">): Promise<{
+  models: Awaited<ReturnType<typeof fetchOpenRouterModelCatalog>>;
+  degraded: boolean;
+  warning: string | null;
+}> {
+  try {
+    return {
+      models: await fetchOpenRouterModelCatalog(),
+      degraded: false,
+      warning: null
+    };
+  } catch (error) {
+    if (!(error instanceof OpenRouterModelCatalogError)) {
+      throw error;
+    }
+
+    const fallbackModels = [
+      ...project.roleDefinitions.map((definition) => definition.model ?? "").filter(Boolean),
+      ...project.roleDefinitions.map((definition) => recommendedRoleModel(definition.roleKey)).filter((value): value is string => Boolean(value))
+    ];
+
+    return {
+      models: buildFallbackModelCatalog(fallbackModels),
+      degraded: true,
+      warning: error.message
+    };
+  }
 }
 
 type DispatchableTaskRole = (typeof DISPATCHABLE_TASK_ROLES)[number];
@@ -3240,6 +3273,70 @@ export async function listRegisteredProjects(): Promise<ProjectListResponse> {
 export async function getRegisteredProject(projectId: string): Promise<ProjectDetailResponse> {
   const project = await loadProjectById(projectId);
   return { project };
+}
+
+export async function readProjectCostAnalysis(projectId: string): Promise<ProjectCostAnalysisResponse> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectRoleDefinitionError("project_not_found", "Project not found", 404);
+  }
+
+  const catalog = await loadProjectModelCatalog(project);
+  const catalogById = new Map(catalog.models.map((model) => [model.id, model] as const));
+  const roles = project.roleDefinitions
+    .slice()
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, undefined, { sensitivity: "base" }))
+    .map((definition) => {
+      const explicitModel = normalizeOptionalString(definition.model);
+      const recommendedModel = recommendedRoleModel(definition.roleKey);
+      const effectiveModel = explicitModel ?? recommendedModel ?? null;
+      const modelSource: "explicit" | "recommended" | "unconfigured" = explicitModel
+        ? "explicit"
+        : effectiveModel
+          ? "recommended"
+          : "unconfigured";
+      const pricing = effectiveModel ? catalogById.get(effectiveModel) ?? null : null;
+
+      return {
+        roleDefinitionId: definition.id,
+        roleKey: definition.roleKey,
+        visualName: definition.label,
+        enabled: definition.enabled,
+        model: effectiveModel,
+        modelSource,
+        promptCostPerMillionUsd: pricing?.promptCostPerMillionUsd ?? null,
+        completionCostPerMillionUsd: pricing?.completionCostPerMillionUsd ?? null,
+        requestCostUsd: pricing?.requestCostUsd ?? null
+      };
+    });
+
+  const pricedRoles = roles.filter(
+    (role) =>
+      role.promptCostPerMillionUsd !== null ||
+      role.completionCostPerMillionUsd !== null ||
+      role.requestCostUsd !== null
+  );
+  const sumKnown = (values: Array<number | null | undefined>): number | null => {
+    const known = values.filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    if (!known.length) {
+      return null;
+    }
+
+    return known.reduce((total, value) => total + value, 0);
+  };
+
+  return {
+    projectId,
+    generatedAt: new Date().toISOString(),
+    degraded: catalog.degraded,
+    warning: catalog.warning,
+    roles,
+    enabledRoleCount: roles.filter((role) => role.enabled).length,
+    pricedRoleCount: pricedRoles.length,
+    promptCostPerMillionUsdTotal: sumKnown(roles.map((role) => role.promptCostPerMillionUsd)),
+    completionCostPerMillionUsdTotal: sumKnown(roles.map((role) => role.completionCostPerMillionUsd)),
+    requestCostUsdTotal: sumKnown(roles.map((role) => role.requestCostUsd))
+  };
 }
 
 export async function registerProject(input: ProjectRegistrationInput): Promise<ProjectSummary> {

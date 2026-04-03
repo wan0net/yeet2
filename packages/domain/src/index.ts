@@ -69,6 +69,28 @@ export interface ModelCostSummary {
   requestCostUsd?: number | null;
 }
 
+export interface ProjectRoleCostSummary extends ModelCostSummary {
+  roleDefinitionId: string;
+  roleKey: ProjectRoleKey;
+  visualName: string;
+  enabled: boolean;
+  model: string | null;
+  modelSource: "explicit" | "recommended" | "unconfigured";
+}
+
+export interface ProjectCostAnalysisSummary {
+  projectId: string;
+  generatedAt: string;
+  degraded: boolean;
+  warning?: string | null;
+  roles: ProjectRoleCostSummary[];
+  enabledRoleCount: number;
+  pricedRoleCount: number;
+  promptCostPerMillionUsdTotal?: number | null;
+  completionCostPerMillionUsdTotal?: number | null;
+  requestCostUsdTotal?: number | null;
+}
+
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;
