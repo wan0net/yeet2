@@ -15,10 +15,10 @@ export default function RootLayout({
 }>) {
   return (
     <html data-theme="light" lang="en">
-      <body className="yeet-shell-grid">
-        <div className="mx-auto min-h-screen max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+      <body>
+        <div className="mx-auto min-h-screen max-w-[1200px] px-6 py-6 sm:px-8">
           <TopBar />
-          <div className="mt-5">{children}</div>
+          <div className="mt-8">{children}</div>
         </div>
       </body>
     </html>

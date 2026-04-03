@@ -2,50 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@300;400;500&display=swap");
+
 :root {
   color-scheme: light;
-  --background: #f6f0e6;
-  --background-elevated: rgba(255, 252, 247, 0.92);
-  --foreground: #1d1a17;
-  --surface: #fffdf8;
-  --surface-muted: #f2ebe1;
-  --muted: #6b6257;
-  --border: #d8cec1;
-  --border-strong: #b8aa97;
-  --accent: #0d9488;
-  --accent-strong: #115e59;
-  --accent-soft: #e2f5f1;
-  --signal-indigo: #e9ecff;
-  --signal-indigo-border: #c7cffd;
-  --signal-rose: #fff0f1;
-  --signal-rose-border: #f7c8cf;
-  --signal-amber: #fff6e7;
-  --signal-amber-border: #f3d9a4;
-  --shadow-soft: 0 22px 60px rgba(39, 29, 13, 0.08);
-  --font-sans: var(--font-geist-sans), "Geist", "Inter", sans-serif;
-  --font-mono: var(--font-geist-mono), "Geist Mono", ui-monospace, monospace;
+  --background: #ffffff;
+  --background-elevated: #ffffff;
+  --foreground: #1a1a1a;
+  --surface: #ffffff;
+  --surface-muted: #f8f8f7;
+  --muted: #57534e;
+  --muted-dim: #a8a29e;
+  --border: #e8e8e6;
+  --border-strong: #d4d4d0;
+  --accent: #6366f1;
+  --accent-strong: #6366f1;
+  --accent-soft: #eef2ff;
+  --signal-indigo: #eef2ff;
+  --signal-indigo-border: #c7d2fe;
+  --signal-rose: #fff1f2;
+  --signal-rose-border: #fecdd3;
+  --signal-amber: #fffbeb;
+  --signal-amber-border: #fde68a;
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --background: #191612;
-  --background-elevated: rgba(28, 24, 20, 0.92);
-  --foreground: #f7f0e5;
-  --surface: #211c17;
-  --surface-muted: #2a241d;
-  --muted: #c0b2a0;
-  --border: #40372b;
-  --border-strong: #5f5141;
-  --accent: #3dd6c6;
-  --accent-strong: #86efe4;
-  --accent-soft: rgba(27, 79, 73, 0.45);
-  --signal-indigo: #262246;
-  --signal-indigo-border: #47419d;
-  --signal-rose: #3e1d24;
-  --signal-rose-border: #8d4b59;
-  --signal-amber: #352b18;
-  --signal-amber-border: #8d6e2c;
-  --shadow-soft: 0 24px 70px rgba(0, 0, 0, 0.34);
+  --background: #111110;
+  --background-elevated: #1c1c1b;
+  --foreground: #ededed;
+  --surface: #1c1c1b;
+  --surface-muted: #1a1a19;
+  --muted: #a09f9b;
+  --muted-dim: #5c5b57;
+  --border: #282826;
+  --border-strong: #343432;
+  --accent: #818cf8;
+  --accent-strong: #818cf8;
+  --accent-soft: #1e1b4b;
+  --signal-indigo: #1e1b4b;
+  --signal-indigo-border: #3730a3;
+  --signal-rose: #4c0519;
+  --signal-rose-border: #9f1239;
+  --signal-amber: #2c2009;
+  --signal-amber-border: #92400e;
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 html,
@@ -55,10 +59,7 @@ body {
 
 body {
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(13, 148, 136, 0.14), transparent 28%),
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 26%),
-    linear-gradient(180deg, #fbf7f0 0%, var(--background) 100%);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
   letter-spacing: -0.01em;
@@ -74,19 +75,7 @@ a {
 }
 
 ::selection {
-  background: rgba(13, 148, 136, 0.18);
-}
-
-.yeet-shell-grid::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(92, 76, 55, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(92, 76, 55, 0.05) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 78%);
+  background: rgba(99, 102, 241, 0.16);
 }
 
 .yeet-shell-panel {
