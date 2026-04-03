@@ -2,6 +2,8 @@ import Fastify from "fastify";
 
 import { createAutonomyLoopManager } from "./autonomy-loop";
 import { registerProjectRoutes } from "./routes/projects";
+import { registerWorkerRoutes } from "./routes/workers";
+import { seedLocalWorkerFromEnv } from "./workers";
 
 const app = Fastify({
   logger: true
@@ -15,6 +17,7 @@ app.get("/health", async () => {
 });
 
 await app.register(registerProjectRoutes);
+await app.register(registerWorkerRoutes);
 
 const port = Number(process.env.PORT ?? 3001);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -50,6 +53,7 @@ process.once("SIGTERM", () => {
 
 async function main() {
   try {
+    await seedLocalWorkerFromEnv();
     loopManager.start();
     await app.listen({ port, host });
   } catch (error) {

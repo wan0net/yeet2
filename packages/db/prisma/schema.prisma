@@ -62,6 +62,12 @@ enum ProjectBranchCleanupState {
   failed
 }
 
+enum WorkerStatus {
+  online
+  busy
+  offline
+}
+
 enum ProjectRoleKey {
   planner
   architect
@@ -220,6 +226,24 @@ model Job {
   task             Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@map("jobs")
+}
+
+model Worker {
+  id               String       @id @default(cuid())
+  name             String
+  executorType     String       @map("executor_type")
+  status           WorkerStatus  @default(online)
+  capabilities     Json
+  lastHeartbeatAt  DateTime?    @map("last_heartbeat_at")
+  leaseExpiresAt   DateTime?    @map("lease_expires_at")
+  currentJobId     String?      @map("current_job_id")
+  host             String?
+  endpoint         String?
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  @@unique([name, executorType])
+  @@map("workers")
 }
 
 model Blocker {

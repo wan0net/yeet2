@@ -18,12 +18,13 @@ export default function HomePage() {
           <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/jobs" as Route}>
             View jobs
           </Link>
+          <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/workers" as Route}>
+            View workers
+          </Link>
           <Link className="rounded-full border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50" href={"/blockers" as Route}>
             View blockers
           </Link>
-          <span className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-700">
-            API and worker skeleton only
-          </span>
+          <span className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-700">API and worker skeleton only</span>
         </div>
       </section>
 

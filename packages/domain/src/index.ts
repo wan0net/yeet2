@@ -24,6 +24,7 @@ export type ProjectPullRequestDraftMode = "draft" | "ready";
 export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval";
 export type ProjectBranchCleanupMode = "manual" | "after_merge";
 export type ProjectBranchCleanupState = "pending" | "deleted" | "retained" | "failed";
+export type WorkerStatus = "online" | "busy" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -149,6 +150,47 @@ export interface JobSummary {
   artifactSummary?: string | null;
   startedAt?: string | null;
   completedAt?: string | null;
+}
+
+export interface WorkerSummary {
+  id: string;
+  name: string;
+  executorType: string;
+  status: WorkerStatus;
+  capabilities: string[];
+  lastHeartbeatAt?: string | null;
+  leaseExpiresAt?: string | null;
+  currentJobId?: string | null;
+  host?: string | null;
+  endpoint?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type Worker = WorkerSummary;
+
+export interface WorkerRegistrationInput {
+  id?: string | null;
+  name: string;
+  executorType: string;
+  status?: WorkerStatus | null;
+  capabilities?: string[];
+  lastHeartbeatAt?: string | null;
+  leaseExpiresAt?: string | null;
+  currentJobId?: string | null;
+  host?: string | null;
+  endpoint?: string | null;
+}
+
+export interface WorkerHeartbeatInput {
+  name?: string | null;
+  executorType?: string | null;
+  status?: WorkerStatus | null;
+  capabilities?: string[];
+  leaseExpiresAt?: string | null;
+  currentJobId?: string | null;
+  host?: string | null;
+  endpoint?: string | null;
 }
 
 export interface ProjectDetailSummary {
