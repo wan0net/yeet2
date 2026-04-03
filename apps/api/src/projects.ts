@@ -304,6 +304,7 @@ type ProjectWithRelations = DbProject & {
 };
 
 type ProjectTaskWithRelations = ProjectWithRelations["missions"][number]["tasks"][number];
+type ProjectMissionWithRelations = ProjectWithRelations["missions"][number];
 type ProjectRoleDefinitionRecord = ProjectWithRelations["roleDefinitions"][number];
 
 interface ResolvedProjectRegistration {
@@ -1090,6 +1091,66 @@ function buildProjectPullRequestTitle(task: Pick<ProjectTaskWithRelations, "titl
   return `yeet2: ${task.title}`;
 }
 
+function selectProjectPullRequestReviewTask(mission: ProjectMissionWithRelations): ProjectTaskWithRelations | null {
+  const sortedTasks = [...mission.tasks].sort((left, right) => left.priority - right.priority);
+  return sortedTasks.find((task) => task.agentRole === "reviewer") ?? sortedTasks.find((task) => task.agentRole === "implementer") ?? null;
+}
+
+function buildProjectPullRequestReviewBlockerDraft(input: {
+  project: Pick<ProjectWithRelations, "id" | "name" | "defaultBranch" | "localPath" | "repoUrl" | "githubRepoUrl" | "pullRequestDraftMode">;
+  mission: Pick<ProjectMissionWithRelations, "id" | "title">;
+  task: Pick<ProjectTaskWithRelations, "id" | "title" | "agentRole">;
+  job: Pick<DbJob, "id" | "branchName" | "githubCompareUrl" | "githubPrNumber" | "githubPrUrl" | "githubPrTitle">;
+}): TaskBlockerDraft {
+  const prLabel = input.job.githubPrTitle ?? `pull request ${input.job.githubPrNumber ? `#${input.job.githubPrNumber}` : input.job.id}`;
+  const prUrl = input.job.githubPrUrl ?? input.job.githubCompareUrl ?? null;
+  const branchLine = input.job.branchName ? `- Branch: ${input.job.branchName}` : null;
+
+  return {
+    title: `Human review required for ${prLabel}`,
+    context: [
+      `A pull request was created automatically for mission "${input.mission.title}" (${input.mission.id}).`,
+      `The PR should be reviewed by a human before it is merged.`,
+      "",
+      `- Project: ${input.project.name} (${input.project.id})`,
+      `- Review task: ${input.task.title} (${input.task.agentRole})`,
+      prUrl ? `- PR URL: ${prUrl}` : "- PR URL: unavailable",
+      `- PR title: ${input.job.githubPrTitle ?? "unavailable"}`,
+      branchLine ?? "- Branch: unavailable"
+    ].join("\n"),
+    options: [
+      "Review the PR now, confirm it meets the mission goals, and approve or merge it.",
+      "Request changes and push follow-up commits to the same branch.",
+      "Defer review for now and leave this blocker open until a human is available."
+    ],
+    recommendation: "Review the PR now so the mission can move forward, or request changes if the implementation needs follow-up."
+  };
+}
+
+async function upsertProjectPullRequestReviewBlocker(
+  project: ProjectWithRelations,
+  mission: ProjectMissionWithRelations,
+  job: DbJob
+): Promise<void> {
+  if (project.pullRequestDraftMode !== "ready") {
+    return;
+  }
+
+  const blockerTask = selectProjectPullRequestReviewTask(mission);
+  if (!blockerTask) {
+    return;
+  }
+
+  const draft = buildProjectPullRequestReviewBlockerDraft({
+    project,
+    mission,
+    task: blockerTask,
+    job
+  });
+
+  await upsertOpenTaskBlocker(prisma, blockerTask, draft);
+}
+
 function isPlanningComplete(missions: ProjectMissionSummary[]): boolean {
   return missions.length > 0 && missions[0].tasks.length >= 3;
 }
@@ -1471,6 +1532,15 @@ async function createProjectJobPullRequest(
       throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
     }
 
+    const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
+    if (mission) {
+      try {
+        await upsertProjectPullRequestReviewBlocker(project, mission, job);
+      } catch {
+        // Keep PR reads resilient if blocker persistence is temporarily unavailable.
+      }
+    }
+
     return {
       project: hydratedProject,
       job: toProjectJobSummary(job),
@@ -1545,6 +1615,20 @@ async function createProjectJobPullRequest(
       githubPrTitle: pullRequest.title
     }
   });
+
+  const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
+  if (mission) {
+    try {
+      await upsertProjectPullRequestReviewBlocker(project, mission, {
+        ...job,
+        githubPrNumber: pullRequest.number,
+        githubPrUrl: pullRequest.htmlUrl,
+        githubPrTitle: pullRequest.title
+      });
+    } catch {
+      // The PR was created successfully; blocker refresh is best-effort.
+    }
+  }
 
   const hydratedProject = await loadProjectById(project.id);
   if (!hydratedProject) {
