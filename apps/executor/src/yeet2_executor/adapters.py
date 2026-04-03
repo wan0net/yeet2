@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 from uuid import uuid4
 
 
@@ -59,10 +60,207 @@ def _is_truthy(value: str | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def cleanText(value: Any | None) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _split_csv_env(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _normalize_host(value: str) -> str:
+    parsed = urlparse(value if "://" in value else f"//{value}")
+    host = parsed.hostname or ""
+    return host.strip().lower()
+
+
+def _is_dangerous_allowed_host(value: str) -> bool:
+    host = value.strip().lower()
+    if not host:
+        return True
+
+    if host.startswith("[") and "]" in host:
+        host = host[1 : host.index("]")]
+    if ":" in host and host.count(":") == 1 and not host.startswith("::"):
+        host = host.rsplit(":", 1)[0]
+
+    if host in {
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "::",
+        "169.254.169.254",
+        "metadata",
+        "metadata.google.internal",
+        "100.100.100.100",
+    }:
+        return True
+
+    for prefix in ("127.", "10.", "192.168.", "169.254."):
+        if host.startswith(prefix):
+            return True
+
+    if host.startswith("172."):
+        parts = host.split(".")
+        if len(parts) >= 2 and parts[0] == "172":
+            try:
+                octet = int(parts[1])
+            except ValueError:
+                return False
+            return 16 <= octet <= 31
+
+    return False
+
+
+def _mandatory_deny_read_paths() -> list[str]:
+    home = Path.home()
+    return [
+        str(home / ".ssh"),
+        str(home / ".aws"),
+        str(home / ".gnupg"),
+        str(home / ".netrc"),
+        str(home / ".npmrc"),
+        str(home / ".docker"),
+        str(home / ".kube"),
+        str(home / ".config" / "gh"),
+        str(home / ".config" / "gcloud"),
+        str(home / ".config" / "op"),
+        str(home / ".password-store"),
+        str(home / ".bashrc"),
+        str(home / ".zshrc"),
+        str(home / ".bash_profile"),
+        str(home / ".zprofile"),
+        str(home / ".profile"),
+        str(home / ".bash_history"),
+        str(home / ".zsh_history"),
+        str(home / ".gitconfig"),
+        str(home / ".yeet2"),
+        str(home / ".config" / "yeet2"),
+    ]
+
+
+def _filter_allowed_domains(values: Any) -> list[str]:
+    domains: list[str] = []
+    if not isinstance(values, list):
+        return domains
+
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        host = _normalize_host(value)
+        if not host or _is_dangerous_allowed_host(host):
+            continue
+        if host not in domains:
+            domains.append(host)
+    return domains
+
+
+def _build_asrt_allowed_domains() -> list[str]:
+    domains: list[str] = []
+    llm_base_url = cleanText(os.getenv("LLM_BASE_URL"))
+    if llm_base_url:
+        host = _normalize_host(llm_base_url)
+        if host and not _is_dangerous_allowed_host(host):
+            domains.append(host)
+
+    for env_name in (
+        "YEET2_EXECUTOR_SANDBOX_ALLOWED_DOMAINS",
+        "YEET2_EXECUTOR_SANDBOX_NETWORK",
+        "YEET2_ASRT_ALLOWED_DOMAINS",
+    ):
+        for raw_domain in _split_csv_env(os.getenv(env_name)):
+            host = _normalize_host(raw_domain)
+            if host and not _is_dangerous_allowed_host(host):
+                domains.append(host)
+
+    return list(dict.fromkeys(domains))
+
+
+def _build_asrt_deny_read_paths() -> list[str]:
+    paths = _mandatory_deny_read_paths()
+    for env_name in (
+        "YEET2_EXECUTOR_SANDBOX_EXTRA_DENY_READ_PATHS",
+        "YEET2_ASRT_EXTRA_DENY_READ_PATHS",
+    ):
+        paths.extend(_split_csv_env(os.getenv(env_name)))
+    return list(dict.fromkeys(paths))
+
+
+def _load_base_asrt_config(sandbox_enabled: bool) -> dict[str, Any] | None:
+    raw_value = cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_BASE_CONFIG"))
+    if not raw_value:
+        return None
+
+    candidate_path = Path(raw_value).expanduser()
+    if not candidate_path.exists():
+        if sandbox_enabled:
+            raise OpenHandsLaunchError(f"ASRT base config not found: {candidate_path}")
+        return None
+    if not candidate_path.is_file():
+        if sandbox_enabled:
+            raise OpenHandsLaunchError(f"ASRT base config is not a file: {candidate_path}")
+        return None
+
+    try:
+        text = candidate_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        if sandbox_enabled:
+            raise OpenHandsLaunchError(f"ASRT base config is unreadable: {candidate_path}") from exc
+        return None
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        if sandbox_enabled:
+            raise OpenHandsLaunchError(f"ASRT base config is not valid JSON: {candidate_path}")
+        return None
+
+    if isinstance(payload, dict):
+        return payload
+    if sandbox_enabled:
+        raise OpenHandsLaunchError(f"ASRT base config must contain a JSON object: {candidate_path}")
+    return None
+
+
+def _merge_unique_strings(*values: Any) -> list[str]:
+    merged: list[str] = []
+    for value in values:
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and item not in merged:
+                    merged.append(item)
+    return merged
+
+
+def _sandbox_extra_args() -> list[str]:
+    return shlex.split(cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_EXTRA_ARGS")))
+
+
 def _truncate(value: str, limit: int = 140) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 3].rstrip()}..."
+
+
+def _is_asrt_enabled() -> bool:
+    sandbox_mode = cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_MODE")).lower()
+    if sandbox_mode == "asrt":
+        return True
+    if sandbox_mode in {"off", "disabled", "none"}:
+        return False
+    return _is_truthy(os.getenv("YEET2_ASRT_ENABLED"))
+
+
+def _resolve_srt_binary() -> str:
+    configured = cleanText(os.getenv("YEET2_ASRT_SRT_BIN")) or cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_BIN"))
+    return configured or "srt"
 
 
 def _build_task_file(workspace_path: Path, payload: dict[str, Any]) -> Path:
@@ -94,6 +292,38 @@ def _build_task_file(workspace_path: Path, payload: dict[str, Any]) -> Path:
 
     task_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return task_file
+
+
+def _build_asrt_config(workspace_path: Path, sandbox_enabled: bool) -> dict[str, Any]:
+    base_config = _load_base_asrt_config(sandbox_enabled) or {}
+    base_network = base_config.get("network") if isinstance(base_config.get("network"), dict) else {}
+    base_filesystem = base_config.get("filesystem") if isinstance(base_config.get("filesystem"), dict) else {}
+
+    return {
+        **base_config,
+        "network": {
+            **base_network,
+            "allowedDomains": _filter_allowed_domains(_merge_unique_strings(_build_asrt_allowed_domains(), base_network.get("allowedDomains"))),
+            "deniedDomains": _merge_unique_strings(base_network.get("deniedDomains")),
+            "allowLocalBinding": False,
+            "allowUnixSockets": [],
+        },
+        "filesystem": {
+            **base_filesystem,
+            "allowRead": _merge_unique_strings(base_filesystem.get("allowRead"), [str(workspace_path)]),
+            "allowWrite": _merge_unique_strings(base_filesystem.get("allowWrite"), [str(workspace_path)]),
+            "denyRead": _merge_unique_strings(base_filesystem.get("denyRead"), _build_asrt_deny_read_paths()),
+            "denyWrite": _merge_unique_strings(base_filesystem.get("denyWrite")),
+        },
+    }
+
+
+def _write_asrt_config(config_dir: Path, job_id: str, config: dict[str, Any]) -> Path:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / f"{job_id}.json"
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    config_path.chmod(0o600)
+    return config_path
 
 
 def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
@@ -209,6 +439,7 @@ class OpenHandsAdapter:
         self.base_dir = Path(root).expanduser().resolve()
         self.workspaces_dir = self.base_dir / "workspaces"
         self.logs_dir = self.base_dir / "logs"
+        self.asrt_configs_dir = self.base_dir / "asrt-configs"
         self.workspaces_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -224,6 +455,7 @@ class OpenHandsAdapter:
         normalized_payload["branch_name"] = branch_name
         normalized_payload["workspace_path"] = str(workspace_path)
         normalized_payload["log_path"] = str(log_path)
+        normalized_payload["sandbox_mode"] = "asrt" if _is_asrt_enabled() else "off"
 
         record = JobRecord(
             id=job_id,
@@ -248,6 +480,7 @@ class OpenHandsAdapter:
                 f"base_branch: {payload.get('base_branch')}",
                 f"branch_name: {branch_name}",
                 f"workspace_path: {workspace_path}",
+                f"sandbox_mode: {normalized_payload['sandbox_mode']}",
             ],
         )
         return record
@@ -307,8 +540,11 @@ class OpenHandsAdapter:
                     "YEET2_EXECUTOR_MODE must be either 'openhands' or 'local'"
                 )
 
+            sandbox_enabled = _is_asrt_enabled()
+            record.payload["sandbox_mode"] = "asrt" if sandbox_enabled else "off"
+            _append_log(log_path, f"sandbox_mode: {record.payload['sandbox_mode']}")
             _append_log(log_path, "launching OpenHands headless run")
-            exit_code = self._run_openhands(workspace_path, task_file, log_path)
+            exit_code = self._run_openhands(record, workspace_path, task_file, log_path, sandbox_enabled)
             summary = _summarize_jsonl_output(log_path, exit_code)
             status = "complete" if exit_code == 0 else "failed"
             error = summary if exit_code != 0 else None
@@ -317,7 +553,7 @@ class OpenHandsAdapter:
             summary = f"Local setup failed: {_format_git_error(exc)}"
             return self._complete_job(record, status="failed", summary=summary, error=summary)
         except OpenHandsLaunchError as exc:
-            if _is_truthy(os.getenv("YEET2_OPENHANDS_ALLOW_LOCAL_FALLBACK")):
+            if _is_truthy(os.getenv("YEET2_OPENHANDS_ALLOW_LOCAL_FALLBACK")) and record.payload.get("sandbox_mode") != "asrt":
                 summary = (
                     "OpenHands was unavailable, so the executor preserved the prepared local "
                     f"worktree instead ({exc})."
@@ -377,7 +613,14 @@ class OpenHandsAdapter:
         )
         return command
 
-    def _run_openhands(self, workspace_path: Path, task_file: Path, log_path: Path) -> int:
+    def _run_openhands(
+        self,
+        record: JobRecord,
+        workspace_path: Path,
+        task_file: Path,
+        log_path: Path,
+        sandbox_enabled: bool,
+    ) -> int:
         command = self._build_openhands_command(task_file)
         timeout_value = os.getenv("YEET2_OPENHANDS_TIMEOUT_SECONDS")
         timeout_seconds: int | None = None
@@ -389,13 +632,27 @@ class OpenHandsAdapter:
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 
+        launch_command = command
+        config_path: Path | None = None
+        if sandbox_enabled:
+            config_path = _write_asrt_config(self.asrt_configs_dir, record.id, _build_asrt_config(workspace_path, sandbox_enabled))
+            launch_command = [_resolve_srt_binary(), *_sandbox_extra_args(), "--settings", str(config_path), *command]
+            record.payload["sandbox_config_path"] = str(config_path)
+            record.payload["sandbox_wrapped_command"] = shlex.join(launch_command)
+        else:
+            record.payload.pop("sandbox_config_path", None)
+            record.payload.pop("sandbox_wrapped_command", None)
+
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(f"openhands_cwd: {workspace_path}\n")
             handle.write(f"openhands_command: {shlex.join(command)}\n")
+            handle.write(f"sandbox_command: {shlex.join(launch_command)}\n")
+            if config_path is not None:
+                handle.write(f"sandbox_config_path: {config_path}\n")
             handle.flush()
             try:
                 process = subprocess.Popen(
-                    command,
+                    launch_command,
                     cwd=str(workspace_path),
                     stdout=handle,
                     stderr=subprocess.STDOUT,
@@ -403,9 +660,8 @@ class OpenHandsAdapter:
                     env=env,
                 )
             except FileNotFoundError as exc:
-                raise OpenHandsLaunchError(
-                    f"command not found: {command[0]}"
-                ) from exc
+                missing = launch_command[0] if launch_command else command[0]
+                raise OpenHandsLaunchError(f"command not found: {missing}") from exc
             except OSError as exc:
                 raise OpenHandsLaunchError(str(exc)) from exc
 

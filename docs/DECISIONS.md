@@ -89,3 +89,13 @@ No implementation deviations recorded yet.
 - Chosen Approach: `The default local Brain runtime uses a dedicated virtualenv at apps/brain/.venv and keeps CrewAI home and storage state under apps/brain/.home and apps/brain/.crewai-data`
 - Reason: `A repo-local runtime keeps Brain setup reproducible, avoids leaking CrewAI state into the operator's global environment, and lets pnpm dev:brain work against the installed CrewAI path without extra shell setup`
 - Consequences: `Local Brain bootstrap now expects uv to create and populate apps/brain/.venv. Repo-local runtime artifacts must stay ignored in git, and operators can still override HOME or CREWAI_STORAGE_DIR if they need a different path`
+
+### DECISION-007: Executor Uses Repo-Owned ASRT Sandbox Wrapper
+
+- Date: `2026-04-03`
+- Status: `accepted`
+- Area: `executor`
+- Spec Default: `Container-based sandboxing is preferred when practical, but full remote sandboxing is not required for MVP`
+- Chosen Approach: `The executor keeps the yeet2-owned local worktree flow and adds an ASRT-backed sandbox mode controlled by YEET2_EXECUTOR_SANDBOX_* env vars, rendering a yeet2-owned per-job config and optionally merging a base JSON policy file before launching OpenHands through srt`
+- Reason: `This keeps sandbox policy under yeet2 control, fits the existing synchronous subprocess model, and borrows the sharkcage-style pattern of generating isolated config per job instead of relying on a shared operator-managed sandbox file`
+- Consequences: `ASRT mode adds a host dependency on srt plus sandbox config management, but it keeps executor behavior compatible with the current OpenHands adapter, leaves sandbox mode optional for local development, and keeps older YEET2_ASRT_* names as compatibility aliases rather than the primary interface`
