@@ -7,6 +7,7 @@ import {
   mergeProjectPullRequest,
   planProject,
   recordProjectAutonomyRun,
+  refreshProjectPullRequestState,
   type ProjectSummary
 } from "./projects";
 import { recordDecisionLog } from "./decision-logs";
@@ -217,6 +218,20 @@ async function processProjectPullRequestAutomation(
     return null;
   }
 
+  let currentProject = project;
+  if (candidate.jobHasPullRequest) {
+    const refreshed = await refreshProjectPullRequestState(project.id, candidate.jobId);
+    currentProject = refreshed.project;
+    if (refreshed.merged) {
+      return {
+        project: refreshed.project,
+        lastAction: "merge",
+        lastOutcome: "merged",
+        message: `Detected externally merged pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
+      };
+    }
+  }
+
   const creationPolicyMessage = isPullRequestPolicySatisfied(project, candidate);
   if (creationPolicyMessage && !candidate.jobHasPullRequest) {
     return {
@@ -226,8 +241,6 @@ async function processProjectPullRequestAutomation(
       message: creationPolicyMessage
     };
   }
-
-  let currentProject = project;
 
   if (!candidate.jobHasPullRequest) {
     const created = await createProjectPullRequest(project.id, candidate.jobId);

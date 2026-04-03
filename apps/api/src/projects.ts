@@ -2052,6 +2052,98 @@ async function mergeProjectJobPullRequest(
   };
 }
 
+async function refreshProjectJobPullRequestState(
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  job: DbJob
+): Promise<ProjectPullRequestResult> {
+  const repository = resolveProjectGitHubRepository(project);
+  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  if (!repository || !token || job.githubPrNumber === null) {
+    const hydratedProject = await loadProjectById(project.id);
+    if (!hydratedProject) {
+      throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
+    }
+
+    const refreshedJob = await prisma.job.findUnique({
+      where: { id: job.id }
+    });
+    if (!refreshedJob) {
+      throw new ProjectPullRequestError("job_not_found", "Job not found", 404);
+    }
+
+    return {
+      project: hydratedProject,
+      job: toProjectJobSummary(refreshedJob),
+      created: false
+    };
+  }
+
+  let pullRequest: GitHubPullRequestDetails;
+  try {
+    pullRequest = await fetchGitHubPullRequest({
+      token,
+      repository,
+      pullRequestNumber: job.githubPrNumber
+    });
+  } catch (error) {
+    if (error instanceof GitHubPullRequestError) {
+      if (error.code === "missing_token") {
+        throw new ProjectPullRequestError("github_not_configured", error.message, error.statusCode);
+      }
+
+      throw new ProjectPullRequestError("github_pull_request_failed", error.message, error.statusCode);
+    }
+
+    throw error;
+  }
+
+  const wasMerged = job.githubPrState === "merged" || job.githubPrMergedAt !== null;
+  await persistJobPullRequestState(job.id, project, pullRequest, job.githubCompareUrl ?? resolveProjectGitHubCompareUrl(project, job.branchName));
+
+  if (pullRequest.merged && !wasMerged) {
+    const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
+    if (mission) {
+      await resolveProjectPullRequestReviewBlocker(mission);
+    }
+
+    await recordDecisionLog({
+      projectId: project.id,
+      missionId: task.missionId,
+      taskId: task.id,
+      jobId: job.id,
+      kind: "merge",
+      actor: "github",
+      summary: `Detected external merge for job ${job.id}`,
+      detail: {
+        prNumber: pullRequest.number,
+        prUrl: pullRequest.htmlUrl,
+        branchName: job.branchName,
+        mergedAt: pullRequest.mergedAt ?? null
+      }
+    });
+  }
+
+  const hydratedProject = await loadProjectById(project.id);
+  if (!hydratedProject) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found after pull request refresh", 404);
+  }
+
+  const refreshedJob = await prisma.job.findUnique({
+    where: { id: job.id }
+  });
+  if (!refreshedJob) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found after pull request refresh", 404);
+  }
+
+  return {
+    project: hydratedProject,
+    job: toProjectJobSummary(refreshedJob),
+    created: false,
+    merged: pullRequest.merged
+  };
+}
+
 async function dispatchTaskFromProject(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number]
@@ -2165,6 +2257,20 @@ export async function mergeProjectPullRequest(projectId: string, jobId: string):
   }
 
   return mergeProjectJobPullRequest(project, match.task, match.job);
+}
+
+export async function refreshProjectPullRequestState(projectId: string, jobId: string): Promise<ProjectPullRequestResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
+  }
+
+  const match = findProjectJob(project, jobId);
+  if (!match) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found", 404);
+  }
+
+  return refreshProjectJobPullRequestState(project, match.task, match.job);
 }
 
 export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
