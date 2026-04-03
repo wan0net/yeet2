@@ -14,6 +14,7 @@ import type {
 import type {
   PlanningProvenance,
   ProjectAutonomyMode,
+  ProjectMergeApprovalMode,
   ProjectPullRequestDraftMode,
   ProjectPullRequestMode,
   ProjectRoleKey
@@ -26,6 +27,8 @@ import {
   buildGitHubIssueBody,
   createGitHubIssue,
   createGitHubPullRequest,
+  fetchGitHubPullRequest,
+  mergeGitHubPullRequest,
   parseGitHubRepositoryUrl,
   GitHubIssueError,
   GitHubPullRequestError
@@ -132,6 +135,7 @@ export interface ProjectSummary {
   autonomyMode: ProjectAutonomyMode;
   pullRequestMode: ProjectPullRequestMode;
   pullRequestDraftMode: ProjectPullRequestDraftMode;
+  mergeApprovalMode: ProjectMergeApprovalMode;
   lastAutonomyRunAt: string | null;
   lastAutonomyStatus: string | null;
   lastAutonomyMessage: string | null;
@@ -162,6 +166,7 @@ export interface ProjectPullRequestResult {
   project: ProjectSummary;
   job: ProjectJobSummary;
   created: boolean;
+  merged?: boolean;
 }
 
 export interface ProjectRoleDefinitionInput {
@@ -178,6 +183,7 @@ export interface ProjectAutonomyUpdateInput {
   autonomyMode: ProjectAutonomyMode;
   pullRequestMode?: ProjectPullRequestMode;
   pullRequestDraftMode?: ProjectPullRequestDraftMode;
+  mergeApprovalMode?: ProjectMergeApprovalMode;
 }
 
 export interface ProjectAutonomyRunUpdateInput {
@@ -696,6 +702,7 @@ function toAutonomySummary(
     | "autonomyMode"
     | "pullRequestMode"
     | "pullRequestDraftMode"
+    | "mergeApprovalMode"
     | "lastAutonomyRunAt"
     | "lastAutonomyStatus"
     | "lastAutonomyMessage"
@@ -707,6 +714,7 @@ function toAutonomySummary(
     autonomyMode: project.autonomyMode ?? "manual",
     pullRequestMode: project.pullRequestMode ?? "manual",
     pullRequestDraftMode: project.pullRequestDraftMode ?? "draft",
+    mergeApprovalMode: project.mergeApprovalMode ?? "human_approval",
     lastAutonomyRunAt: project.lastAutonomyRunAt?.toISOString() ?? null,
     lastAutonomyStatus: project.lastAutonomyStatus ?? null,
     lastAutonomyMessage: project.lastAutonomyMessage ?? null,
@@ -1127,7 +1135,7 @@ function buildProjectPullRequestReviewBlockerDraft(input: {
   };
 }
 
-async function upsertProjectPullRequestReviewBlocker(
+async function ensureProjectPullRequestReviewBlocker(
   project: ProjectWithRelations,
   mission: ProjectMissionWithRelations,
   job: DbJob
@@ -1149,6 +1157,33 @@ async function upsertProjectPullRequestReviewBlocker(
   });
 
   await upsertOpenTaskBlocker(prisma, blockerTask, draft);
+}
+
+async function resolveProjectPullRequestReviewBlocker(mission: ProjectMissionWithRelations): Promise<void> {
+  const blockerTask = selectProjectPullRequestReviewTask(mission);
+  if (!blockerTask) {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.blocker.updateMany({
+      where: {
+        taskId: blockerTask.id,
+        status: "open"
+      },
+      data: {
+        status: "resolved",
+        resolvedAt: new Date()
+      }
+    });
+
+    await tx.task.update({
+      where: { id: blockerTask.id },
+      data: {
+        blockerReason: null
+      }
+    });
+  });
 }
 
 function isPlanningComplete(missions: ProjectMissionSummary[]): boolean {
@@ -1535,7 +1570,7 @@ async function createProjectJobPullRequest(
     const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
     if (mission) {
       try {
-        await upsertProjectPullRequestReviewBlocker(project, mission, job);
+        await ensureProjectPullRequestReviewBlocker(project, mission, job);
       } catch {
         // Keep PR reads resilient if blocker persistence is temporarily unavailable.
       }
@@ -1619,7 +1654,7 @@ async function createProjectJobPullRequest(
   const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
   if (mission) {
     try {
-      await upsertProjectPullRequestReviewBlocker(project, mission, {
+      await ensureProjectPullRequestReviewBlocker(project, mission, {
         ...job,
         githubPrNumber: pullRequest.number,
         githubPrUrl: pullRequest.htmlUrl,
@@ -1646,6 +1681,82 @@ async function createProjectJobPullRequest(
     project: hydratedProject,
     job: toProjectJobSummary(updatedJob),
     created: true
+  };
+}
+
+async function mergeProjectJobPullRequest(
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  job: DbJob
+): Promise<ProjectPullRequestResult> {
+  if (!job.githubPrNumber || !job.githubPrUrl) {
+    throw new ProjectPullRequestError("github_pull_request_failed", "Job does not have a pull request to merge.", 409);
+  }
+
+  const repository = resolveProjectGitHubRepository(project);
+  if (!repository) {
+    throw new ProjectPullRequestError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  if (!token) {
+    throw new ProjectPullRequestError("github_not_configured", "GITHUB_TOKEN is required to merge GitHub pull requests.", 503);
+  }
+
+  const pullRequest = await fetchGitHubPullRequest({
+    token,
+    repository,
+    pullRequestNumber: job.githubPrNumber
+  });
+
+  if (pullRequest.draft) {
+    throw new ProjectPullRequestError("github_pull_request_failed", "Draft pull requests are never auto-merged.", 409);
+  }
+
+  if (!pullRequest.merged) {
+    try {
+      await mergeGitHubPullRequest({
+        token,
+        repository,
+        pullRequestNumber: pullRequest.number,
+        mergeMethod: "squash"
+      });
+    } catch (error) {
+      if (error instanceof GitHubPullRequestError) {
+        if (error.code === "missing_token") {
+          throw new ProjectPullRequestError("github_not_configured", error.message, error.statusCode);
+        }
+
+        throw new ProjectPullRequestError("github_pull_request_failed", error.message, error.statusCode);
+      }
+
+      throw error;
+    }
+  }
+
+  const hydratedProject = await loadProjectById(project.id);
+  if (!hydratedProject) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found after pull request merge", 404);
+  }
+
+  const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
+  if (mission) {
+    await resolveProjectPullRequestReviewBlocker(mission);
+  }
+
+  const mergedJob = await prisma.job.findUnique({
+    where: { id: job.id }
+  });
+
+  if (!mergedJob) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found after pull request merge", 404);
+  }
+
+  return {
+    project: hydratedProject,
+    job: toProjectJobSummary(mergedJob),
+    created: false,
+    merged: true
   };
 }
 
@@ -1748,6 +1859,20 @@ export async function createProjectPullRequest(projectId: string, jobId: string)
   }
 
   return createProjectJobPullRequest(project, match.task, match.job);
+}
+
+export async function mergeProjectPullRequest(projectId: string, jobId: string): Promise<ProjectPullRequestResult> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectPullRequestError("project_not_found", "Project not found", 404);
+  }
+
+  const match = findProjectJob(project, jobId);
+  if (!match) {
+    throw new ProjectPullRequestError("job_not_found", "Job not found", 404);
+  }
+
+  return mergeProjectJobPullRequest(project, match.task, match.job);
 }
 
 export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
@@ -2217,7 +2342,8 @@ export async function updateProjectAutonomy(
     data: {
       ...(update.autonomyMode ? { autonomyMode: update.autonomyMode } : {}),
       ...(update.pullRequestMode ? { pullRequestMode: update.pullRequestMode } : {}),
-      ...(update.pullRequestDraftMode ? { pullRequestDraftMode: update.pullRequestDraftMode } : {})
+      ...(update.pullRequestDraftMode ? { pullRequestDraftMode: update.pullRequestDraftMode } : {}),
+      ...(update.mergeApprovalMode ? { mergeApprovalMode: update.mergeApprovalMode } : {})
     }
   });
 

@@ -4,6 +4,7 @@ import {
   advanceProject,
   createProjectPullRequest,
   listRegisteredProjects,
+  mergeProjectPullRequest,
   planProject,
   recordProjectAutonomyRun,
   type ProjectSummary
@@ -15,8 +16,8 @@ export interface AutonomyLoopTelemetry {
   projectId: string;
   mode: AutonomyLoopMode;
   lastRunAt: string;
-  lastAction: "plan" | "advance" | "pull_request" | "skip" | "error";
-  lastOutcome: "planned" | "advanced" | "created_pr" | "pr_skipped" | "skipped" | "idle" | "error";
+  lastAction: "plan" | "advance" | "pull_request" | "merge" | "skip" | "error";
+  lastOutcome: "planned" | "advanced" | "created_pr" | "merged" | "merge_skipped" | "pr_skipped" | "skipped" | "idle" | "error";
   lastMissionId: string | null;
   lastTaskId: string | null;
   nextDispatchableTaskId: string | null;
@@ -151,10 +152,6 @@ function isPullRequestPolicySatisfied(project: ProjectSummary, candidate: Return
     return "No completed implementer job is available for pull request automation.";
   }
 
-  if (candidate.jobHasPullRequest) {
-    return "The latest completed implementer job already has a pull request.";
-  }
-
   if (project.pullRequestMode === "manual") {
     return "Pull request automation is disabled by policy.";
   }
@@ -164,6 +161,101 @@ function isPullRequestPolicySatisfied(project: ProjectSummary, candidate: Return
   }
 
   return null;
+}
+
+function missionHasAllDispatchableTasksComplete(project: ProjectSummary, missionId: string): boolean {
+  const mission = project.missions.find((candidate) => candidate.id === missionId) ?? null;
+  if (!mission) {
+    return false;
+  }
+
+  return mission.tasks
+    .filter((task) => task.agentRole === "implementer" || task.agentRole === "qa" || task.agentRole === "reviewer")
+    .every((task) => task.status === "complete");
+}
+
+function isProjectPullRequestMergeAllowed(
+  project: ProjectSummary,
+  candidate: ReturnType<typeof findLatestCompletedImplementerJob>
+): string | null {
+  if (!candidate) {
+    return "No completed implementer job is available for pull request merging.";
+  }
+
+  if (project.pullRequestDraftMode !== "ready") {
+    return "Draft pull requests are never auto-merged.";
+  }
+
+  if (project.mergeApprovalMode === "human_approval") {
+    return "Human approval is required before merging this pull request.";
+  }
+
+  if (project.mergeApprovalMode === "agent_signoff" && !candidate.reviewerComplete) {
+    return `Reviewer work for mission ${candidate.missionTitle} is not complete yet.`;
+  }
+
+  if (project.mergeApprovalMode === "no_approval" && !missionHasAllDispatchableTasksComplete(project, candidate.missionId)) {
+    return `Dispatchable tasks for mission ${candidate.missionTitle} are not complete yet.`;
+  }
+
+  return null;
+}
+
+interface PullRequestAutomationResult {
+  project: ProjectSummary;
+  lastAction: AutonomyLoopTelemetry["lastAction"];
+  lastOutcome: AutonomyLoopTelemetry["lastOutcome"];
+  message: string;
+}
+
+async function processProjectPullRequestAutomation(
+  project: ProjectSummary
+): Promise<PullRequestAutomationResult | null> {
+  const candidate = findLatestCompletedImplementerJob(project);
+  if (!candidate) {
+    return null;
+  }
+
+  const creationPolicyMessage = isPullRequestPolicySatisfied(project, candidate);
+  if (creationPolicyMessage && !candidate.jobHasPullRequest) {
+    return {
+      project,
+      lastAction: "pull_request",
+      lastOutcome: "pr_skipped",
+      message: creationPolicyMessage
+    };
+  }
+
+  let currentProject = project;
+
+  if (!candidate.jobHasPullRequest) {
+    const created = await createProjectPullRequest(project.id, candidate.jobId);
+    currentProject = created.project;
+  } else if (project.mergeApprovalMode === "human_approval" && project.pullRequestDraftMode === "ready") {
+    try {
+      await createProjectPullRequest(project.id, candidate.jobId);
+    } catch {
+      // Best-effort blocker refresh only.
+    }
+  }
+
+  const mergePolicyMessage = isProjectPullRequestMergeAllowed(currentProject, candidate);
+  if (mergePolicyMessage) {
+    return {
+      project: currentProject,
+      lastAction: "merge",
+      lastOutcome: "merge_skipped",
+      message: mergePolicyMessage
+    };
+  }
+
+  const merged = await mergeProjectPullRequest(currentProject.id, candidate.jobId);
+  return {
+    project: merged.project,
+    lastAction: "merge",
+    lastOutcome: "merged",
+    message: `Merged pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
+  };
 }
 
 function buildTelemetry(
@@ -312,24 +404,17 @@ class AutonomyLoopManager {
     }
 
     if (!currentProject.nextDispatchableTaskId) {
-      const candidate = findLatestCompletedImplementerJob(currentProject);
-      const policyMessage = isPullRequestPolicySatisfied(currentProject, candidate);
-      if (policyMessage) {
-        await this.persistTelemetry(currentProject, "skip", candidate ? "pr_skipped" : "idle", policyMessage);
-        return;
-      }
-
-      if (!candidate) {
-        return;
-      }
-
       try {
-        const created = await createProjectPullRequest(currentProject.id, candidate.jobId);
-        await this.persistTelemetry(created.project, "pull_request", "created_pr", `Created pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`);
+        const automation = await processProjectPullRequestAutomation(currentProject);
+        if (!automation) {
+          return;
+        }
+
+        await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Pull request creation failed";
-        this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request creation failed");
-        await this.persistTelemetry(currentProject, "pull_request", "error", message);
+        const message = error instanceof Error ? error.message : "Pull request automation failed";
+        this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request automation failed");
+        await this.persistTelemetry(currentProject, "merge", "error", message);
       }
       return;
     }
@@ -339,23 +424,17 @@ class AutonomyLoopManager {
       await this.persistTelemetry(dispatched.project, "advance", "advanced", `Dispatched task ${dispatched.job.taskId}`);
 
       const candidate = findLatestCompletedImplementerJob(dispatched.project);
-      const policyMessage = isPullRequestPolicySatisfied(dispatched.project, candidate);
-      if (!policyMessage && candidate) {
+      if (candidate) {
         try {
-          const created = await createProjectPullRequest(dispatched.project.id, candidate.jobId);
-          await this.persistTelemetry(
-            created.project,
-            "pull_request",
-            "created_pr",
-            `Created pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
-          );
+          const automation = await processProjectPullRequestAutomation(dispatched.project);
+          if (automation) {
+            await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
+          }
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Pull request creation failed";
-          this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request creation failed");
-          await this.persistTelemetry(dispatched.project, "pull_request", "error", message);
+          const message = error instanceof Error ? error.message : "Pull request automation failed";
+          this.logger.error({ error, projectId: project.id }, "Autonomy loop pull request automation failed");
+          await this.persistTelemetry(dispatched.project, "merge", "error", message);
         }
-      } else if (policyMessage && !dispatched.project.nextDispatchableTaskId) {
-        await this.persistTelemetry(dispatched.project, "skip", candidate ? "pr_skipped" : "idle", policyMessage);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Dispatch failed";

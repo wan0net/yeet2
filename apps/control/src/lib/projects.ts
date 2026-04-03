@@ -57,11 +57,13 @@ export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous" | "unknown";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer" | "unknown";
 export type ProjectPullRequestDraftMode = "draft" | "ready" | "unknown";
+export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval" | "unknown";
 
 export interface ProjectAutonomyState {
   mode: ProjectAutonomyMode;
   pullRequestMode: ProjectPullRequestMode;
   pullRequestDraftMode: ProjectPullRequestDraftMode;
+  mergeApprovalMode: ProjectMergeApprovalMode;
   lastRunStatus: string | null;
   lastRunMessage: string | null;
   lastRunAt: string | null;
@@ -253,6 +255,27 @@ function normalizePullRequestDraftMode(value: unknown): ProjectPullRequestDraftM
   }
 }
 
+function normalizeMergeApprovalMode(value: unknown): ProjectMergeApprovalMode {
+  const normalized = stringValue(value).toLowerCase();
+
+  switch (normalized) {
+    case "human_approval":
+    case "agent_signoff":
+    case "no_approval":
+      return normalized;
+    case "human-approval":
+      return "human_approval";
+    case "agent-signoff":
+      return "agent_signoff";
+    case "no-approval":
+      return "no_approval";
+    case "":
+      return "unknown";
+    default:
+      return "unknown";
+  }
+}
+
 function autonomySource(raw: RawRecord): RawRecord {
   return asRecord(raw.autonomy ?? raw.autonomyState ?? raw.autonomy_state ?? raw.loop ?? raw.loopState ?? raw.loop_state);
 }
@@ -289,6 +312,20 @@ function normalizeAutonomyState(raw: RawRecord): ProjectAutonomyState {
         autonomy.pull_request_draft_mode ??
         autonomy.prDraftMode ??
         autonomy.pr_draft_mode
+    ),
+    mergeApprovalMode: normalizeMergeApprovalMode(
+      raw.mergeApprovalMode ??
+        raw.merge_approval_mode ??
+        raw.approvalMode ??
+        raw.approval_mode ??
+        raw.pullRequestApprovalMode ??
+        raw.pull_request_approval_mode ??
+        autonomy.mergeApprovalMode ??
+        autonomy.merge_approval_mode ??
+        autonomy.approvalMode ??
+        autonomy.approval_mode ??
+        autonomy.pullRequestApprovalMode ??
+        autonomy.pull_request_approval_mode
     ),
     lastRunStatus: stringValue(
       raw.lastRunStatus,
@@ -1085,6 +1122,32 @@ export function pullRequestDraftModeTone(value: ProjectPullRequestDraftMode | st
     case "draft":
       return "border-amber-200 bg-amber-50 text-amber-800";
     case "ready":
+      return "border-emerald-200 bg-emerald-50 text-emerald-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
+}
+
+export function mergeApprovalModeLabel(value: ProjectMergeApprovalMode | string | null | undefined): string {
+  switch (normalizeMergeApprovalMode(value)) {
+    case "human_approval":
+      return "Human approval";
+    case "agent_signoff":
+      return "Agent signoff";
+    case "no_approval":
+      return "No approval";
+    default:
+      return "Unknown";
+  }
+}
+
+export function mergeApprovalModeTone(value: ProjectMergeApprovalMode | string | null | undefined): string {
+  switch (normalizeMergeApprovalMode(value)) {
+    case "human_approval":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "agent_signoff":
+      return "border-sky-200 bg-sky-50 text-sky-800";
+    case "no_approval":
       return "border-emerald-200 bg-emerald-50 text-emerald-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-600";

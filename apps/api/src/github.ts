@@ -33,6 +33,14 @@ export interface GitHubPullRequestResult {
   title: string;
 }
 
+export interface GitHubPullRequestDetails extends GitHubPullRequestResult {
+  draft: boolean;
+  merged: boolean;
+  state: "open" | "closed";
+  headBranch: string;
+  baseBranch: string;
+}
+
 export class GitHubIssueError extends Error {
   constructor(
     public readonly code: "missing_token" | "invalid_repository_url" | "issue_create_failed",
@@ -46,7 +54,13 @@ export class GitHubIssueError extends Error {
 
 export class GitHubPullRequestError extends Error {
   constructor(
-    public readonly code: "missing_token" | "invalid_repository_url" | "pull_request_create_failed",
+    public readonly code:
+      | "missing_token"
+      | "invalid_repository_url"
+      | "pull_request_fetch_failed"
+      | "pull_request_create_failed"
+      | "pull_request_merge_failed"
+      | "pull_request_not_ready",
     message: string,
     public readonly statusCode: number
   ) {
@@ -275,6 +289,124 @@ export async function createGitHubPullRequest(input: GitHubPullRequestInput): Pr
     htmlUrl: candidate.html_url,
     title: candidate.title
   };
+}
+
+export async function fetchGitHubPullRequest(input: {
+  token: string | undefined;
+  repository: GitHubRepositoryRef;
+  pullRequestNumber: number;
+}): Promise<GitHubPullRequestDetails> {
+  if (!input.token) {
+    throw new GitHubPullRequestError("missing_token", "GITHUB_TOKEN is required to inspect GitHub pull requests.", 503);
+  }
+
+  const response = await fetch(`${input.repository.apiBaseUrl}/repos/${input.repository.owner}/${input.repository.repo}/pulls/${input.pullRequestNumber}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new GitHubPullRequestError("pull_request_fetch_failed", `GitHub returned invalid JSON (${response.status}).`, 502);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new GitHubPullRequestError("pull_request_fetch_failed", message || "Unable to inspect GitHub pull request.", 502);
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new GitHubPullRequestError("pull_request_fetch_failed", "GitHub returned an empty pull request payload.", 502);
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  const head = candidate.head as Record<string, unknown> | undefined;
+  const base = candidate.base as Record<string, unknown> | undefined;
+  if (
+    typeof candidate.number !== "number" ||
+    typeof candidate.html_url !== "string" ||
+    typeof candidate.title !== "string" ||
+    typeof candidate.draft !== "boolean" ||
+    typeof candidate.merged !== "boolean" ||
+    typeof candidate.state !== "string" ||
+    !head ||
+    typeof head.ref !== "string" ||
+    !base ||
+    typeof base.ref !== "string"
+  ) {
+    throw new GitHubPullRequestError("pull_request_fetch_failed", "GitHub returned an incomplete pull request payload.", 502);
+  }
+
+  return {
+    number: candidate.number,
+    htmlUrl: candidate.html_url,
+    title: candidate.title,
+    draft: candidate.draft,
+    merged: candidate.merged,
+    state: candidate.state === "closed" ? "closed" : "open",
+    headBranch: head.ref,
+    baseBranch: base.ref
+  };
+}
+
+export async function mergeGitHubPullRequest(input: {
+  token: string | undefined;
+  repository: GitHubRepositoryRef;
+  pullRequestNumber: number;
+  mergeMethod?: "merge" | "squash" | "rebase";
+}): Promise<GitHubPullRequestDetails> {
+  if (!input.token) {
+    throw new GitHubPullRequestError("missing_token", "GITHUB_TOKEN is required to merge GitHub pull requests.", 503);
+  }
+
+  const response = await fetch(`${input.repository.apiBaseUrl}/repos/${input.repository.owner}/${input.repository.repo}/pulls/${input.pullRequestNumber}/merge`, {
+    method: "PUT",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({
+      merge_method: input.mergeMethod ?? "squash"
+    })
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new GitHubPullRequestError("pull_request_merge_failed", `GitHub returned invalid JSON (${response.status}).`, 502);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new GitHubPullRequestError("pull_request_merge_failed", message || "Unable to merge GitHub pull request.", 502);
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new GitHubPullRequestError("pull_request_merge_failed", "GitHub returned an empty merge payload.", 502);
+  }
+
+  return fetchGitHubPullRequest({
+    token: input.token,
+    repository: input.repository,
+    pullRequestNumber: input.pullRequestNumber
+  });
 }
 
 export async function createGitHubIssue(input: GitHubIssueInput & { repository: GitHubRepositoryRef }): Promise<GitHubIssueResult> {

@@ -44,6 +44,12 @@ enum ProjectPullRequestDraftMode {
   ready
 }
 
+enum ProjectMergeApprovalMode {
+  human_approval
+  agent_signoff
+  no_approval
+}
+
 enum ProjectRoleKey {
   planner
   architect
@@ -94,6 +100,7 @@ model Project {
   autonomyMode       ProjectAutonomyMode @default(manual) @map("autonomy_mode")
   pullRequestMode    ProjectPullRequestMode @default(manual) @map("pull_request_mode")
   pullRequestDraftMode ProjectPullRequestDraftMode @default(draft) @map("pull_request_draft_mode")
+  mergeApprovalMode  ProjectMergeApprovalMode @default(human_approval) @map("merge_approval_mode")
   lastAutonomyRunAt  DateTime?           @map("last_autonomy_run_at")
   lastAutonomyStatus String?             @map("last_autonomy_status")
   lastAutonomyMessage String?            @map("last_autonomy_message")

@@ -21,6 +21,7 @@ export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "r
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
 export type ProjectPullRequestDraftMode = "draft" | "ready";
+export type ProjectMergeApprovalMode = "human_approval" | "agent_signoff" | "no_approval";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
@@ -56,6 +57,7 @@ export interface Project {
   autonomyMode?: ProjectAutonomyMode | null;
   pullRequestMode?: ProjectPullRequestMode | null;
   pullRequestDraftMode?: ProjectPullRequestDraftMode | null;
+  mergeApprovalMode?: ProjectMergeApprovalMode | null;
   lastAutonomyRunAt?: string | null;
   lastAutonomyStatus?: string | null;
   lastAutonomyMessage?: string | null;

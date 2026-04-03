@@ -154,6 +154,7 @@ function parseProjectAutonomyBody(body: unknown): {
         autonomyMode: ProjectAutonomyMode;
         pullRequestMode?: ProjectPullRequestMode;
         pullRequestDraftMode?: ProjectPullRequestDraftMode;
+        mergeApprovalMode?: import("@yeet2/domain").ProjectMergeApprovalMode;
       }
     | null;
   error: string | null;
@@ -202,11 +203,27 @@ function parseProjectAutonomyBody(body: unknown): {
     };
   }
 
+  const rawMergeApprovalMode = candidate.mergeApprovalMode ?? candidate.merge_approval_mode;
+  const mergeApprovalMode =
+    typeof rawMergeApprovalMode === "string" ? rawMergeApprovalMode.trim().toLowerCase() : "";
+  if (
+    mergeApprovalMode &&
+    mergeApprovalMode !== "human_approval" &&
+    mergeApprovalMode !== "agent_signoff" &&
+    mergeApprovalMode !== "no_approval"
+  ) {
+    return {
+      input: null,
+      error: "mergeApprovalMode must be human_approval, agent_signoff, or no_approval"
+    };
+  }
+
   return {
     input: {
       autonomyMode,
       ...(pullRequestMode ? { pullRequestMode: pullRequestMode as ProjectPullRequestMode } : {}),
-      ...(pullRequestDraftMode ? { pullRequestDraftMode: pullRequestDraftMode as ProjectPullRequestDraftMode } : {})
+      ...(pullRequestDraftMode ? { pullRequestDraftMode: pullRequestDraftMode as ProjectPullRequestDraftMode } : {}),
+      ...(mergeApprovalMode ? { mergeApprovalMode: mergeApprovalMode as import("@yeet2/domain").ProjectMergeApprovalMode } : {})
     },
     error: null
   };

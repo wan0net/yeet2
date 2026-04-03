@@ -9,12 +9,15 @@ import { formatTimestamp } from "../../../lib/project-detail";
 import {
   autonomyModeLabel,
   autonomyModeTone,
+  mergeApprovalModeLabel,
+  mergeApprovalModeTone,
   pullRequestDraftModeLabel,
   pullRequestDraftModeTone,
   pullRequestModeLabel,
   pullRequestModeTone,
   type ProjectAutonomyMode,
   type ProjectAutonomyState,
+  type ProjectMergeApprovalMode,
   type ProjectPullRequestDraftMode,
   type ProjectPullRequestMode
 } from "../../../lib/projects";
@@ -47,6 +50,7 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
   const [mode, setMode] = useState<ProjectAutonomyMode>(autonomy.mode);
   const [pullRequestMode, setPullRequestMode] = useState<ProjectPullRequestMode>(autonomy.pullRequestMode);
   const [pullRequestDraftMode, setPullRequestDraftMode] = useState<ProjectPullRequestDraftMode>(autonomy.pullRequestDraftMode);
+  const [mergeApprovalMode, setMergeApprovalMode] = useState<ProjectMergeApprovalMode>(autonomy.mergeApprovalMode);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,7 +59,8 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
     setMode(autonomy.mode);
     setPullRequestMode(autonomy.pullRequestMode);
     setPullRequestDraftMode(autonomy.pullRequestDraftMode);
-  }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode]);
+    setMergeApprovalMode(autonomy.mergeApprovalMode);
+  }, [autonomy.mode, autonomy.pullRequestMode, autonomy.pullRequestDraftMode, autonomy.mergeApprovalMode]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,7 +79,8 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
           mode,
           autonomyMode: mode,
           pullRequestMode,
-          pullRequestDraftMode
+          pullRequestDraftMode,
+          mergeApprovalMode
         })
       });
       const payload = (await response.json().catch(() => null)) as { error?: string; detail?: unknown; message?: string } | null;
@@ -98,9 +104,9 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
         <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr]">
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Control how {projectName} runs its planning loop and PR automation. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, and they can start as draft or ready.
+              Control how {projectName} runs its planning loop, PR automation, and merge gating. Manual keeps the loop paused, supervised keeps approval in the loop, and autonomous allows the loop to run on its own. PRs can be opened manually or after a specific role, start as draft or ready, and merge approval can stay with a human or be handed off.
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <label className="block space-y-1">
                 <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Autonomy mode</span>
                 <select
@@ -139,6 +145,19 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
                   <option value="ready">Ready</option>
                 </select>
               </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Merge approval</span>
+                <select
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+                  onChange={(event) => setMergeApprovalMode(event.currentTarget.value as ProjectMergeApprovalMode)}
+                  value={mergeApprovalMode}
+                >
+                  <option value="unknown">Unknown</option>
+                  <option value="human_approval">Human approval</option>
+                  <option value="agent_signoff">Agent signoff</option>
+                  <option value="no_approval">No approval</option>
+                </select>
+              </label>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
@@ -156,6 +175,9 @@ export function ProjectAutonomyPanel({ projectId, projectName, autonomy }: Proje
               </span>
               <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${pullRequestDraftModeTone(autonomy.pullRequestDraftMode)}`}>
                 PR draft: {pullRequestDraftModeLabel(autonomy.pullRequestDraftMode)}
+              </span>
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${mergeApprovalModeTone(autonomy.mergeApprovalMode)}`}>
+                Merge: {mergeApprovalModeLabel(autonomy.mergeApprovalMode)}
               </span>
             </div>
           </div>
