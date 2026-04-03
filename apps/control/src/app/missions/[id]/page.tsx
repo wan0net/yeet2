@@ -5,6 +5,7 @@ import { SectionCard, StatusBadge } from "@yeet2/ui";
 
 import { formatTimestamp, jobStatusTone, missionRecentJobs, missionResultSummaries, stageLabel } from "../../../lib/project-detail";
 import { fetchMissionDetail } from "../../../lib/project-resource";
+import { planningProvenanceLabel, planningProvenanceTone } from "../../../lib/projects";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +46,12 @@ export default async function MissionDetailPage({ params }: { params: Promise<{ 
                 </Link>
               </span>
               <span>Created by: <span className="font-medium text-slate-700">{mission.createdBy ?? "unknown"}</span></span>
+              <span className="inline-flex items-center gap-2">
+                <span>Planning provenance:</span>
+                <span className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${planningProvenanceTone(mission.planningProvenance)}`}>
+                  {planningProvenanceLabel(mission.planningProvenance)}
+                </span>
+              </span>
               <span>Started: <span className="font-medium text-slate-700">{formatTimestamp(mission.startedAt) ?? "Unknown"}</span></span>
             </div>
           </div>

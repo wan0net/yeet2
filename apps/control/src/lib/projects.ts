@@ -49,6 +49,8 @@ export interface ProjectJobRecord {
   githubCompareUrl?: string;
 }
 
+export type PlanningProvenance = "crewai" | "brain" | "fallback" | "unknown";
+
 export interface ProjectBlockerRecord {
   id: string;
   taskId: string | null;
@@ -69,6 +71,7 @@ export interface ProjectMissionRecord {
   objective: string;
   status: string;
   createdBy: string | null;
+  planningProvenance: PlanningProvenance;
   startedAt: string | null;
   completedAt: string | null;
   tasks: ProjectTaskRecord[];
@@ -157,6 +160,30 @@ function stringArrayValue(value: unknown): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim())
     .filter(Boolean);
+}
+
+function normalizePlanningProvenanceValue(...values: unknown[]): PlanningProvenance {
+  for (const value of values) {
+    const normalized = stringValue(value).toLowerCase().replace(/[\s_-]+/g, "");
+
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.includes("crewai")) {
+      return "crewai";
+    }
+
+    if (normalized.includes("brain")) {
+      return "brain";
+    }
+
+    if (normalized.includes("fallback")) {
+      return "fallback";
+    }
+  }
+
+  return "unknown";
 }
 
 function stripGitSuffix(value: string): string {
@@ -461,6 +488,16 @@ function normalizeMissionRecord(value: unknown): ProjectMissionRecord | null {
     objective,
     status: stringValue(raw.status) || "active",
     createdBy: stringValue(raw.createdBy, raw.created_by) || null,
+    planningProvenance: normalizePlanningProvenanceValue(
+      raw.planningProvenance,
+      raw.planning_provenance,
+      raw.provenance,
+      raw.planSource,
+      raw.plan_source,
+      raw.source,
+      raw.createdBy,
+      raw.created_by
+    ),
     startedAt: stringValue(raw.startedAt, raw.started_at) || null,
     completedAt: stringValue(raw.completedAt, raw.completed_at) || null,
     tasks
@@ -597,6 +634,32 @@ export function normalizeProjectRegistration(payload: unknown): ProjectRegistrat
     default_branch: defaultBranch,
     ...(localPath ? { local_path: localPath } : {})
   };
+}
+
+export function planningProvenanceLabel(value: PlanningProvenance | string | null | undefined): string {
+  switch (normalizePlanningProvenanceValue(value)) {
+    case "crewai":
+      return "CrewAI-backed";
+    case "brain":
+      return "Brain-generated";
+    case "fallback":
+      return "Fallback-generated";
+    default:
+      return "Unknown provenance";
+  }
+}
+
+export function planningProvenanceTone(value: PlanningProvenance | string | null | undefined): string {
+  switch (normalizePlanningProvenanceValue(value)) {
+    case "crewai":
+      return "border-cyan-200 bg-cyan-50 text-cyan-800";
+    case "brain":
+      return "border-indigo-200 bg-indigo-50 text-indigo-800";
+    case "fallback":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    default:
+      return "border-slate-200 bg-slate-100 text-slate-600";
+  }
 }
 
 export function missingRegistrationFields(input: ProjectRegistrationInput | null): string[] {

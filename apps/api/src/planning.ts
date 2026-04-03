@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 
+import type { PlanningProvenance } from "@yeet2/domain";
 import type { ConstitutionInspection, ConstitutionFileKey } from "./constitution";
 
-export type PlanSource = "brain" | "fallback";
+type BrainRequestedBy = Exclude<PlanningProvenance, "fallback">;
 
 export interface PlanningProject {
   id: string;
@@ -16,7 +17,8 @@ export interface PlanningMissionDraft {
   title: string;
   objective: string;
   status: "active";
-  createdBy: PlanSource;
+  createdBy: PlanningProvenance;
+  planningProvenance: PlanningProvenance;
 }
 
 export interface PlanningTaskDraft {
@@ -31,7 +33,7 @@ export interface PlanningTaskDraft {
 }
 
 export interface PlanningDraft {
-  source: PlanSource;
+  source: PlanningProvenance;
   mission: PlanningMissionDraft;
   tasks: PlanningTaskDraft[];
 }
@@ -79,21 +81,43 @@ function cleanText(value: string | null | undefined): string {
   return (value ?? "").trim();
 }
 
-function normalizePlanSource(value: unknown, fallback: PlanSource): PlanSource {
+function normalizePlanningProvenance(value: unknown, fallback: PlanningProvenance): PlanningProvenance {
   if (typeof value !== "string") {
     return fallback;
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "fallback") {
-    return "fallback";
+  if (normalized === "crewai" || normalized === "brain" || normalized === "fallback") {
+    return normalized;
   }
 
   if (normalized === "brain" || normalized === "system" || normalized === "api") {
-    return "brain";
+    return fallback === "fallback" ? "brain" : fallback;
   }
 
   return fallback;
+}
+
+function runtimePrefersCrewAI(): boolean {
+  const backend = cleanText(process.env.YEET2_BRAIN_PLANNER_BACKEND).toLowerCase();
+  if (backend === "crewai") {
+    return true;
+  }
+
+  if (backend === "deterministic") {
+    return false;
+  }
+
+  return Boolean(
+    cleanText(process.env.YEET2_BRAIN_CREWAI_MODEL) ||
+      cleanText(process.env.OPENAI_MODEL_NAME) ||
+      cleanText(process.env.MODEL) ||
+      ["1", "true", "yes", "on"].includes(cleanText(process.env.YEET2_BRAIN_CREWAI_ENABLED).toLowerCase())
+  );
+}
+
+function requestedPlanningProvenance(): BrainRequestedBy {
+  return runtimePrefersCrewAI() ? "crewai" : "brain";
 }
 
 function normalizeAgentRole(value: unknown): PlanningTaskDraft["agentRole"] | null {
@@ -134,8 +158,7 @@ function firstMeaningfulLine(text: string | null | undefined, fallback: string):
   return lines[0] || fallback;
 }
 
-function buildBrainPlanningRequest(context: PlanningContext): BrainPlanningRequest {
-  const requestedBy = "api";
+function buildBrainPlanningRequest(context: PlanningContext, requestedBy: BrainRequestedBy): BrainPlanningRequest {
   const sections = (Object.keys(context.constitution.files) as ConstitutionFileKey[]).reduce(
     (acc, key) => {
       const file = context.constitution.files[key];
@@ -207,7 +230,8 @@ function buildFallbackDraft(context: PlanningContext): PlanningDraft {
       title: `Launch the first constitutional slice for ${projectName}`,
       objective: `Turn the constitution into a first implementation pass grounded in ${visionHeadline}, ${specHeadline}, and ${roadmapHeadline}.`,
       status: "active",
-      createdBy: "fallback"
+      createdBy: "fallback",
+      planningProvenance: "fallback"
     },
     tasks: [
       {
@@ -279,13 +303,15 @@ function normalizeMissionDraft(value: unknown, fallback: PlanningMissionDraft): 
   const title = cleanText(typeof raw.title === "string" ? raw.title : undefined) || fallback.title;
   const objective = cleanText(typeof raw.objective === "string" ? raw.objective : undefined) || fallback.objective;
   const status = raw.status === "active" ? "active" : fallback.status;
-  const createdBy = normalizePlanSource(raw.createdBy, fallback.createdBy);
+  const planningProvenance = normalizePlanningProvenance(raw.planningProvenance ?? raw.createdBy, fallback.planningProvenance);
+  const createdBy = planningProvenance;
 
   return {
     title,
     objective,
     status,
-    createdBy
+    createdBy,
+    planningProvenance
   };
 }
 
@@ -319,7 +345,7 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
   };
 }
 
-function extractBrainDraft(payload: unknown, fallback: PlanningDraft): PlanningDraft {
+function extractBrainDraft(payload: unknown, fallback: PlanningDraft, provenance: BrainRequestedBy): PlanningDraft {
   if (typeof payload !== "object" || payload === null) {
     return fallback;
   }
@@ -327,7 +353,7 @@ function extractBrainDraft(payload: unknown, fallback: PlanningDraft): PlanningD
   const raw = payload as Record<string, unknown>;
   const fromPlan = typeof raw.plan === "object" && raw.plan !== null ? (raw.plan as Record<string, unknown>) : null;
   const fromResult = typeof raw.result === "object" && raw.result !== null ? (raw.result as Record<string, unknown>) : null;
-  const draftSource = raw.source ?? fromPlan?.source ?? fromResult?.source;
+  const draftProvenance = normalizePlanningProvenance(raw.source ?? raw.planningProvenance ?? fromPlan?.source ?? fromPlan?.planningProvenance ?? fromResult?.source ?? fromResult?.planningProvenance, provenance);
 
   const missionValue = raw.mission ?? fromPlan?.mission ?? fromResult?.mission;
   const taskValues = raw.tasks ?? fromPlan?.tasks ?? fromResult?.tasks;
@@ -343,13 +369,13 @@ function extractBrainDraft(payload: unknown, fallback: PlanningDraft): PlanningD
   }
 
   return {
-    source: draftSource === "brain" ? "brain" : fallback.source,
+    source: draftProvenance,
     mission,
     tasks
   };
 }
 
-async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft | null> {
+async function callBrainPlanner(context: PlanningContext, provenance: BrainRequestedBy): Promise<PlanningDraft | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
@@ -360,7 +386,7 @@ async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft
         "Content-Type": "application/json",
         Accept: "application/json"
       },
-      body: JSON.stringify(buildBrainPlanningRequest(context)),
+      body: JSON.stringify(buildBrainPlanningRequest(context, provenance)),
       signal: controller.signal
     });
 
@@ -370,7 +396,7 @@ async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft
 
     const payload = (await response.json().catch(() => null)) as unknown;
     const fallback = buildFallbackDraft(context);
-    return extractBrainDraft(payload, fallback);
+    return extractBrainDraft(payload, fallback, provenance);
   } catch {
     return null;
   } finally {
@@ -380,6 +406,6 @@ async function callBrainPlanner(context: PlanningContext): Promise<PlanningDraft
 
 export async function createInitialPlan(context: PlanningContext): Promise<PlanningDraft> {
   const fallback = buildFallbackDraft(context);
-  const brainDraft = await callBrainPlanner(context);
+  const brainDraft = await callBrainPlanner(context, requestedPlanningProvenance());
   return brainDraft ?? fallback;
 }

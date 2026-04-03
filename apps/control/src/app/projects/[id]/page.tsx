@@ -27,6 +27,8 @@ import {
   githubBranchUrl,
   jobGitHubCompareUrl,
   parseGitHubRepoUrl,
+  planningProvenanceLabel,
+  planningProvenanceTone,
   projectGitHubRepoInfo
 } from "../../../lib/projects";
 
@@ -215,6 +217,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Created by</div>
                 <div className="mt-1 font-medium text-slate-900">{currentMission.createdBy ?? "unknown"}</div>
+                <div className="mt-3 text-[10px] uppercase tracking-[0.18em] text-slate-500">Planning provenance</div>
+                <div className={`mt-1 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] ${planningProvenanceTone(currentMission.planningProvenance)}`}>
+                  {planningProvenanceLabel(currentMission.planningProvenance)}
+                </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Started</div>

@@ -11,6 +11,7 @@ import type {
   Project as DbProject,
   Task as DbTask
 } from "@yeet2/db";
+import type { PlanningProvenance } from "@yeet2/domain";
 
 import { prisma } from "./db";
 import {
@@ -88,6 +89,7 @@ export interface ProjectMissionSummary {
   objective: string;
   status: string;
   createdBy: string | null;
+  planningProvenance: PlanningProvenance | null;
   startedAt: string | null;
   completedAt: string | null;
   tasks: ProjectTaskSummary[];
@@ -456,6 +458,23 @@ function asProjectInput(project: Pick<ProjectWithRelations, "id" | "name" | "rep
   };
 }
 
+function planningProvenanceFromCreatedBy(value: string | null | undefined): PlanningProvenance | null {
+  const normalized = normalizeOptionalString(value)?.toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (normalized === "crewai" || normalized === "brain" || normalized === "fallback") {
+    return normalized;
+  }
+
+  if (normalized === "api" || normalized === "system") {
+    return "brain";
+  }
+
+  return null;
+}
+
 function toProjectJobSummary(job: DbJob): ProjectJobSummary {
   return {
     id: job.id,
@@ -517,6 +536,7 @@ function toProjectMissionSummary(mission: ProjectWithRelations["missions"][numbe
     .sort((left, right) => left.priority - right.priority)
     .map(toProjectTaskSummary);
   const status = missionStatusFromTasks(mission);
+  const planningProvenance = planningProvenanceFromCreatedBy(mission.createdBy);
 
   return {
     id: mission.id,
@@ -525,6 +545,7 @@ function toProjectMissionSummary(mission: ProjectWithRelations["missions"][numbe
     objective: mission.objective,
     status,
     createdBy: mission.createdBy ?? null,
+    planningProvenance,
     startedAt: mission.startedAt?.toISOString() ?? null,
     completedAt: mission.completedAt?.toISOString() ?? null,
     tasks

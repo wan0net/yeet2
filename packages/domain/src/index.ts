@@ -17,6 +17,7 @@ export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
 export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
+export type PlanningProvenance = "crewai" | "brain" | "fallback";
 
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
@@ -87,6 +88,7 @@ export interface MissionSummary {
   objective: string;
   status: MissionStatus;
   createdBy?: string | null;
+  planningProvenance?: PlanningProvenance | null;
   startedAt?: string | null;
   completedAt?: string | null;
   taskCount: number;
@@ -176,6 +178,7 @@ export type PlanningTaskSet = readonly [
 export interface PlanningMissionDraft {
   title: string;
   objective: string;
+  planningProvenance: PlanningProvenance;
 }
 
 export interface PlanningRequest {
