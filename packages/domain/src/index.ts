@@ -137,6 +137,26 @@ export interface GlobalBlockerQueueItem {
   blocker: ProjectBlockerSummary;
 }
 
+export interface ControlPlaneOverview {
+  generatedAt: string;
+  auth: {
+    enabled: boolean;
+    requireAuthForReads: boolean;
+    mode: "open" | "write_protected" | "full";
+  };
+  totals: {
+    projects: number;
+    activeMissions: number;
+    activeTasks: number;
+    openBlockers: number;
+    openApprovals: number;
+    runningJobs: number;
+    queuedJobs: number;
+    failedJobs: number;
+  };
+  workers: WorkerFleetSummary;
+}
+
 export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;

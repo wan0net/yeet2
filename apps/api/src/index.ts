@@ -3,6 +3,7 @@ import Fastify from "fastify";
 import { createAutonomyLoopManager } from "./autonomy-loop";
 import { describeApiAuth, requireApiAuth } from "./auth";
 import { registerProjectRoutes } from "./routes/projects";
+import { registerSystemRoutes } from "./routes/system";
 import { registerWorkerRoutes } from "./routes/workers";
 import { seedLocalWorkerFromEnv } from "./workers";
 
@@ -31,6 +32,7 @@ const loopManager = createAutonomyLoopManager(app.log);
 
 await app.register(registerProjectRoutes, { loopManager });
 await app.register(registerWorkerRoutes);
+await app.register(registerSystemRoutes);
 
 app.addHook("onClose", async () => {
   await loopManager.stop();
