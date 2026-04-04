@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { enhance } from "$app/forms";
   import type { ActionData, PageData } from "./$types";
   import {
     activeMission,
@@ -13,6 +14,7 @@
   import Markdown from "$lib/ui/Markdown.svelte";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
+  let submitting = $state("");
 
   const project = $derived(data.project);
   const mission = $derived(activeMission(project));
@@ -92,13 +94,23 @@
       </div>
     </div>
     <div class="token-row">
-      <form method="POST">
+      <form method="POST" use:enhance={() => {
+        submitting = "plan";
+        return async ({ update }) => { submitting = ""; await update(); };
+      }}>
         <input name="returnTab" type="hidden" value={currentTab} />
-        <button formaction="?/plan" type="submit">Plan</button>
+        <button formaction="?/plan" type="submit" disabled={submitting !== ""}>
+          {submitting === "plan" ? "Planning..." : "Plan"}
+        </button>
       </form>
-      <form method="POST">
+      <form method="POST" use:enhance={() => {
+        submitting = "run";
+        return async ({ update }) => { submitting = ""; await update(); };
+      }}>
         <input name="returnTab" type="hidden" value={currentTab} />
-        <button formaction="?/run" type="submit">Run now</button>
+        <button formaction="?/run" type="submit" disabled={submitting !== ""}>
+          {submitting === "run" ? "Running..." : "Run now"}
+        </button>
       </form>
       <a class="btn secondary" href="/projects">Back</a>
     </div>
