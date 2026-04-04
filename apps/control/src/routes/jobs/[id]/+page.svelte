@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   import { formatTimestamp } from "$lib/project-detail";
+  import Markdown from "$lib/ui/Markdown.svelte";
   let { data }: { data: PageData } = $props();
 </script>
 
@@ -57,7 +58,7 @@
 <section class="card">
   <div class="card-header">Artifact summary</div>
   <div class="card-body">
-    <p>{data.job.artifactSummary}</p>
+    <Markdown content={data.job.artifactSummary} />
   </div>
 </section>
 {/if}

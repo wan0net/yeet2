@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   import { formatTimestamp, jobStatusTone } from "$lib/project-detail";
+  import Markdown from "$lib/ui/Markdown.svelte";
   let { data }: { data: PageData } = $props();
 
   const runningJobs = $derived(data.jobs.filter((entry) => entry.job.status === "running"));
@@ -75,7 +76,7 @@
               </div>
             </div>
             {#if entry.job.artifactSummary}
-              <p>{entry.job.artifactSummary}</p>
+              <Markdown content={entry.job.artifactSummary} inline />
             {/if}
           </article>
         {/each}

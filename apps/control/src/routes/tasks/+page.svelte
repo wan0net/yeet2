@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData } from "./$types";
+  import Markdown from "$lib/ui/Markdown.svelte";
   let { data }: { data: PageData } = $props();
 
   function entryDispatchable(entry: PageData["tasks"][number]): boolean {
@@ -72,7 +73,7 @@
                 <div>{entry.task.dispatchable ? "Ready to dispatch" : entry.task.dispatchBlockedReason || "Waiting on previous step"}</div>
               </div>
             </div>
-            <p>{entry.task.description}</p>
+            <Markdown content={entry.task.description} />
           </article>
         {/each}
       </div>

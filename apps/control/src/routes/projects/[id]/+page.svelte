@@ -10,6 +10,7 @@
     formatTimestamp
   } from "$lib/project-detail";
   import { formatConstitutionFiles, planningProvenanceLabel, projectModelCostSummary } from "$lib/projects";
+  import Markdown from "$lib/ui/Markdown.svelte";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -193,6 +194,7 @@
         {#if project.constitution.inspectedAt}
           <div class="muted" style="margin-top: var(--space-1);">Inspected: {formatTimestamp(project.constitution.inspectedAt)}</div>
         {/if}
+        <a class="btn secondary" href={`/projects/${project.id}/constitution`} style="margin-top: var(--space-2); display: inline-block;">Edit constitution</a>
       </div>
       <div><strong>Planner source:</strong> {mission ? planningProvenanceLabel(mission.planningProvenance) : "No mission yet"}</div>
     </div>
@@ -212,7 +214,7 @@
         </div>
         <div>
           <h2>{mission.title}</h2>
-          <p>{mission.objective}</p>
+          <Markdown content={mission.objective} />
         </div>
       </div>
     {:else}
@@ -318,7 +320,7 @@
               <span class="pill {blocker.status === 'open' ? 'warn' : 'success'}">{blocker.status}</span>
             </div>
             <strong>{blocker.title}</strong>
-            <div class="muted">{blocker.context}</div>
+            <div class="muted"><Markdown content={blocker.context ?? ""} inline /></div>
           </div>
         {/each}
       {/if}
@@ -363,7 +365,7 @@
               {/if}
             </div>
           </div>
-          <div>{entry.summary}</div>
+          <Markdown content={entry.summary} inline />
         </div>
       {/each}
     {/if}

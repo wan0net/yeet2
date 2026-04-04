@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData, ActionData } from "./$types";
+  import Markdown from "$lib/ui/Markdown.svelte";
   let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
@@ -59,10 +60,10 @@
               </div>
               <div>
                 <div class="metric-kicker">Recommendation</div>
-                <div>{approval.blockerRecommendation || "No recommendation recorded."}</div>
+                <Markdown content={String(approval.blockerRecommendation || "No recommendation recorded.")} inline />
               </div>
             </div>
-            <p>{approval.blockerContext}</p>
+            <Markdown content={String(approval.blockerContext ?? "")} />
             {#if approval.blockerStatus === "open"}
               <div class="token-row" style="margin-top: var(--space-3);">
                 <form method="POST" action="?/approve">

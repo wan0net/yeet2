@@ -43,10 +43,13 @@ import {
   ProjectRoleDefinitionError,
   ProjectJobLogError,
   ProjectPullRequestError,
+  ProjectConstitutionError,
   createProjectMessage,
   replaceProjectRoleDefinitions,
   readProjectCostAnalysis,
   updateProjectAutonomy,
+  readConstitutionFile,
+  writeConstitutionFile,
   type ProjectRegistrationInput
 } from "../projects";
 
@@ -1233,6 +1236,70 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to create project message"
+      });
+    }
+  });
+
+  app.get("/projects/:projectId/constitution/:fileKey", async (request, reply) => {
+    const { projectId, fileKey } = request.params as { projectId?: string; fileKey?: string };
+    if (!projectId || !fileKey) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and fileKey are required"
+      });
+    }
+
+    try {
+      const result = await readConstitutionFile(projectId, fileKey);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectConstitutionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to read constitution file"
+      });
+    }
+  });
+
+  app.put("/projects/:projectId/constitution/:fileKey", async (request, reply) => {
+    const { projectId, fileKey } = request.params as { projectId?: string; fileKey?: string };
+    if (!projectId || !fileKey) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and fileKey are required"
+      });
+    }
+
+    const body = request.body as Record<string, unknown> | null;
+    if (typeof body !== "object" || body === null || typeof body.content !== "string") {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "Request body must include a content string"
+      });
+    }
+
+    try {
+      const result = await writeConstitutionFile(projectId, fileKey, body.content);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectConstitutionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to write constitution file"
       });
     }
   });

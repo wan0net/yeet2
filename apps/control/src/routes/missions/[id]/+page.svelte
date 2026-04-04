@@ -2,6 +2,7 @@
   import type { PageData } from "./$types";
   import { planningProvenanceLabel } from "$lib/projects";
   import { formatTimestamp } from "$lib/project-detail";
+  import Markdown from "$lib/ui/Markdown.svelte";
 
   let { data }: { data: PageData } = $props();
 </script>
@@ -25,7 +26,7 @@
         <span class="pill">{data.mission.status}</span>
         <span class="pill info">{planningProvenanceLabel(data.mission.planningProvenance)}</span>
       </div>
-      <p>{data.mission.objective}</p>
+      <Markdown content={data.mission.objective} />
     </div>
   </div>
   <div class="card">

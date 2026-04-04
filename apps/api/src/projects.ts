@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -409,6 +409,120 @@ export class ProjectAutonomyError extends Error {
     super(message);
     this.name = "ProjectAutonomyError";
   }
+}
+
+export class ProjectConstitutionError extends Error {
+  constructor(
+    public readonly code: "project_not_found" | "project_no_local_path" | "invalid_file_key" | "file_read_failed" | "file_write_failed" | "path_traversal",
+    message: string,
+    public readonly statusCode: number
+  ) {
+    super(message);
+    this.name = "ProjectConstitutionError";
+  }
+}
+
+const CONSTITUTION_FILE_PATHS: Record<string, string> = {
+  vision: "docs/VISION.md",
+  spec: "docs/SPEC.md",
+  roadmap: "docs/ROADMAP.md",
+  architecture: "docs/ARCHITECTURE.md",
+  decisions: "docs/DECISIONS.md",
+  qualityBar: "docs/QUALITY_BAR.md"
+};
+
+export interface ConstitutionFileReadResult {
+  fileKey: string;
+  path: string;
+  content: string;
+  exists: boolean;
+}
+
+export interface ConstitutionFileWriteResult {
+  fileKey: string;
+  path: string;
+  written: true;
+}
+
+export async function readConstitutionFile(projectId: string, fileKey: string): Promise<ConstitutionFileReadResult> {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) {
+    throw new ProjectConstitutionError("project_not_found", "Project not found", 404);
+  }
+  if (!project.localPath) {
+    throw new ProjectConstitutionError("project_no_local_path", "Project has no local path configured", 422);
+  }
+
+  const relativePath = CONSTITUTION_FILE_PATHS[fileKey];
+  if (!relativePath) {
+    throw new ProjectConstitutionError("invalid_file_key", `Invalid file key: ${fileKey}. Must be one of: ${Object.keys(CONSTITUTION_FILE_PATHS).join(", ")}`, 400);
+  }
+
+  const localRoot = resolve(project.localPath);
+  const absolutePath = resolve(join(localRoot, relativePath));
+  if (!absolutePath.startsWith(localRoot + "/") && absolutePath !== localRoot) {
+    throw new ProjectConstitutionError("path_traversal", "Resolved path is outside the project directory", 400);
+  }
+
+  try {
+    const content = await readFile(absolutePath, "utf8");
+    return { fileKey, path: relativePath, content, exists: true };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { fileKey, path: relativePath, content: "", exists: false };
+    }
+    throw new ProjectConstitutionError("file_read_failed", `Failed to read file: ${relativePath}`, 500);
+  }
+}
+
+export async function writeConstitutionFile(projectId: string, fileKey: string, content: string): Promise<ConstitutionFileWriteResult> {
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) {
+    throw new ProjectConstitutionError("project_not_found", "Project not found", 404);
+  }
+  if (!project.localPath) {
+    throw new ProjectConstitutionError("project_no_local_path", "Project has no local path configured", 422);
+  }
+
+  const relativePath = CONSTITUTION_FILE_PATHS[fileKey];
+  if (!relativePath) {
+    throw new ProjectConstitutionError("invalid_file_key", `Invalid file key: ${fileKey}. Must be one of: ${Object.keys(CONSTITUTION_FILE_PATHS).join(", ")}`, 400);
+  }
+
+  const localRoot = resolve(project.localPath);
+  const absolutePath = resolve(join(localRoot, relativePath));
+  if (!absolutePath.startsWith(localRoot + "/") && absolutePath !== localRoot) {
+    throw new ProjectConstitutionError("path_traversal", "Resolved path is outside the project directory", 400);
+  }
+
+  try {
+    await mkdir(resolve(join(localRoot, "docs")), { recursive: true });
+    await writeFile(absolutePath, content, "utf8");
+  } catch {
+    throw new ProjectConstitutionError("file_write_failed", `Failed to write file: ${relativePath}`, 500);
+  }
+
+  // Re-inspect constitution and update DB metadata
+  try {
+    const inspection = await inspectConstitution(localRoot);
+    const constitutionData = buildConstitutionData(inspection);
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        constitutionStatus: inspection.status,
+        constitution: {
+          upsert: {
+            create: constitutionData,
+            update: constitutionData
+          }
+        }
+      }
+    });
+  } catch {
+    // Best-effort: don't fail the write if re-inspection fails
+  }
+
+  return { fileKey, path: relativePath, written: true };
 }
 
 export interface ProjectListResponse {
