@@ -377,21 +377,29 @@ def _operator_guidance_summary(planning_input: PlanningInput) -> str:
 
 
 def _summarize_text(text: str) -> str:
-    text = " ".join(text.split())
-    if not text:
+    normalized = " ".join(text.split())
+    if not normalized:
         return ""
+
+    # Try extracting the first markdown heading (handles collapsed newlines too)
+    import re
+    heading_match = re.search(r"(?:^|\s)(#{1,3})\s+(.+?)(?:\s+#{1,3}\s|$)", normalized)
+    if heading_match:
+        candidate = heading_match.group(2).strip()
+        if candidate and len(candidate) < 200:
+            return candidate
 
     paragraphs = [part.strip() for part in text.splitlines() if part.strip()]
     for paragraph in paragraphs:
         if paragraph.startswith("#"):
             candidate = paragraph.lstrip("#").strip()
             if candidate:
-                return candidate
+                return candidate[:200]
 
-    sentences = [part.strip() for part in _SENTENCE_RE.split(text) if part.strip()]
+    sentences = [part.strip() for part in _SENTENCE_RE.split(normalized) if part.strip()]
     if sentences:
-        return sentences[0]
-    return text[:180].strip()
+        return sentences[0][:200]
+    return normalized[:180].strip()
 
 
 def _tokenize(text: str) -> list[str]:
@@ -462,9 +470,10 @@ def _compose_mission(
         objective_bits.append(f"Focus areas: {', '.join(themes[:3])}.")
     if continuation_summary:
         objective_bits.append(continuation_summary)
-    mission_objective = objective or " ".join(bit for bit in objective_bits if bit).strip() or (
+    generated_objective = " ".join(bit for bit in objective_bits if bit).strip() or (
         f"Establish the first durable planning loop for {project_name}."
     )
+    mission_objective = objective if objective and len(objective) < 500 else generated_objective
 
     return PlannedMission(
         id=f"mission-{uuid4().hex}",
@@ -656,10 +665,13 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         Task(
             description=(
                 f"Read the constitution for {project_name}. As the {definition.label} role, "
-                f"focus on {definition.goal}. Return only valid JSON with summary, themes, "
-                "mission_title, mission_objective, and role_notes."
+                f"focus on {definition.goal}. Return ONLY valid JSON with these keys: "
+                "summary (one sentence), themes (list of 3-5 short topic strings), "
+                "mission_title (under 80 chars), mission_objective (2-3 sentences max, "
+                "NOT the raw constitution text), and role_notes (object mapping role keys "
+                "to one-sentence guidance). Keep every value concise."
             ),
-            expected_output="Valid JSON with summary, themes, mission_title, mission_objective, and role_notes.",
+            expected_output="Valid JSON under 500 characters total with summary, themes, mission_title, mission_objective, and role_notes.",
             agent=agent,
         )
         for definition, agent in zip(role_definitions, agents)
