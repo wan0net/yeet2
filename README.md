@@ -59,3 +59,19 @@ This is the on-host bring-up path for the forgeyard dogfood stack.
    - confirm the new project appears in the attached projects list
 
 The root `docker-compose.yml` remains the lightweight local infra file. The real single-host deployment path now lives in `docker-compose.deploy.yml`.
+
+## CI/CD And GHCR
+
+yeet2 now ships with GitHub Actions for validation, security scanning, and GHCR image publishing.
+
+- `CI` runs workspace typechecks, builds, Prisma client generation, and Python compile checks.
+- `Security` runs Semgrep and Trivy.
+- `Publish Images` builds and pushes:
+  - `ghcr.io/<owner>/yeet2-node`
+  - `ghcr.io/<owner>/yeet2-brain`
+  - `ghcr.io/<owner>/yeet2-executor`
+
+For a release-style deployment that pulls prebuilt images instead of building on-host, use:
+
+- [docker-compose.release.yml](/Users/icd/Workspace/nas/yeet2/docker-compose.release.yml)
+- [docs/CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)

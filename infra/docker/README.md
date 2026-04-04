@@ -14,9 +14,16 @@ Primary deploy command on `10.42.10.101`:
 
 - `docker compose --env-file .env -f docker-compose.deploy.yml up -d --build`
 
+GHCR-backed release deploy command:
+
+- `docker compose --env-file .env -f docker-compose.release.yml pull`
+- `docker compose --env-file .env -f docker-compose.release.yml up -d`
+
 Notes:
 
 - The deploy compose file is intentionally separate from the root `docker-compose.yml`, which remains the lightweight local infra file.
+- `docker-compose.deploy.yml` is the current build-on-host path.
+- `docker-compose.release.yml` is the prebuilt-image path for GHCR deployments.
 - The deployed stack assumes repo registration by `repoUrl` so API and Executor can share the managed-projects volume cleanly.
 - If you want to attach host checkouts by `localPath`, add an explicit host bind mount that is visible to both API and Executor at the same in-container path.
 - Keep secrets in `.env` on the host; do not hardcode them into compose files.
