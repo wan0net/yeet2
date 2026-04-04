@@ -1,95 +1,122 @@
 # yeet2
 
-yeet2 is a self-hosted autonomous software-team platform. It keeps project intent in durable constitutions, turns that intent into missions and tasks, and routes work through specialist agents and execution workers over time.
+Self-hosted autonomous team platform. Define a project, attach a pipeline of specialist agents, and let yeet2 plan, execute, review, and ship — continuously.
 
-The internal dogfood project is `forgeyard`, which is the in-use expression of yeet2 rather than a separate adjacent track.
+While the alpha focuses on software development, the architecture is domain-agnostic. Any multi-stage knowledge work pipeline (content, architecture, research, compliance) can be modelled as a sequence of roles operating on a shared repository.
 
-## Layout
+**Live dogfood**: `forgeyard` — yeet2 managing its own development on `10.42.10.101`.
 
-This repo is intended to grow into a monorepo with these major areas:
+## Current Release: v0.1.0-alpha
 
-- `apps/control` for the web UI
-- `apps/api` for the Fastify API
-- `apps/brain` for CrewAI orchestration
-- `apps/executor` for OpenHands-backed execution
-- `packages/db` for PostgreSQL schema ownership
-- `packages/constitution` for constitution discovery and parsing
-- `packages/domain` and `packages/ui` for shared types and UI primitives
-- `infra/docker` and `infra/nomad` for local and future execution infrastructure
-- `docs` for product and implementation decisions
+### Core Features
 
-## Documentation Map
+- [x] Project registration (clone from URL or attach local path)
+- [x] Constitution detection and inspection (VISION.md, SPEC.md, ROADMAP.md + optional files)
+- [x] Chat-driven constitution interview (5-question guided setup with LLM synthesis)
+- [x] Constitution editor with live markdown preview
+- [x] Deterministic and CrewAI-backed mission planning
+- [x] 7-stage TDD pipeline: Architect → Implementer → Tester → Coder → QA → Reviewer → (Visual)
+- [x] Stage-aware dispatch with role ranking
+- [x] Autonomy modes: Manual, Supervised, Autonomous
+- [x] Job execution via OpenHands in isolated git worktrees
+- [x] Job logs and artifact summaries
+- [x] Blocker creation, resolution, and dismissal
+- [x] Approval approve/reject workflow
+- [x] Pull request creation and merge automation
+- [x] Structured QA/reviewer verdict recording
+- [x] Stuck job recovery with configurable timeout
+- [x] Worker heartbeat and registry
+- [x] Markdown rendering across the UI
+- [x] Chatroom-style project chat with agent bubbles
+- [x] Top navbar + per-project sidebar navigation
+- [x] GitHub PAT management via Settings UI
+- [x] 21 agent name themes (Star Trek, Star Wars, Stargate, LOTR, Dune, Firefly, and more)
+- [x] Character personalities injected into agent stage briefs
+- [x] Getting Started guide (in-app + docs site)
+- [x] Installation guide (INSTALL.md)
+- [x] Docker deployment with health checks for all services
+- [x] CI/CD: typecheck, build, Semgrep, Trivy, GHCR multi-arch publishing
+- [x] 251+ tests across all services (Vitest + pytest)
+- [x] Error feedback and graceful API-down handling across all pages
+- [x] OpenRouter model catalog with live pricing
 
-Core docs:
+### Beta Roadmap
 
-- [docs/VISION.md](./docs/VISION.md)
-- [docs/SPEC.md](./docs/SPEC.md)
-- [docs/ROADMAP.md](./docs/ROADMAP.md)
-- [docs/PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md)
+- [ ] **GitHub Projects + Issues kanban** — missions as project boards, tasks as issues, stage transitions move cards, agents comment on issues
+- [ ] **Generic pipeline platform** — pluggable execution adapters (passthrough, document, research, shell) beyond code-only
+- [ ] **Visual flow editor** — n8n/NiFi-style node canvas for building pipelines with drag-and-drop
+- [ ] **Loops with exit conditions** — stages can loop back with max iterations, verdict-based exits, timeout, and escalation
+- [ ] **Pipeline templates** — pre-built pipelines for content dev, solution architecture, marketing, legal, data analysis, research
+- [ ] **Custom roles** — create, rename, reorder roles beyond the defaults
+- [ ] **Role editor UI** — drag-to-reorder, per-role model/adapter/character config
+- [ ] **Chat-driven pipeline design** — interview that builds both constitution and pipeline
+- [ ] **pipeline.yml** — config-as-code pipeline definition, importable/exportable
+- [ ] **Webhook support** — GitHub webhook receiver for two-way sync
+- [ ] **Improved constitution interview** — follow-up questions, generate all 6 files
+- [ ] **Audit log** — searchable history of every autonomy decision
+- [ ] **Cost tracking** — per-project and per-role LLM token spend
+- [ ] **Worker pool** — multiple executor instances with load balancing
+- [ ] **Database migrations** — `prisma migrate deploy` instead of `prisma db push`
 
-System reference docs:
+### Future (Post-Beta)
 
-- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-- [docs/DATA_FLOWS.md](./docs/DATA_FLOWS.md)
-- [docs/OPERATIONS.md](./docs/OPERATIONS.md)
-- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)
-- [docs/CI_CD.md](./docs/CI_CD.md)
-- [docs/DECISIONS.md](./docs/DECISIONS.md)
+- [ ] Multi-tenant / multi-user auth
+- [ ] Nomad-backed distributed execution
+- [ ] Container-level sandboxing
+- [ ] Real-time websocket updates
+- [ ] Plugin system for custom adapters
 
-## Local Development
+## Architecture
 
-1. Copy `.env.example` to `.env` and fill in local values.
-2. Start PostgreSQL and Redis with `docker compose up -d`.
-3. In separate terminals, start Control, API, and Brain with:
-   - `pnpm dev:control`
-   - `pnpm dev:api`
-   - `pnpm dev:brain`
-4. If you also want the Executor skeleton, run `pnpm dev:executor` in another terminal.
+```
+apps/control      SvelteKit web UI
+apps/api          Fastify REST API + autonomy loop
+apps/brain        Python planning service (CrewAI + deterministic)
+apps/executor     Python execution adapter (OpenHands)
+packages/db       Prisma schema (PostgreSQL)
+packages/domain   Shared types, model defaults, agent themes
+packages/constitution  Constitution file discovery and parsing
+infra/docker      Dockerfiles and deployment scripts
+docs/             Product specs, architecture, operations
+```
 
-Brain binds from repo-level env first, so `YEET2_HOST` and `BRAIN_PORT` from `.env` control the local listener. The compose file stays infra-only for now, which keeps the app runtime explicit and easy to change per service.
+## Quick Start
 
-The API now calls Brain directly and surfaces planning failures instead of silently synthesizing a fallback plan. Set `YEET2_BRAIN_PLANNER_BACKEND=deterministic` only if you want the local rule-based planner; otherwise Brain/CrewAI failures are returned as errors.
+```bash
+git clone https://github.com/wan0net/yeet2.git && cd yeet2
+cp .env.example .env
+# Edit .env: set YEET2_CONTROL_ORIGIN, LLM_API_KEY, LLM_MODEL, LLM_BASE_URL
 
-## Operator Deployment: 10.42.10.101
+# Build-on-host deployment:
+docker compose --env-file .env -f docker-compose.deploy.yml up -d --build
 
-This is the on-host bring-up path for the forgeyard dogfood stack.
+# Or pull pre-built images:
+docker compose --env-file .env -f docker-compose.release.yml pull
+docker compose --env-file .env -f docker-compose.release.yml up -d
+```
 
-1. Copy `.env.example` to `.env` on `10.42.10.101` and fill in the operational values:
-   - `GITHUB_TOKEN` for GitHub-backed project registration, blockers, pull requests, and merge refresh.
-   - `LLM_API_KEY`, `LLM_MODEL`, and `LLM_BASE_URL` for OpenHands execution.
-   - `OPENROUTER_API_KEY` or `OPENAI_API_KEY` for CrewAI planning, depending on the model/provider path you use.
-   - `YEET2_BRAIN_CREWAI_ENABLED=true` and `YEET2_BRAIN_CREWAI_MODEL=<model>` if Brain should plan with CrewAI on the host.
-   - `YEET2_EXECUTOR_MODE`, `YEET2_EXECUTOR_SANDBOX_MODE`, and related executor/OpenHands settings for the runtime you want on the box.
-2. Bring the full stack up from the repo root:
-   - `docker compose --env-file .env -f docker-compose.deploy.yml up -d --build`
-3. Verify the stack:
-   - `curl http://10.42.10.101:3001/health`
-   - `curl http://10.42.10.101:3002/health`
-   - `curl http://10.42.10.101:3003/health`
-   - load `http://10.42.10.101:3000/projects` in a browser
-4. Watch startup and migrations when needed:
-   - `docker compose --env-file .env -f docker-compose.deploy.yml logs -f migrate api brain executor control`
-5. Register the first forgeyard project in Control:
-   - open the Projects page
-   - create a project named `forgeyard`
-   - prefer `repoUrl` so yeet2 clones into the shared managed-projects volume inside the deployed stack
-   - only use `localPath` if you intentionally extend the compose setup with a host bind mount that makes that checkout visible to both API and Executor
-   - confirm the new project appears in the attached projects list
+Open `http://localhost:3000` → follow the Getting Started guide.
 
-The root `docker-compose.yml` remains the lightweight local infra file. The real single-host deployment path now lives in `docker-compose.deploy.yml`.
+See [docs/INSTALL.md](./docs/INSTALL.md) for full setup instructions.
 
-## CI/CD And GHCR
+## Documentation
 
-yeet2 now ships with GitHub Actions for validation, security scanning, and GHCR image publishing.
+| Doc | Purpose |
+|---|---|
+| [INSTALL.md](./docs/INSTALL.md) | Step-by-step deployment guide |
+| [GETTING_STARTED.md](./docs/GETTING_STARTED.md) | First project walkthrough |
+| [VISION.md](./docs/VISION.md) | Project purpose and principles |
+| [SPEC.md](./docs/SPEC.md) | Technical specification |
+| [PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md) | MVP product definition |
+| [ROADMAP.md](./docs/ROADMAP.md) | Milestone breakdown |
+| [BETA_SPEC.md](./docs/BETA_SPEC.md) | Beta release specification |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Service map and deployment |
+| [DATA_FLOWS.md](./docs/DATA_FLOWS.md) | Sequence diagrams for all flows |
+| [OPERATIONS.md](./docs/OPERATIONS.md) | Operator runtime guide |
+| [DEVELOPMENT.md](./docs/DEVELOPMENT.md) | Local development setup |
+| [CI_CD.md](./docs/CI_CD.md) | GitHub Actions and GHCR publishing |
+| [DECISIONS.md](./docs/DECISIONS.md) | Implementation decisions log |
 
-- `CI` runs workspace typechecks, builds, Prisma client generation, and Python compile checks.
-- `Security` runs Semgrep and Trivy.
-- `Publish Images` builds and pushes:
-  - `ghcr.io/<owner>/yeet2-node`
-  - `ghcr.io/<owner>/yeet2-brain`
-  - `ghcr.io/<owner>/yeet2-executor`
+## License
 
-For a release-style deployment that pulls prebuilt images instead of building on-host, use:
-
-- [docker-compose.release.yml](./docker-compose.release.yml)
-- [docs/CI_CD.md](./docs/CI_CD.md)
+BSD-3-Clause

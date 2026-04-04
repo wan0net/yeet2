@@ -1,24 +1,39 @@
 # yeet2
 
-Self-hosted autonomous software-team platform.
+Self-hosted autonomous team platform. Define a project, attach a pipeline of specialist agents, and let yeet2 plan, execute, review, and ship — continuously.
 
-yeet2 turns a project constitution into durable missions, tasks, execution jobs, blockers, approvals, and team chat, then keeps the work moving over time.
+## Current Release: v0.1.0-alpha
 
-## Read This First
+### What's Working
 
-- [Vision](./VISION.md)
-- [Spec](./SPEC.md)
-- [Product Spec](./PRODUCT_SPEC.md)
-- [Roadmap](./ROADMAP.md)
+- [x] Project registration and constitution detection
+- [x] Chat-driven constitution interview with LLM synthesis
+- [x] Constitution editor with live markdown preview
+- [x] 7-stage TDD pipeline: Architect → Implementer → Tester → Coder → QA → Reviewer
+- [x] Autonomy modes: Manual, Supervised, Autonomous
+- [x] Job execution via OpenHands in isolated git worktrees
+- [x] Blocker creation, resolution, and approval workflows
+- [x] Pull request creation and merge automation
+- [x] QA/reviewer verdict recording
+- [x] Stuck job recovery with configurable timeout
+- [x] Markdown rendering and chatroom-style project chat
+- [x] GitHub PAT management and 21 agent name themes
+- [x] Docker deployment with health checks
+- [x] 251+ tests across all services
+- [x] CI/CD: typecheck, build, security scanning, GHCR publishing
 
-## System Reference
+### Beta Roadmap
 
-- [Architecture](./ARCHITECTURE.md)
-- [Data Flows](./DATA_FLOWS.md)
-- [Operations](./OPERATIONS.md)
-- [Development](./DEVELOPMENT.md)
-- [CI/CD](./CI_CD.md)
-- [Decisions](./DECISIONS.md)
+- [ ] GitHub Projects + Issues as kanban boards
+- [ ] Generic pipeline platform with pluggable execution adapters
+- [ ] Visual flow editor (n8n/NiFi-style) with loops and branching
+- [ ] Pipeline templates for content, architecture, research, compliance
+- [ ] Custom roles with drag-to-reorder editor
+- [ ] Chat-driven pipeline design
+- [ ] Cost tracking and audit log
+- [ ] Worker pool and database migrations
+
+See [Beta Spec](./BETA_SPEC.md) for full details.
 
 ## Runtime View
 
@@ -28,15 +43,25 @@ flowchart LR
     Control --> API["API"]
     API --> Brain["Brain"]
     API --> Executor["Executor"]
-    API --> Memory["PostgreSQL / Redis"]
-    Executor --> Repo["Isolated repo workspace"]
-    API --> GitHub["GitHub ledger"]
+    API --> DB["PostgreSQL"]
+    Executor --> Repo["Isolated workspace"]
+    API --> GitHub["GitHub"]
 ```
 
-## Current Focus
+## Read This First
 
-- clear operator control
-- durable planning and execution state
-- GitHub-native artifacts
-- stronger execution safety over time
-- dogfooding yeet2 on itself as `forgeyard`
+- [Get Started](./GETTING_STARTED.md) — first project walkthrough
+- [Install](./INSTALL.md) — deployment guide
+- [Vision](./VISION.md) — project purpose
+- [Spec](./SPEC.md) — technical specification
+- [Roadmap](./ROADMAP.md) — milestone breakdown
+
+## System Reference
+
+- [Architecture](./ARCHITECTURE.md)
+- [Data Flows](./DATA_FLOWS.md)
+- [Operations](./OPERATIONS.md)
+- [Development](./DEVELOPMENT.md)
+- [CI/CD](./CI_CD.md)
+- [Decisions](./DECISIONS.md)
+- [Beta Spec](./BETA_SPEC.md)

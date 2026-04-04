@@ -1,8 +1,9 @@
 import { defineConfig } from "vitepress";
+import { withMermaid } from "vitepress-plugin-mermaid";
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: "yeet2",
-  description: "Self-hosted autonomous software-team platform",
+  description: "Self-hosted autonomous team platform",
   base: "/yeet2/",
   lastUpdated: true,
   cleanUrls: true,
@@ -38,6 +39,13 @@ export default defineConfig({
           { text: "CI/CD", link: "/CI_CD" },
           { text: "Decisions", link: "/DECISIONS" }
         ]
+      },
+      {
+        text: "Releases",
+        items: [
+          { text: "Install", link: "/INSTALL" },
+          { text: "Beta Spec", link: "/BETA_SPEC" }
+        ]
       }
     ],
     socialLinks: [
@@ -51,4 +59,4 @@ export default defineConfig({
       copyright: "yeet2"
     }
   }
-});
+}));
