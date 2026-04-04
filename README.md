@@ -42,16 +42,28 @@ While the alpha focuses on software development, the architecture is domain-agno
 
 ### Beta Roadmap
 
-- [ ] **GitHub Projects + Issues kanban** — missions as project boards, tasks as issues, stage transitions move cards, agents comment on issues
-- [ ] **Generic pipeline platform** — pluggable execution adapters (passthrough, document, research, shell) beyond code-only
-- [ ] **Visual flow editor** — n8n/NiFi-style node canvas for building pipelines with drag-and-drop
-- [ ] **Loops with exit conditions** — stages can loop back with max iterations, verdict-based exits, timeout, and escalation
-- [ ] **Pipeline templates** — pre-built pipelines for content dev, solution architecture, marketing, legal, data analysis, research
+**Agent Experience & Visualization**
+- [ ] **Mission Control dashboard** — real-time grid of all active agents across projects with status (Cursor 2.0 style)
+- [ ] **Live pipeline graph** — active node pulses, completed nodes glow green, animated handoffs
+- [ ] **Mid-task chat steering** — talk to agents while they work, redirect without canceling (OpenHands/Devin style)
+- [ ] **Chunked progress summaries** — narrative updates during execution, not just raw logs
+- [ ] **Spatial agent visualization** — characters in themed environments: Star Trek bridge, LOTR war table, The Office floor (Smallville style)
+- [ ] **Execution trace timeline** — step-by-step visual replay of agent actions (LangGraph style)
+
+**GitHub Integration**
+- [ ] **GitHub Projects + Issues kanban** — missions as project boards, tasks as issues, stage transitions move cards
+- [ ] **Webhook support** — GitHub webhook receiver for two-way sync
+
+**Generic Pipeline Platform**
+- [ ] **Pluggable execution adapters** — passthrough, document, research, shell beyond code-only
+- [ ] **Visual flow editor** — n8n/NiFi-style node canvas with drag-and-drop, branching, loops with exit conditions
+- [ ] **Pipeline templates** — pre-built pipelines for content, architecture, marketing, legal, data, research
+- [ ] **Chat-driven pipeline design** — interview that builds both constitution and pipeline
+- [ ] **pipeline.yml** — config-as-code pipeline definition
+
+**Operator Tools**
 - [ ] **Custom roles** — create, rename, reorder roles beyond the defaults
 - [ ] **Role editor UI** — drag-to-reorder, per-role model/adapter/character config
-- [ ] **Chat-driven pipeline design** — interview that builds both constitution and pipeline
-- [ ] **pipeline.yml** — config-as-code pipeline definition, importable/exportable
-- [ ] **Webhook support** — GitHub webhook receiver for two-way sync
 - [ ] **Improved constitution interview** — follow-up questions, generate all 6 files
 - [ ] **Audit log** — searchable history of every autonomy decision
 - [ ] **Cost tracking** — per-project and per-role LLM token spend

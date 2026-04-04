@@ -279,6 +279,112 @@ The system reads this file during constitution inspection, same as VISION.md / S
 - Role editor: set adapter per role
 - Job detail: render artifacts by type (code diff, markdown preview, diagram render)
 
+## Agent Experience & Visualization
+
+### Mission Control Dashboard
+
+A real-time grid view showing every active agent across all projects. One glance tells the operator the state of the entire factory.
+
+Inspired by Cursor 2.0's Mission Control:
+- Grid of agent cards, one per active role across all projects
+- Each card shows: character name, role, project, current task, status (working / idle / blocked)
+- Cards pulse when actively executing
+- Blocked cards show red with blocker summary
+- Click any card to jump to that project's detail page
+- Replaces the current bare Overview page
+
+This becomes the factory's primary dashboard — the first thing operators see.
+
+### Live Pipeline Graph
+
+The static pipeline view (added in alpha) becomes live:
+- **Active node pulses** with an animated border while the agent is working
+- **Completed nodes** show a checkmark and green fill
+- **Blocked nodes** flash red
+- **Progress indicator** on the active node shows elapsed time
+- **Edges animate** when a handoff happens (stage complete → next stage starts)
+- **Tooltip on hover** shows the latest artifact summary or working message
+
+Implementation: the project detail page polls for task status updates (or uses SSE/websocket in a later pass) and updates the pipeline nodes reactively.
+
+### Mid-Task Chat Steering
+
+Operators can talk to agents while they're working, not just before dispatch.
+
+Inspired by OpenHands and Devin:
+- While a job is running, the chatroom shows a "working" indicator for the active agent
+- Operator types a message → it's sent to the executor as an interrupt/guidance injection
+- The agent incorporates the guidance into its current work
+- Examples: "skip the migration for now", "focus on the API routes first", "use postgres not sqlite"
+
+**Implementation:**
+- New API endpoint: `POST /projects/:id/jobs/:jobId/steer` with `{ guidance: "..." }`
+- Executor appends the guidance to the active OpenHands session (or the passthrough prompt)
+- Decision log records the steering event
+- UI shows the guidance message in the chatroom with a "steering" badge
+
+This is the single biggest UX improvement for power users — it turns fire-and-forget into collaborative development.
+
+### Chunked Progress Summaries
+
+Instead of raw logs, agents post narrative progress updates during execution.
+
+Inspired by Devin:
+- Every N seconds (or at key milestones), the executor posts a summary: "I've read the spec and identified 3 files to modify. Starting with `api/routes.ts`..."
+- Summaries appear in the chatroom as agent messages
+- They're richer than the current artifact summary (which only comes at completion)
+- Implementation: the executor periodically parses its JSONL output and posts intermediate summaries via the heartbeat/API callback
+
+### Spatial Agent Visualization (Office View)
+
+A visual mode where agents are shown as characters in a themed environment.
+
+Inspired by Stanford Smallville and ChatDev:
+- A 2D scene matching the agent theme (Star Trek bridge, Firefly cargo bay, LOTR war table, The Office... office)
+- Each agent character has a position in the scene
+- **Working**: character animates at their station, speech bubble shows current task
+- **Idle**: character sits at their desk, muted colors
+- **Blocked**: red exclamation mark above their head, speech bubble shows blocker
+- **Handoff**: animated path between characters as work passes from one to the next
+- Click a character → opens their task detail / chat
+
+**Theme environments:**
+
+| Theme | Environment |
+|---|---|
+| Star Trek TNG | Enterprise bridge with stations |
+| Star Wars | Rebel base war room |
+| Stargate SG-1 | SGC briefing room |
+| LOTR | Council of Elrond |
+| Firefly | Serenity cargo bay |
+| The Office | Dunder Mifflin office floor |
+| Silicon Valley | Hacker hostel garage |
+| Hitchhiker's | Heart of Gold bridge |
+| Mythology | Mount Olympus |
+| Dune | Sietch war room |
+| Matrix | Nebuchadnezzar hovercraft |
+| Red Dwarf | Starbug cockpit |
+
+**Implementation:**
+- Each theme ships a background SVG/image and character position coordinates
+- Character sprites are simple SVG avatars (or pixel art for the retro feel)
+- Status is overlaid with CSS animations
+- Toggle between Pipeline View (graph) and Office View (spatial) on the project page
+- Mobile: falls back to pipeline view
+
+This is the "delight" feature — it makes the factory feel alive and gives the agent themes real visual presence. It's also the most shareable/demo-friendly feature.
+
+### Execution Trace Visualization
+
+A detailed step-by-step view of what an agent did during a task.
+
+Inspired by LangGraph Studio:
+- Each job gets a timeline view showing: tool calls, file reads, file writes, test runs, errors
+- Nodes in the timeline are clickable — expand to see the full input/output
+- Errors are highlighted in red
+- The timeline replaces the current raw log viewer for debugging
+- Implementation: parse the OpenHands JSONL output into structured events and render as a visual timeline
+
 ## Other Beta Features
 
 ### Custom Roles

@@ -24,14 +24,19 @@ Self-hosted autonomous team platform. Define a project, attach a pipeline of spe
 
 ### Beta Roadmap
 
-- [ ] GitHub Projects + Issues as kanban boards
-- [ ] Generic pipeline platform with pluggable execution adapters
-- [ ] Visual flow editor (n8n/NiFi-style) with loops and branching
+**Agent Experience**
+- [ ] Mission Control dashboard — real-time grid of all agents
+- [ ] Live pipeline graph with animated handoffs
+- [ ] Mid-task chat steering — talk to agents while they work
+- [ ] Spatial agent visualization — characters in themed environments
+- [ ] Execution trace timeline
+
+**Platform**
+- [ ] GitHub Projects + Issues kanban
+- [ ] Pluggable execution adapters (passthrough, document, research)
+- [ ] Visual flow editor (n8n-style) with loops and branching
 - [ ] Pipeline templates for content, architecture, research, compliance
-- [ ] Custom roles with drag-to-reorder editor
-- [ ] Chat-driven pipeline design
-- [ ] Cost tracking and audit log
-- [ ] Worker pool and database migrations
+- [ ] Custom roles and role editor
 
 See [Beta Spec](./BETA_SPEC.md) for full details.
 
