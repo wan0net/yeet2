@@ -109,3 +109,13 @@ No implementation deviations recorded yet.
 - Chosen Approach: `apps/control is migrated to SvelteKit with adapter-node so yeet2 can align directly with the existing link42 platform libraries, theme tokens, layout patterns, and component language`
 - Reason: `The operator requested full UI alignment with link42, and link42 itself is built on SvelteKit with a shared token and component system. Matching that platform directly is the most reliable way to achieve true parity instead of approximating it inside a separate Next.js stack`
 - Consequences: `This is a deliberate frontend-stack deviation from the original MVP spec. The Fastify API, Brain, Executor, and domain contracts remain unchanged, but the control app now shares the same platform direction as link42. Deployment and local runtime expectations for apps/control now follow SvelteKit rather than Next.js`
+
+### DECISION-009: Trivy Filesystem Scan Is Informational, Not Blocking
+
+- Date: `2026-04-04`
+- Status: `accepted`
+- Area: `infra`
+- Spec Default: `CI_CD.md implies security scans should block unless exceptions are documented`
+- Chosen Approach: `Trivy filesystem scan runs with exit-code 0 (informational) while Semgrep runs with --error (blocking). Findings are uploaded as SARIF to GitHub Security tab in both cases.`
+- Reason: `Trivy flags CRITICAL/HIGH vulnerabilities in transitive dependencies that yeet2 does not control directly. Blocking CI on upstream dependency CVEs would prevent any deployment until every transitive dep ships a fix. Semgrep scans our own source code and should remain blocking.`
+- Consequences: `Dependency vulnerabilities are visible in the GitHub Security tab but do not block pushes to main. The team must monitor the Security tab and upgrade dependencies proactively. Semgrep findings in yeet2's own code remain blocking.`
