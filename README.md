@@ -22,19 +22,19 @@ This repo is intended to grow into a monorepo with these major areas:
 
 Core docs:
 
-- [docs/VISION.md](/Users/icd/Workspace/nas/yeet2/docs/VISION.md)
-- [docs/SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/SPEC.md)
-- [docs/ROADMAP.md](/Users/icd/Workspace/nas/yeet2/docs/ROADMAP.md)
-- [docs/PRODUCT_SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/PRODUCT_SPEC.md)
+- [docs/VISION.md](./docs/VISION.md)
+- [docs/SPEC.md](./docs/SPEC.md)
+- [docs/ROADMAP.md](./docs/ROADMAP.md)
+- [docs/PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md)
 
 System reference docs:
 
-- [docs/ARCHITECTURE.md](/Users/icd/Workspace/nas/yeet2/docs/ARCHITECTURE.md)
-- [docs/DATA_FLOWS.md](/Users/icd/Workspace/nas/yeet2/docs/DATA_FLOWS.md)
-- [docs/OPERATIONS.md](/Users/icd/Workspace/nas/yeet2/docs/OPERATIONS.md)
-- [docs/DEVELOPMENT.md](/Users/icd/Workspace/nas/yeet2/docs/DEVELOPMENT.md)
-- [docs/CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)
-- [docs/DECISIONS.md](/Users/icd/Workspace/nas/yeet2/docs/DECISIONS.md)
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
+- [docs/DATA_FLOWS.md](./docs/DATA_FLOWS.md)
+- [docs/OPERATIONS.md](./docs/OPERATIONS.md)
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)
+- [docs/CI_CD.md](./docs/CI_CD.md)
+- [docs/DECISIONS.md](./docs/DECISIONS.md)
 
 ## Local Development
 
@@ -91,5 +91,5 @@ yeet2 now ships with GitHub Actions for validation, security scanning, and GHCR 
 
 For a release-style deployment that pulls prebuilt images instead of building on-host, use:
 
-- [docker-compose.release.yml](/Users/icd/Workspace/nas/yeet2/docker-compose.release.yml)
-- [docs/CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)
+- [docker-compose.release.yml](./docker-compose.release.yml)
+- [docs/CI_CD.md](./docs/CI_CD.md)

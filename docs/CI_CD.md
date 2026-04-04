@@ -40,7 +40,7 @@ Published image roles:
 
 ## Release Deployment
 
-Use [docker-compose.release.yml](/Users/icd/Workspace/nas/yeet2/docker-compose.release.yml) when deploying prebuilt GHCR images instead of building on-host.
+Use [`docker-compose.release.yml`](https://github.com/wan0net/yeet2/blob/main/docker-compose.release.yml) when deploying prebuilt GHCR images instead of building on-host.
 
 Example:
 

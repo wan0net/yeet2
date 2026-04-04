@@ -123,8 +123,8 @@ Projects may configure role definitions and per-role model selection, but the ab
 
 Use these companion docs for the fuller system picture:
 
-- [ARCHITECTURE.md](/Users/icd/Workspace/nas/yeet2/docs/ARCHITECTURE.md)
-- [DATA_FLOWS.md](/Users/icd/Workspace/nas/yeet2/docs/DATA_FLOWS.md)
-- [OPERATIONS.md](/Users/icd/Workspace/nas/yeet2/docs/OPERATIONS.md)
-- [DEVELOPMENT.md](/Users/icd/Workspace/nas/yeet2/docs/DEVELOPMENT.md)
-- [CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [DATA_FLOWS.md](./DATA_FLOWS.md)
+- [OPERATIONS.md](./OPERATIONS.md)
+- [DEVELOPMENT.md](./DEVELOPMENT.md)
+- [CI_CD.md](./CI_CD.md)

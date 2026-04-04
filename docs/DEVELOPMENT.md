@@ -107,18 +107,18 @@ GitHub Actions now cover:
 - Trivy
 - GHCR publishing
 
-Use [docs/CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md) for the release/deploy side.
+Use [CI_CD.md](./CI_CD.md) for the release/deploy side.
 
 ## Documentation Set
 
 The current core docs are:
 
-- [VISION.md](/Users/icd/Workspace/nas/yeet2/docs/VISION.md)
-- [SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/SPEC.md)
-- [ROADMAP.md](/Users/icd/Workspace/nas/yeet2/docs/ROADMAP.md)
-- [PRODUCT_SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/PRODUCT_SPEC.md)
-- [ARCHITECTURE.md](/Users/icd/Workspace/nas/yeet2/docs/ARCHITECTURE.md)
-- [DATA_FLOWS.md](/Users/icd/Workspace/nas/yeet2/docs/DATA_FLOWS.md)
-- [OPERATIONS.md](/Users/icd/Workspace/nas/yeet2/docs/OPERATIONS.md)
-- [CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)
-- [DECISIONS.md](/Users/icd/Workspace/nas/yeet2/docs/DECISIONS.md)
+- [VISION.md](./VISION.md)
+- [SPEC.md](./SPEC.md)
+- [ROADMAP.md](./ROADMAP.md)
+- [PRODUCT_SPEC.md](./PRODUCT_SPEC.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [DATA_FLOWS.md](./DATA_FLOWS.md)
+- [OPERATIONS.md](./OPERATIONS.md)
+- [CI_CD.md](./CI_CD.md)
+- [DECISIONS.md](./DECISIONS.md)

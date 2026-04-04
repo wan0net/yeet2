@@ -8,9 +8,15 @@
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "dev:control": "pnpm --filter @yeet2/control dev",
     "dev:api": "pnpm --filter @yeet2/api dev",
     "dev:brain": "cd apps/brain && PYTHONPATH=src .venv/bin/python -m yeet2_brain",
     "dev:executor": "cd apps/executor && PYTHONPATH=src python3 -m yeet2_executor"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
   }
 }
