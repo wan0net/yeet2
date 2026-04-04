@@ -423,6 +423,102 @@ Project detail page gets a role management section:
 
 The beta builds incrementally on the alpha. The GitHub Projects integration is the headline feature and should be built first. Custom roles and the role editor follow. Operational maturity features are addressed continuously.
 
+## Agent Skills & Plugin Ecosystem
+
+### Concept
+
+The Agent Skills standard (SKILL.md) is now cross-platform (Claude Code, OpenAI Codex). yeet2 should support loading agent skills that extend what roles can do — giving agents new tools and capabilities without changing the core platform.
+
+### How It Works
+
+- Each skill is a SKILL.md file with instructions + optional scripts and templates
+- Skills are loaded per-role or per-project
+- A role configured with a "web-search" skill gains the ability to search the web
+- A role configured with a "screenshot" skill can capture visual output
+- Skills are discoverable via a built-in catalog or imported from external marketplaces
+
+### Examples
+
+| Skill | What It Adds | Use Cases |
+|---|---|---|
+| `web-search` | Search the web and cite sources | Research roles, fact-checking |
+| `screenshot` | Capture screenshots of web pages or UIs | Visual review, QA verification |
+| `file-manager` | Read/write/organize files beyond git | Content workflows, document management |
+| `api-caller` | Make HTTP requests to external APIs | Integration testing, data collection |
+| `diagram-generator` | Generate mermaid/PlantUML diagrams | Architecture, documentation |
+| `image-generator` | Generate images via DALL-E/Midjourney APIs | Design roles, visual content |
+| `slack-notifier` | Post messages to Slack channels | Status updates, escalations |
+| `database-query` | Run read-only SQL queries | Data analysis, QA verification |
+
+### Plugin Packaging
+
+Following the emerging standard: a plugin bundles one or more skills with optional MCP server configuration, so a single install adds multiple capabilities.
+
+## Observability & Tracing
+
+### Langfuse Integration
+
+Integrate Langfuse (open-source, MIT, self-hostable) for full LLM observability:
+
+- **Trace every LLM call** — see exactly what prompt was sent, what response came back, latency, token count, cost
+- **Multi-turn conversation tracking** — follow an agent's full reasoning chain across tool calls
+- **Per-project and per-role cost dashboards** — answer "how much did this mission cost?" and "which role spends the most?"
+- **Evaluation and quality scoring** — rate agent outputs to track quality over time
+- **Self-hosted** — runs alongside yeet2 in Docker, no data leaves the operator's infrastructure
+
+This replaces the manual audit log and cost tracking features with a proper observability platform.
+
+### Implementation
+
+- Add Langfuse as an optional Docker service in the compose files
+- Brain and Executor instrument LLM calls with the Langfuse SDK
+- Control UI links to the Langfuse dashboard for trace exploration
+- Configuration via `LANGFUSE_HOST`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`
+
+## External Trigger Sources
+
+### Concept
+
+Work can be triggered from outside the Control UI — from GitHub, Slack, or other external systems. This lets operators kick off tasks without opening the yeet2 web app.
+
+### Trigger Sources
+
+| Source | How It Works |
+|---|---|
+| **GitHub Issue** | Label an issue with `yeet2:plan` → autonomy loop picks it up and plans a mission |
+| **GitHub Comment** | Comment `@yeet2 implement this` on a PR → dispatches a task |
+| **Slack** | Send a message to a yeet2 channel → triggers planning or dispatch |
+| **Webhook** | POST to `/api/trigger` with project ID and intent → kicks off the loop |
+| **CLI** | `yeet2 plan <project>` from the command line |
+| **Cron** | Scheduled autonomy runs beyond the loop interval |
+
+### Implementation
+
+- Webhook receiver in the API: `POST /webhooks/github`, `POST /webhooks/slack`
+- GitHub App installation for richer integration (vs. PAT-only)
+- Slack App with slash commands (`/yeet2 plan forgeyard`)
+- CLI tool that calls the API directly
+
+## Agent Verification & Demos
+
+### Concept
+
+Agents produce verification artifacts — screenshots, test results, demo recordings — that prove their work is correct before handoff.
+
+Inspired by Cursor 3's cloud agent demos:
+
+- **Visual roles**: capture a screenshot of the rendered UI after changes
+- **QA roles**: include test output (pass/fail counts, coverage delta)
+- **Coder roles**: include a diff summary and build status
+- **All roles**: produce a one-paragraph "handoff note" explaining what was done and what to check
+
+### Implementation
+
+- Verification artifacts are stored alongside job logs
+- The pipeline view shows a verification badge on completed nodes
+- Click the badge → see the screenshot, test output, or handoff note
+- The reviewer role's acceptance criteria include checking verification artifacts
+
 ## Non-Goals for Beta
 
 - Multi-tenant / multi-user auth (deferred to GA)

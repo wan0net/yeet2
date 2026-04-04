@@ -61,12 +61,20 @@ While the alpha focuses on software development, the architecture is domain-agno
 - [ ] **Chat-driven pipeline design** — interview that builds both constitution and pipeline
 - [ ] **pipeline.yml** — config-as-code pipeline definition
 
+**Extensibility**
+- [ ] **Agent Skills / plugins** — SKILL.md standard for extending agent capabilities (web search, screenshots, API calls)
+- [ ] **External triggers** — start work from GitHub Issues, Slack, webhooks, CLI
+- [ ] **Agent verification artifacts** — screenshots, test output, demo recordings to prove work
+
+**Observability**
+- [ ] **Langfuse integration** — self-hosted LLM observability with traces, cost dashboards, quality scoring
+- [ ] **Audit log** — searchable history of every autonomy decision
+- [ ] **Cost tracking** — per-project and per-role LLM spend from OpenRouter + Langfuse
+
 **Operator Tools**
 - [ ] **Custom roles** — create, rename, reorder roles beyond the defaults
 - [ ] **Role editor UI** — drag-to-reorder, per-role model/adapter/character config
 - [ ] **Improved constitution interview** — follow-up questions, generate all 6 files
-- [ ] **Audit log** — searchable history of every autonomy decision
-- [ ] **Cost tracking** — per-project and per-role LLM token spend
 - [ ] **Worker pool** — multiple executor instances with load balancing
 - [ ] **Database migrations** — `prisma migrate deploy` instead of `prisma db push`
 
