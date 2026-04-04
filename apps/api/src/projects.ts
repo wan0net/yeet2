@@ -11,27 +11,27 @@ import type {
   Project as DbProject,
   Task as DbTask
 } from "@yeet2/db";
-import type {
-  GlobalBlockerQueueItem,
-  GlobalJobQueueItem,
-  GlobalMissionQueueItem,
-  GlobalTaskQueueItem,
-  ProjectChatMessageSummary,
-  ProjectCostAnalysisSummary,
-  ProjectApprovalQueueItem,
-  OperatorGuidanceSummary,
-  PlanningProvenance,
-  ProjectApprovalAction,
-  ProjectDecisionLogSummary,
-  ProjectBranchCleanupMode,
-  ProjectBranchCleanupState,
-  ProjectAutonomyMode,
-  ProjectMergeApprovalMode,
-  ProjectPullRequestDraftMode,
-  ProjectPullRequestMode,
-  ProjectRoleKey
+import {
+  RECOMMENDED_ROLE_MODELS,
+  type GlobalBlockerQueueItem,
+  type GlobalJobQueueItem,
+  type GlobalMissionQueueItem,
+  type GlobalTaskQueueItem,
+  type ProjectChatMessageSummary,
+  type ProjectCostAnalysisSummary,
+  type ProjectApprovalQueueItem,
+  type OperatorGuidanceSummary,
+  type PlanningProvenance,
+  type ProjectApprovalAction,
+  type ProjectDecisionLogSummary,
+  type ProjectBranchCleanupMode,
+  type ProjectBranchCleanupState,
+  type ProjectAutonomyMode,
+  type ProjectMergeApprovalMode,
+  type ProjectPullRequestDraftMode,
+  type ProjectPullRequestMode,
+  type ProjectRoleKey
 } from "@yeet2/domain";
-import { RECOMMENDED_ROLE_MODELS } from "@yeet2/domain";
 
 import { prisma } from "./db";
 import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
