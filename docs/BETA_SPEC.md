@@ -195,6 +195,11 @@ A node-based canvas editor where operators build pipelines visually:
 2. **Nodes**: each node represents a role/stage — click to configure name, goal, adapter, model, character
 3. **Edges**: connect nodes with directional arrows to define the flow order
 4. **Branching**: support conditional paths (e.g., if QA fails → loop back to Coder, if passes → proceed to Reviewer)
+5. **Loops with exit conditions**: a stage can loop back to an earlier stage with a configurable exit condition (e.g., "Coder → QA → if fails, back to Coder, max 3 iterations then escalate to blocker"). Exit conditions prevent infinite loops:
+   - **Max iterations**: hard cap on loop count (default 3)
+   - **Verdict-based**: exit when a stage outputs "pass" / meets acceptance criteria
+   - **Timeout-based**: exit after N minutes of total loop time
+   - **Escalation**: when exit condition triggers, create a blocker instead of continuing
 5. **Templates**: start from a pre-built template or blank canvas
 6. **Groups**: cluster related stages visually (e.g., "Implementation" group containing Tester + Coder)
 7. **Live preview**: as nodes are placed, the pipeline diagram updates in real-time
