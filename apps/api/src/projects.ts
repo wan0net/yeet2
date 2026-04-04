@@ -582,20 +582,10 @@ const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 
-import { AGENT_THEMES, type AgentCharacter } from "@yeet2/domain";
+import { pickCharacters } from "@yeet2/domain";
 
 function getAgentNameTheme(): string {
   return process.env.YEET2_AGENT_NAME_THEME?.trim().toLowerCase() || "mythology";
-}
-
-function getAgentCharacter(roleKey: string, theme?: string): AgentCharacter {
-  const selectedTheme = theme || getAgentNameTheme();
-  const themeMap = AGENT_THEMES[selectedTheme] || AGENT_THEMES["default"];
-  return themeMap[roleKey] || { name: roleKey.charAt(0).toUpperCase() + roleKey.slice(1), franchise: "", description: "" };
-}
-
-function generateRoleName(roleKey: string, theme?: string): string {
-  return getAgentCharacter(roleKey, theme).name;
 }
 
 const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder"> & { sortOrder: number }> = [
@@ -1039,15 +1029,22 @@ function toPrismaRoleDefinition(definition: ProjectRoleDefinitionInput) {
 }
 
 function defaultProjectRoleDefinitions(projectName?: string): ProjectRoleDefinitionInput[] {
-  return PROJECT_ROLE_DEFAULTS.map((definition) => {
-    const funName = generateRoleName(definition.roleKey);
-    const displayName = funName !== definition.label ? `${funName} (${definition.label})` : definition.label;
+  const theme = getAgentNameTheme();
+  const characters = pickCharacters(theme, PROJECT_ROLE_DEFAULTS.length, projectName || "default");
+  return PROJECT_ROLE_DEFAULTS.map((definition, index) => {
+    const character = characters[index];
+    const displayName = character && character.name !== definition.label
+      ? `${character.name} (${definition.label})`
+      : definition.label;
+    const backstory = character?.description
+      ? `${character.description}. ${definition.backstory}`
+      : definition.backstory;
     return {
       roleKey: definition.roleKey,
       visualName: displayName,
       label: displayName,
       goal: definition.goal,
-      backstory: definition.backstory,
+      backstory,
       model: definition.model,
       enabled: definition.enabled,
       sortOrder: definition.sortOrder
