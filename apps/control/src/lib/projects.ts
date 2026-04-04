@@ -103,17 +103,19 @@ export interface ProjectRoleDefinition {
   label: string;
   enabled: boolean;
   model: string | null;
+  recommendedModel: string | null;
+  effectiveModel: string | null;
   goal: string;
   backstory: string;
 }
 
 const RECOMMENDED_ROLE_MODELS: Record<string, string> = {
-  planner: "openrouter/anthropic/claude-sonnet-4",
-  architect: "openrouter/anthropic/claude-sonnet-4",
-  implementer: "openrouter/openai/gpt-4.1",
+  planner: "openrouter/anthropic/claude-sonnet-4-5",
+  architect: "openrouter/anthropic/claude-sonnet-4-5",
+  implementer: "openrouter/anthropic/claude-sonnet-4-5",
   qa: "openrouter/openai/gpt-4.1-mini",
-  reviewer: "openrouter/anthropic/claude-sonnet-4",
-  visual: "openrouter/google/gemini-2.5-pro"
+  reviewer: "openrouter/anthropic/claude-sonnet-4-5",
+  visual: "openrouter/google/gemini-2.5-pro-preview"
 };
 
 export function recommendedRoleModel(roleKey: string): string | null {
@@ -507,73 +509,48 @@ function formatRoleLabel(value: string): string {
     .join(" ");
 }
 
+function defaultRoleFields(roleKey: string): { recommendedModel: string | null; effectiveModel: string | null } {
+  const recommended = RECOMMENDED_ROLE_MODELS[roleKey] ?? null;
+  return { recommendedModel: recommended, effectiveModel: recommended };
+}
+
 function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): ProjectRoleDefinition[] {
   const enabled = new Set(dispatchableRoles.map((role) => normalizeRoleId(role)));
 
   return [
     {
-      id: "planner",
-      roleKey: "planner",
-      sortOrder: 0,
-      visualName: "Planner",
-      label: "Planner",
-      enabled: enabled.has("planner"),
-      model: null,
+      id: "planner", roleKey: "planner", sortOrder: 0, visualName: "Planner", label: "Planner",
+      enabled: enabled.has("planner"), model: null, ...defaultRoleFields("planner"),
       goal: "Turn the constitution into a crisp planning brief.",
       backstory: "Grounds the team in project intent and the first durable slice."
     },
     {
-      id: "architect",
-      roleKey: "architect",
-      sortOrder: 1,
-      visualName: "Architect",
-      label: "Architect",
-      enabled: enabled.has("architect"),
-      model: null,
+      id: "architect", roleKey: "architect", sortOrder: 1, visualName: "Architect", label: "Architect",
+      enabled: enabled.has("architect"), model: null, ...defaultRoleFields("architect"),
       goal: "Refine the plan into concrete structural boundaries.",
       backstory: "Identifies the shape of the system and the dependencies that matter first."
     },
     {
-      id: "implementer",
-      roleKey: "implementer",
-      sortOrder: 2,
-      visualName: "Implementer",
-      label: "Implementer",
-      enabled: enabled.has("implementer") || dispatchableRoles.length === 0,
-      model: null,
+      id: "implementer", roleKey: "implementer", sortOrder: 2, visualName: "Implementer", label: "Implementer",
+      enabled: enabled.has("implementer") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("implementer"),
       goal: "Convert the plan into the smallest shippable implementation slice.",
       backstory: "Focuses on direct, executable steps that move the project forward."
     },
     {
-      id: "qa",
-      roleKey: "qa",
-      sortOrder: 3,
-      visualName: "QA",
-      label: "QA",
-      enabled: enabled.has("qa") || dispatchableRoles.length === 0,
-      model: null,
+      id: "qa", roleKey: "qa", sortOrder: 3, visualName: "QA", label: "QA",
+      enabled: enabled.has("qa") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("qa"),
       goal: "Add verification and acceptance coverage for the slice.",
       backstory: "Looks for missing checks, edge cases, and review gates."
     },
     {
-      id: "reviewer",
-      roleKey: "reviewer",
-      sortOrder: 4,
-      visualName: "Reviewer",
-      label: "Reviewer",
-      enabled: enabled.has("reviewer") || dispatchableRoles.length === 0,
-      model: null,
+      id: "reviewer", roleKey: "reviewer", sortOrder: 4, visualName: "Reviewer", label: "Reviewer",
+      enabled: enabled.has("reviewer") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("reviewer"),
       goal: "Produce an operator-ready review and handoff.",
       backstory: "Checks readability, grounding, and follow-up readiness."
     },
     {
-      id: "visual",
-      roleKey: "visual",
-      sortOrder: 5,
-      visualName: "Visual",
-      label: "Visual",
-      enabled: enabled.has("visual"),
-      model: null,
+      id: "visual", roleKey: "visual", sortOrder: 5, visualName: "Visual", label: "Visual",
+      enabled: enabled.has("visual"), model: null, ...defaultRoleFields("visual"),
       goal: "Polish the presentation and any UI-facing details.",
       backstory: "Tunes surfaces and keeps the experience legible."
     }
@@ -588,6 +565,7 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
     }
 
     const id = normalizeRoleId(visualName);
+    const recommended = RECOMMENDED_ROLE_MODELS[id] ?? null;
     return {
       id,
       roleKey: id,
@@ -596,6 +574,8 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
       label: formatRoleLabel(visualName),
       enabled: false,
       model: null,
+      recommendedModel: recommended,
+      effectiveModel: recommended,
       goal: "",
       backstory: ""
     };
@@ -620,6 +600,8 @@ function normalizeProjectRoleDefinition(value: unknown, fallbackIndex: number): 
     label: visualName || formatRoleLabel(id),
     enabled: booleanValue(raw.enabled, raw.isEnabled, raw.active, raw.is_active),
     model: stringValue(raw.model, raw.modelName, raw.model_name) || null,
+    recommendedModel: stringValue(raw.recommendedModel, raw.recommended_model) || RECOMMENDED_ROLE_MODELS[normalizeRoleId(stringValue(raw.roleKey, raw.role_key, raw.id, raw.key, raw.slug, raw.role) || id)] || null,
+    effectiveModel: stringValue(raw.effectiveModel, raw.effective_model) || stringValue(raw.model, raw.modelName, raw.model_name) || RECOMMENDED_ROLE_MODELS[normalizeRoleId(stringValue(raw.roleKey, raw.role_key, raw.id, raw.key, raw.slug, raw.role) || id)] || null,
     goal,
     backstory
   };

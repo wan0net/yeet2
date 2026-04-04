@@ -15,9 +15,9 @@ export interface OpenRouterModelCatalogItem {
 const STATIC_FALLBACK_MODELS = [
   "openrouter/openai/gpt-4.1-mini",
   "openrouter/openai/gpt-4.1",
-  "openrouter/anthropic/claude-sonnet-4",
-  "openrouter/anthropic/claude-opus-4",
-  "openrouter/google/gemini-2.5-pro"
+  "openrouter/anthropic/claude-sonnet-4-5",
+  "openrouter/anthropic/claude-opus-4-5",
+  "openrouter/google/gemini-2.5-pro-preview"
 ] as const;
 
 export class OpenRouterModelCatalogError extends Error {

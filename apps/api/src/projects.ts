@@ -97,6 +97,8 @@ export interface ProjectRoleDefinitionSummary {
   goal: string;
   backstory: string;
   model: string | null;
+  recommendedModel: string | null;
+  effectiveModel: string | null;
   enabled: boolean;
   sortOrder: number;
   createdAt: string;
@@ -629,12 +631,12 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
 ];
 
 const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
-  planner: "openrouter/anthropic/claude-sonnet-4",
-  architect: "openrouter/anthropic/claude-sonnet-4",
-  implementer: "openrouter/openai/gpt-4.1",
+  planner: "openrouter/anthropic/claude-sonnet-4-5",
+  architect: "openrouter/anthropic/claude-sonnet-4-5",
+  implementer: "openrouter/anthropic/claude-sonnet-4-5",
   qa: "openrouter/openai/gpt-4.1-mini",
-  reviewer: "openrouter/anthropic/claude-sonnet-4",
-  visual: "openrouter/google/gemini-2.5-pro"
+  reviewer: "openrouter/anthropic/claude-sonnet-4-5",
+  visual: "openrouter/google/gemini-2.5-pro-preview"
 };
 
 function recommendedRoleModel(roleKey: ProjectRoleKey): string | null {
@@ -978,6 +980,8 @@ function asProjectInput(
         goal: definition.goal,
         backstory: definition.backstory,
         model: definition.model ?? null,
+        recommendedModel: recommendedRoleModel(definition.roleKey) ?? null,
+        effectiveModel: definition.model?.trim() || recommendedRoleModel(definition.roleKey) || null,
         enabled: definition.enabled,
         sortOrder: definition.sortOrder,
         createdAt: definition.createdAt.toISOString(),
@@ -1000,6 +1004,7 @@ function defaultProjectRoleDefinitions(): ProjectRoleDefinitionInput[] {
 }
 
 function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord): ProjectRoleDefinitionSummary {
+  const recommended = recommendedRoleModel(definition.roleKey) ?? null;
   return {
     id: definition.id,
     projectId: definition.projectId,
@@ -1009,6 +1014,8 @@ function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord)
     goal: definition.goal,
     backstory: definition.backstory,
     model: definition.model,
+    recommendedModel: recommended,
+    effectiveModel: definition.model?.trim() || recommended,
     enabled: definition.enabled,
     sortOrder: definition.sortOrder,
     createdAt: definition.createdAt.toISOString(),
@@ -4123,6 +4130,8 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
         goal: definition.goal,
         backstory: definition.backstory,
         model: null,
+        recommendedModel: recommendedRoleModel(definition.roleKey) ?? null,
+        effectiveModel: recommendedRoleModel(definition.roleKey) ?? null,
         enabled: definition.enabled,
         sortOrder: definition.sortOrder,
         createdAt: project.createdAt.toISOString(),

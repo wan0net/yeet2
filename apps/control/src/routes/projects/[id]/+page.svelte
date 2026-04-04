@@ -279,9 +279,9 @@
       {#each project.roleDefinitions.filter((entry) => entry.enabled) as role}
         <div class="hero-card">
           <strong>{role.visualName}</strong>
-          <div class="muted">{role.model || "Recommended default"}</div>
+          <div class="muted">{role.effectiveModel || role.model || "No model assigned"}{!role.model && role.recommendedModel ? " (default)" : ""}</div>
           <div class="muted">
-            {projectModelCostSummary(data.modelCatalog.find((entry) => entry.value === role.model) || null) || "No published pricing available."}
+            {projectModelCostSummary(data.modelCatalog.find((entry) => entry.value === (role.effectiveModel || role.model)) || null) || "No published pricing available."}
           </div>
         </div>
       {/each}
