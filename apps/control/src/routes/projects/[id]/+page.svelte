@@ -53,6 +53,16 @@
     return role?.model || "Default";
   }
 
+  function catalogModelId(model: string | null): string {
+    if (!model) return "";
+    return model.replace(/^openrouter\//, "");
+  }
+
+  function findModelCatalogEntry(model: string | null) {
+    const id = catalogModelId(model);
+    return id ? data.modelCatalog.find((entry) => entry.value === id) ?? null : null;
+  }
+
   function roleStatusCopy(status: string): string {
     if (status === "active") return "On stage";
     if (status === "blocked") return "Needs help";
@@ -281,7 +291,7 @@
           <strong>{role.visualName}</strong>
           <div class="muted">{role.effectiveModel || role.model || "No model assigned"}{!role.model && role.recommendedModel ? " (default)" : ""}</div>
           <div class="muted">
-            {projectModelCostSummary(data.modelCatalog.find((entry) => entry.value === (role.effectiveModel || role.model)) || null) || "No published pricing available."}
+            {projectModelCostSummary(findModelCatalogEntry(role.effectiveModel || role.model)) || "No published pricing available."}
           </div>
         </div>
       {/each}
