@@ -45,23 +45,33 @@ class InterviewResult:
     files: dict[str, str] | None = None  # {"vision": "# Vision\n...", "spec": "...", "roadmap": "..."}
 
 
+def _is_system_message(message: dict[str, Any]) -> bool:
+    actor = str(message.get("actor", message.get("role", ""))).strip().lower()
+    detail = message.get("detail") or {}
+    source = str(detail.get("source", "")).strip().lower() if isinstance(detail, dict) else ""
+    return actor != "operator" and (source == "system" or (isinstance(detail, dict) and "interviewStep" in detail))
+
+
+def _message_content(message: dict[str, Any]) -> str:
+    return str(message.get("content", message.get("summary", ""))).strip()
+
+
 def _count_answered(chat_history: list[dict[str, Any]]) -> int:
     """Count how many interview questions have been answered.
 
-    A question is a system message with detail.interviewStep set.
-    An answer is the next non-system message after a question.
+    A question is a system/planner message with detail.interviewStep set.
+    An answer is the next operator message after a question.
     """
     answered = 0
     waiting_for_answer = False
 
     for message in chat_history:
-        role = message.get("role", "")
         detail = message.get("detail") or {}
         has_step = isinstance(detail, dict) and "interviewStep" in detail
 
-        if role == "system" and has_step:
+        if _is_system_message(message) and has_step:
             waiting_for_answer = True
-        elif role != "system" and waiting_for_answer:
+        elif not _is_system_message(message) and waiting_for_answer:
             answered += 1
             waiting_for_answer = False
 
@@ -95,14 +105,13 @@ def interview_step(payload: dict[str, Any]) -> InterviewResult:
     current_question: str | None = None
 
     for message in chat_history:
-        role = message.get("role", "")
         detail = message.get("detail") or {}
         has_step = isinstance(detail, dict) and "interviewStep" in detail
 
-        if role == "system" and has_step:
-            current_question = str(message.get("content", "")).strip()
-        elif role != "system" and current_question is not None:
-            answer = str(message.get("content", "")).strip()
+        if _is_system_message(message) and has_step:
+            current_question = _message_content(message)
+        elif not _is_system_message(message) and current_question is not None:
+            answer = _message_content(message)
             qa_pairs.append((current_question, answer))
             current_question = None
 
