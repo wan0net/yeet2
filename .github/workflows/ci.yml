@@ -33,6 +33,9 @@ jobs:
           DATABASE_URL: postgresql://yeet2:yeet2@127.0.0.1:5432/yeet2
         run: pnpm --filter @yeet2/db exec prisma generate
 
+      - name: Build domain package
+        run: pnpm --filter @yeet2/domain build
+
       - name: Typecheck workspace
         run: pnpm typecheck
 
