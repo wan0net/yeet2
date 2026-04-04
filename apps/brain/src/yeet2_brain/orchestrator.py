@@ -238,8 +238,15 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
         "visual": "Review the UX and visual outcome against the intended product experience.",
     }.get(role_key, "Advance the assigned task and keep the mission aligned to the spec.")
 
+    # If the role label contains a character name like "Picard (Planner)", add personality
+    character_note = ""
+    if "(" in role_label and ")" in role_label:
+        character_name = role_label.split("(")[0].strip()
+        character_note = f"You are {character_name}. Respond with {character_name}'s personality and communication style while staying focused on the technical work."
+
     parts = [
         f"You are acting as {role_label} for project {input.project_name}.",
+        character_note,
         mission_context,
         f"Current task: {input.task_title}.",
         input.task_description,
