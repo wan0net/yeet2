@@ -3,10 +3,15 @@
 
   let { content = "", inline = false }: { content: string; inline?: boolean } = $props();
 
+  const renderer = new marked.Renderer();
+  const options = { async: false as const, renderer };
+
   const rendered = $derived((() => {
     if (!content) return "";
     try {
-      return inline ? marked.parseInline(content) : marked.parse(content);
+      return inline
+        ? (marked.parseInline(content, options) as string)
+        : (marked.parse(content, options) as string);
     } catch {
       return content;
     }
