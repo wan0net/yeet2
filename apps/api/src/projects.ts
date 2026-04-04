@@ -584,8 +584,22 @@ const execFileAsync = promisify(execFile);
 
 import { pickCharacters } from "@yeet2/domain";
 
-function getAgentNameTheme(): string {
-  return process.env.YEET2_AGENT_NAME_THEME?.trim().toLowerCase() || "mythology";
+import { getSetting } from "./settings";
+
+let _cachedTheme: string | null = null;
+let _cachedThemeAt = 0;
+
+async function getAgentNameTheme(): Promise<string> {
+  const now = Date.now();
+  if (_cachedTheme && now - _cachedThemeAt < 30_000) return _cachedTheme;
+  try {
+    const dbTheme = await getSetting("agent_theme");
+    _cachedTheme = dbTheme || process.env.YEET2_AGENT_NAME_THEME?.trim().toLowerCase() || "mythology";
+  } catch {
+    _cachedTheme = process.env.YEET2_AGENT_NAME_THEME?.trim().toLowerCase() || "mythology";
+  }
+  _cachedThemeAt = now;
+  return _cachedTheme;
 }
 
 const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder"> & { sortOrder: number }> = [
@@ -1028,8 +1042,8 @@ function toPrismaRoleDefinition(definition: ProjectRoleDefinitionInput) {
   return rest;
 }
 
-function defaultProjectRoleDefinitions(projectName?: string): ProjectRoleDefinitionInput[] {
-  const theme = getAgentNameTheme();
+async function defaultProjectRoleDefinitions(projectName?: string): Promise<ProjectRoleDefinitionInput[]> {
+  const theme = await getAgentNameTheme();
   const characters = pickCharacters(theme, PROJECT_ROLE_DEFAULTS.length, projectName || "default");
   return PROJECT_ROLE_DEFAULTS.map((definition, index) => {
     const character = characters[index];
@@ -1120,7 +1134,7 @@ async function ensureProjectRoleDefinitions(projectId: string, definitions: Proj
   }
 
   await prisma.projectRoleDefinition.createMany({
-    data: defaultProjectRoleDefinitions().map((definition) => ({
+    data: (await defaultProjectRoleDefinitions()).map((definition) => ({
       projectId,
       ...toPrismaRoleDefinition(definition)
     })) as any,
@@ -4158,7 +4172,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
           roleDefinitions: {
-            create: defaultProjectRoleDefinitions().map(toPrismaRoleDefinition) as any
+            create: (await defaultProjectRoleDefinitions()).map(toPrismaRoleDefinition) as any
           },
           constitution: {
             create: constitutionData
@@ -4175,7 +4189,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
       githubRepoOwner: project.githubRepoOwner ?? null,
       githubRepoName: project.githubRepoName ?? null,
       githubRepoUrl: project.githubRepoUrl ?? null,
-      roleDefinitions: defaultProjectRoleDefinitions().map((definition, index) => ({
+      roleDefinitions: (await defaultProjectRoleDefinitions()).map((definition, index) => ({
         id: `seed-${project.id}-${definition.roleKey}-${index}`,
         projectId: project.id,
         roleKey: definition.roleKey,

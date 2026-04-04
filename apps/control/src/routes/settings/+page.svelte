@@ -60,15 +60,24 @@
   <div class="card-header">Agent name theme</div>
   <div class="card-body">
     <p style="margin-bottom: 1rem;">
-      Choose a naming theme for your agent roles. New projects will get character names from the selected franchise. Set via <code>YEET2_AGENT_NAME_THEME</code> in your environment.
+      Choose a naming theme for your agent roles. New projects will get character names randomly drawn from the selected franchise.
+    </p>
+    <p style="margin-bottom: 1rem;">
+      Active theme: <span class="pill success">{data.themes.find((t) => t.key === data.activeTheme)?.label || data.activeTheme}</span>
     </p>
     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-      {#each ["mythology", "norse", "star-trek-tos", "star-trek-tng", "star-trek-ds9", "star-trek-voyager", "star-wars", "stargate-sg1", "stargate-atlantis", "stargate-universe", "firefly", "hitchhikers", "dune", "lotr", "matrix", "doctor-who", "expanse", "red-dwarf", "futurama", "silicon-valley", "severance"] as theme}
-        <span class="pill" style="cursor: default;">{theme}</span>
+      {#each data.themes as theme}
+        <form method="POST" action="?/setTheme" style="display: inline;">
+          <input type="hidden" name="theme" value={theme.key} />
+          <button
+            type="submit"
+            class="pill {theme.key === data.activeTheme ? 'success' : ''}"
+            style="cursor: pointer; border: none; font-family: inherit;"
+          >
+            {theme.label}
+          </button>
+        </form>
       {/each}
     </div>
-    <p style="margin-top: 1rem; color: var(--color-text-muted); font-size: 0.8rem;">
-      Examples — <strong>star-trek-tng</strong>: Picard (Planner), LaForge (Architect), Data (Tester) &middot; <strong>stargate-sg1</strong>: Hammond, Carter, O'Neill &middot; <strong>lotr</strong>: Gandalf, Elrond, Legolas &middot; <strong>red-dwarf</strong>: Holly, Kryten, Rimmer
-    </p>
   </div>
 </section>

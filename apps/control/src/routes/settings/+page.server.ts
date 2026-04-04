@@ -3,9 +3,18 @@ import { fail, redirect } from "@sveltejs/kit";
 import { apiJson } from "$lib/server/api";
 import { putJson } from "$lib/server/mutations";
 
+interface ThemeOption { key: string; label: string }
+
 export const load: PageServerLoad = async () => {
-  const status = await apiJson<{ configured: boolean }>("/settings/github-token");
-  return { githubTokenConfigured: status.configured };
+  const [tokenStatus, themeStatus] = await Promise.all([
+    apiJson<{ configured: boolean }>("/settings/github-token"),
+    apiJson<{ active: string; themes: ThemeOption[] }>("/settings/agent-theme")
+  ]);
+  return {
+    githubTokenConfigured: tokenStatus.configured,
+    activeTheme: themeStatus.active,
+    themes: themeStatus.themes
+  };
 };
 
 export const actions: Actions = {
@@ -17,6 +26,17 @@ export const actions: Actions = {
       await putJson("/settings/github-token", { token });
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to save token" });
+    }
+    throw redirect(303, "/settings");
+  },
+  setTheme: async ({ request }) => {
+    const form = await request.formData();
+    const theme = String(form.get("theme") || "").trim();
+    if (!theme) return fail(400, { actionError: "Theme is required" });
+    try {
+      await putJson("/settings/agent-theme", { theme });
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to save theme" });
     }
     throw redirect(303, "/settings");
   },
