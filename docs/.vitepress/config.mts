@@ -9,6 +9,7 @@ export default defineConfig({
   themeConfig: {
     nav: [
       { text: "Home", link: "/" },
+      { text: "Get Started", link: "/GETTING_STARTED" },
       { text: "Spec", link: "/SPEC" },
       { text: "Architecture", link: "/ARCHITECTURE" },
       { text: "Flows", link: "/DATA_FLOWS" },
@@ -20,6 +21,7 @@ export default defineConfig({
         text: "Overview",
         items: [
           { text: "Home", link: "/" },
+          { text: "Get Started", link: "/GETTING_STARTED" },
           { text: "Vision", link: "/VISION" },
           { text: "Spec", link: "/SPEC" },
           { text: "Product Spec", link: "/PRODUCT_SPEC" },

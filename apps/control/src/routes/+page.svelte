@@ -38,6 +38,7 @@
       <a class="btn secondary" href="/blockers">Inspect blockers</a>
       <a class="btn secondary" href="/projects/new">Add project</a>
       <a class="btn secondary" href="/projects">Open projects</a>
+      <a class="btn secondary" href="/guide">Get started</a>
     </div>
   </div>
 </section>

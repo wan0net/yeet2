@@ -17,6 +17,7 @@
       title: "Control",
       items: [
         { href: "/", label: "Overview", exact: true },
+        { href: "/guide", label: "Get started" },
         { href: "/projects", label: "All projects" },
         { href: "/projects/new", label: "Add project" }
       ]
