@@ -169,7 +169,7 @@ class BrainApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
-                if path not in {"/orchestration/plan", "/orchestration/decide", "/orchestration/brief"}:
+                if path not in {"/orchestration/plan", "/orchestration/decide", "/orchestration/brief", "/orchestration/interview"}:
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                     return
                 length = int(self.headers.get("Content-Length", "0"))
@@ -178,6 +178,11 @@ class BrainApp:
                     payload = json.loads(raw.decode("utf-8"))
                 except json.JSONDecodeError:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_json"})
+                    return
+                if path == "/orchestration/interview":
+                    from .interview import interview_step, serialize_interview_result
+                    result = interview_step(payload)
+                    self._send_json(HTTPStatus.OK, serialize_interview_result(result))
                     return
                 project_id = str(payload.get("project_id", "")).strip()
                 if not project_id:

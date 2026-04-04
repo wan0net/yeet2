@@ -340,45 +340,139 @@
 {/if}
 
 {#if currentTab === "chat"}
-<section class="card">
-  <div class="card-header">Team chat</div>
-  <div class="card-body stack">
-    <form class="stack" method="POST">
-      <label>
-        Message
-        <textarea name="content" placeholder="Add operator guidance or @reply to a teammate."></textarea>
-      </label>
-      <div class="token-row">
+<section class="chatroom">
+  <div class="chatroom-header">
+    <strong>Team chat</strong>
+    {#if project.constitutionStatus === "missing" || project.constitutionStatus === "pending"}
+      <form method="POST" style="margin-left: auto;">
         <input name="returnTab" type="hidden" value="chat" />
-        <button formaction="?/message" type="submit">Post to team chat</button>
-      </div>
-    </form>
+        <button class="btn primary" formaction="?/interview" type="submit">Start project interview</button>
+      </form>
+    {/if}
+  </div>
 
-    <div class="hero-card">
-      <strong>How this thread works</strong>
-      <div class="muted">
-        Agents can post working updates while they are active, then hand off with `@mentions` when it is the next role's turn. Operators can reply in the same trail.
-      </div>
-    </div>
-
+  <div class="chatroom-messages">
     {#if chatEntries.length === 0}
-      <div class="empty-state">No workflow chat yet.</div>
+      <div class="chatroom-empty">
+        {#if project.constitutionStatus === "missing" || project.constitutionStatus === "pending"}
+          <p>No constitution files detected. Start the project interview to set up this project — the planner will ask you a few questions and generate the constitution documents.</p>
+        {:else}
+          <p>No messages yet. Agents will post updates here as they work.</p>
+        {/if}
+      </div>
     {:else}
-      {#each chatEntries as entry}
-        <div class="hero-card">
-          <div class="page-header">
+      {#each [...chatEntries].reverse() as entry}
+        {@const isOperator = entry.actor === "operator" || entry.tone === "success"}
+        <div class="chat-bubble {isOperator ? 'chat-bubble--operator' : 'chat-bubble--agent'}">
+          <div class="chat-bubble-meta">
             <strong>{entry.actor}</strong>
-            <div class="token-row">
-              <span class={`pill ${entry.tone}`}>{entry.kind}</span>
-              {#if entry.createdAt}
-                <span class="muted">{formatTimestamp(entry.createdAt) || entry.createdAt}</span>
-              {/if}
-            </div>
+            <span class={`pill ${entry.tone}`} style="font-size: 0.625rem; padding: 0.1rem 0.3rem;">{entry.kind}</span>
+            {#if entry.createdAt}
+              <span class="muted" style="font-size: 0.75rem;">{formatTimestamp(entry.createdAt) || entry.createdAt}</span>
+            {/if}
           </div>
-          <Markdown content={entry.summary} inline />
+          <div class="chat-bubble-content">
+            <Markdown content={entry.summary} />
+          </div>
         </div>
       {/each}
     {/if}
   </div>
+
+  <div class="chatroom-input">
+    <form method="POST" class="chatroom-form">
+      <input name="returnTab" type="hidden" value="chat" />
+      <textarea name="content" class="chatroom-textarea" placeholder="Type a message..." rows="2"></textarea>
+      <button class="btn primary" formaction="?/message" type="submit">Send</button>
+    </form>
+  </div>
 </section>
+
+<style>
+  .chatroom {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 200px);
+    min-height: 400px;
+    background: var(--color-surface-sunken, #111);
+    border-radius: var(--radius-lg, 0.75rem);
+    border: 1px solid var(--color-border, #333);
+    overflow: hidden;
+  }
+  .chatroom-header {
+    display: flex;
+    align-items: center;
+    padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+    border-bottom: 1px solid var(--color-border, #333);
+    background: var(--color-surface-raised, #1a1a1a);
+  }
+  .chatroom-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-4, 1rem);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 0.75rem);
+  }
+  .chatroom-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--color-text-secondary, #888);
+    text-align: center;
+    padding: var(--space-6, 2rem);
+  }
+  .chat-bubble {
+    max-width: 75%;
+    padding: var(--space-3, 0.75rem);
+    border-radius: var(--radius-md, 0.5rem);
+  }
+  .chat-bubble--agent {
+    align-self: flex-start;
+    background: var(--color-surface-raised, #1a1a1a);
+    border: 1px solid var(--color-border, #333);
+  }
+  .chat-bubble--operator {
+    align-self: flex-end;
+    background: var(--color-accent-subtle, #1e3a5f);
+    border: 1px solid var(--color-accent-dim, #2563eb33);
+  }
+  .chat-bubble-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    margin-bottom: var(--space-1, 0.25rem);
+  }
+  .chat-bubble-content {
+    font-size: var(--font-size-sm, 0.875rem);
+    line-height: 1.5;
+  }
+  .chatroom-input {
+    padding: var(--space-3, 0.75rem) var(--space-4, 1rem);
+    border-top: 1px solid var(--color-border, #333);
+    background: var(--color-surface-raised, #1a1a1a);
+  }
+  .chatroom-form {
+    display: flex;
+    gap: var(--space-2, 0.5rem);
+    align-items: flex-end;
+  }
+  .chatroom-textarea {
+    flex: 1;
+    font-family: inherit;
+    font-size: var(--font-size-sm, 0.875rem);
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-primary, #eee);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-md, 0.5rem);
+    padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+    resize: none;
+  }
+  .chatroom-textarea:focus {
+    outline: 2px solid var(--color-accent, #60a5fa);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+</style>
 {/if}

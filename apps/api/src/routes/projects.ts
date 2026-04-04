@@ -45,6 +45,7 @@ import {
   ProjectPullRequestError,
   ProjectConstitutionError,
   createProjectMessage,
+  conductConstitutionInterview,
   replaceProjectRoleDefinitions,
   readProjectCostAnalysis,
   updateProjectAutonomy,
@@ -1236,6 +1237,37 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to create project message"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/interview", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId is required"
+      });
+    }
+
+    const body = request.body as { content?: string } | null;
+    const content = typeof body?.content === "string" ? body.content.trim() : null;
+
+    try {
+      const result = await conductConstitutionInterview(projectId, content || null);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectConstitutionError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to conduct interview"
       });
     }
   });

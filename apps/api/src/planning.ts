@@ -175,7 +175,7 @@ function brainBaseUrl(): string {
   return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
 }
 
-async function readBrainJson<T>(path: string, payload: Record<string, unknown>): Promise<T> {
+export async function readBrainJson<T>(path: string, payload: Record<string, unknown>): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), brainPlanningTimeoutMs());
 

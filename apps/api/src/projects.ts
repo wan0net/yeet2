@@ -51,7 +51,7 @@ import {
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "./openrouter-models";
-import { createInitialPlan, createTaskStageBrief, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
+import { createInitialPlan, createTaskStageBrief, loadPlanningContext, readBrainJson, type PlanningDraft, type PlanningProject } from "./planning";
 
 export interface ProjectRegistrationInput {
   name: string;
@@ -4399,4 +4399,111 @@ export async function planProject(projectId: string): Promise<ProjectSummary | n
 
   await persistPlannedMission(project, context);
   return loadProjectById(projectId);
+}
+
+interface BrainInterviewResponse {
+  action: "ask" | "synthesize";
+  question?: string;
+  interviewStep?: number;
+  totalSteps?: number;
+  files?: Partial<Record<string, string>>;
+}
+
+export async function conductConstitutionInterview(
+  projectId: string,
+  operatorMessage: string | null
+): Promise<{ action: string; question?: string; interviewStep?: number; totalSteps?: number; filesWritten?: string[] }> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectConstitutionError("project_not_found", "Project not found", 404);
+  }
+
+  // Record the incoming operator message before building history
+  if (operatorMessage) {
+    await recordDecisionLog({
+      projectId,
+      kind: "message",
+      actor: "operator",
+      summary: operatorMessage,
+      detail: { source: "operator" }
+    });
+  }
+
+  // Load recent decision logs and filter to interview-related entries
+  const recentLogs = await loadRecentDecisionLogs(projectId, 50);
+  const interviewLogs = recentLogs
+    .filter((log) => {
+      if (log.kind === "interview") {
+        return true;
+      }
+      if (log.kind === "message") {
+        const detail = typeof log.detail === "object" && log.detail !== null ? (log.detail as Record<string, unknown>) : {};
+        return detail.source === "operator";
+      }
+      return false;
+    })
+    .reverse(); // chronological order for chat history
+
+  const missingRequiredFiles: string[] = [];
+  if (project.constitution) {
+    const constitutionDetail = project.constitution as Record<string, unknown>;
+    if (Array.isArray(constitutionDetail.missingRequiredFiles)) {
+      for (const item of constitutionDetail.missingRequiredFiles) {
+        if (typeof item === "string") {
+          missingRequiredFiles.push(item);
+        }
+      }
+    }
+  }
+
+  const response = await readBrainJson<BrainInterviewResponse>("/orchestration/interview", {
+    project_id: projectId,
+    project_name: project.name,
+    constitution_status: project.constitutionStatus,
+    missing_files: missingRequiredFiles,
+    chat_history: interviewLogs.map((log) => ({
+      actor: log.actor,
+      content: log.summary,
+      detail: log.detail
+    }))
+  });
+
+  if (response.action === "ask") {
+    await recordDecisionLog({
+      projectId,
+      kind: "interview",
+      actor: "planner",
+      summary: response.question ?? "",
+      detail: { source: "system", interviewStep: response.interviewStep }
+    });
+
+    return {
+      action: "ask",
+      question: response.question,
+      interviewStep: response.interviewStep,
+      totalSteps: response.totalSteps
+    };
+  }
+
+  if (response.action === "synthesize" && typeof response.files === "object" && response.files !== null) {
+    const filesWritten: string[] = [];
+    for (const [fileKey, content] of Object.entries(response.files)) {
+      if (typeof content === "string" && content.trim()) {
+        await writeConstitutionFile(projectId, fileKey, content);
+        filesWritten.push(fileKey);
+      }
+    }
+
+    await recordDecisionLog({
+      projectId,
+      kind: "interview",
+      actor: "planner",
+      summary: "Constitution documents generated from interview.",
+      detail: { source: "system" }
+    });
+
+    return { action: "synthesize", filesWritten };
+  }
+
+  throw new Error(`Unexpected Brain interview response action: ${response.action}`);
 }

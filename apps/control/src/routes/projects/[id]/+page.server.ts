@@ -71,5 +71,17 @@ export const actions: Actions = {
     }
 
     throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+  },
+  interview: async ({ params, request }) => {
+    const form = await request.formData();
+    const returnTab = String(form.get("returnTab") || "").trim();
+
+    try {
+      await postJson(`/projects/${params.id}/interview`, {});
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to start interview" });
+    }
+
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
   }
 };
