@@ -563,7 +563,7 @@ interface ResolvedProjectRegistration {
   repoUrl: string | null;
 }
 
-const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "coder", "qa", "reviewer"] as const;
+const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "tester", "coder", "qa", "reviewer"] as const;
 const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
@@ -600,6 +600,16 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     sortOrder: 2
   },
   {
+    roleKey: "tester" as ProjectRoleKey,
+    visualName: "Tester",
+    label: "Tester",
+    goal: "Write test cases and acceptance tests based on the implementation plan before code is written.",
+    backstory: "You define what success looks like with concrete tests, enabling test-driven development.",
+    model: null,
+    enabled: true,
+    sortOrder: 4
+  },
+  {
     roleKey: "coder" as ProjectRoleKey,
     visualName: "Coder",
     label: "Coder",
@@ -607,7 +617,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "Takes the implementer's plan and turns it into concrete file changes, commits, and verified output.",
     model: null,
     enabled: true,
-    sortOrder: 3
+    sortOrder: 5
   },
   {
     roleKey: "qa",
@@ -617,7 +627,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You design checks and acceptance coverage that make the change trustworthy.",
     model: null,
     enabled: true,
-    sortOrder: 4
+    sortOrder: 6
   },
   {
     roleKey: "reviewer",
@@ -627,7 +637,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You protect quality and ensure the plan is understandable to operators.",
     model: null,
     enabled: true,
-    sortOrder: 5
+    sortOrder: 7
   },
   {
     roleKey: "visual",
@@ -637,7 +647,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You watch for layout, motion, and visual consistency risks.",
     model: null,
     enabled: true,
-    sortOrder: 6
+    sortOrder: 8
   }
 ];
 
@@ -2085,6 +2095,8 @@ function nextWorkflowRoleKeyForTask(task: ProjectTaskWithRelations): ProjectRole
     case "architect":
       return "implementer";
     case "implementer":
+      return "tester";
+    case "tester":
       return "coder";
     case "coder":
       return "qa";

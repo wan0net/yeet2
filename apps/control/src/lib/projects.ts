@@ -531,25 +531,31 @@ function defaultProjectRoleDefinitions(dispatchableRoles: string[] = []): Projec
       backstory: "Defines which files to change, what approach to take, and what to test."
     },
     {
-      id: "coder", roleKey: "coder", sortOrder: 3, visualName: "Coder", label: "Coder",
+      id: "tester", roleKey: "tester", sortOrder: 4, visualName: "Tester", label: "Tester",
+      enabled: enabled.has("tester") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("tester"),
+      goal: "Write test cases before code is written to enable TDD.",
+      backstory: "Defines what success looks like with concrete tests."
+    },
+    {
+      id: "coder", roleKey: "coder", sortOrder: 5, visualName: "Coder", label: "Coder",
       enabled: enabled.has("coder") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("coder"),
       goal: "Execute the implementation plan by writing and testing code.",
       backstory: "Takes the implementer's plan and turns it into concrete file changes."
     },
     {
-      id: "qa", roleKey: "qa", sortOrder: 4, visualName: "QA", label: "QA",
+      id: "qa", roleKey: "qa", sortOrder: 6, visualName: "QA", label: "QA",
       enabled: enabled.has("qa") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("qa"),
       goal: "Add verification and acceptance coverage for the slice.",
       backstory: "Looks for missing checks, edge cases, and review gates."
     },
     {
-      id: "reviewer", roleKey: "reviewer", sortOrder: 5, visualName: "Reviewer", label: "Reviewer",
+      id: "reviewer", roleKey: "reviewer", sortOrder: 7, visualName: "Reviewer", label: "Reviewer",
       enabled: enabled.has("reviewer") || dispatchableRoles.length === 0, model: null, ...defaultRoleFields("reviewer"),
       goal: "Produce an operator-ready review and handoff.",
       backstory: "Checks readability, grounding, and follow-up readiness."
     },
     {
-      id: "visual", roleKey: "visual", sortOrder: 6, visualName: "Visual", label: "Visual",
+      id: "visual", roleKey: "visual", sortOrder: 8, visualName: "Visual", label: "Visual",
       enabled: enabled.has("visual"), model: null, ...defaultRoleFields("visual"),
       goal: "Polish the presentation and any UI-facing details.",
       backstory: "Tunes surfaces and keeps the experience legible."

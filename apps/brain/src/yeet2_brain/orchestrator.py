@@ -167,6 +167,8 @@ def _next_role_for(role_key: str) -> str | None:
     if normalized == "architect":
         return "implementer"
     if normalized == "implementer":
+        return "tester"
+    if normalized == "tester":
         return "coder"
     if normalized == "coder":
         return "qa"
@@ -182,11 +184,12 @@ def _dispatch_role_rank(role_key: str) -> int:
     order = {
         "architect": 0,
         "implementer": 1,
-        "coder": 2,
-        "qa": 3,
-        "reviewer": 4,
-        "planner": 5,
-        "visual": 6,
+        "tester": 2,
+        "coder": 3,
+        "qa": 4,
+        "reviewer": 5,
+        "planner": 6,
+        "visual": 7,
     }
     return order.get(normalized, 99)
 
@@ -227,6 +230,7 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
     role_focus = {
         "architect": "Validate scope, constraints, and technical direction before code changes begin.",
         "implementer": "Plan the implementation approach: define the strategy, constraints, and steps the coder will follow.",
+        "tester": "Write test cases and acceptance tests that define success criteria before code is written.",
         "coder": "Execute the implementation plan: write code, run tests, and produce a clean diff.",
         "qa": "Verify the result against the acceptance criteria and surface regressions or missing checks.",
         "reviewer": "Review the completed work for correctness, maintainability, and spec alignment.",
@@ -253,6 +257,7 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
     working_summary = {
         "architect": f"Reviewing the implementation boundary for \"{input.task_title}\" and checking it against the constitution.",
         "implementer": f"Planning the implementation approach for \"{input.task_title}\" within the approved architecture.",
+        "tester": f"Writing tests for \"{input.task_title}\" before the coder implements.",
         "coder": f"Coding \"{input.task_title}\" based on the implementer's plan.",
         "qa": f"Verifying \"{input.task_title}\" against the expected checks and regressions.",
         "reviewer": f"Reviewing \"{input.task_title}\" for correctness, maintainability, and spec alignment.",

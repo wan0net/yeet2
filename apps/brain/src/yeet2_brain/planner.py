@@ -216,7 +216,7 @@ def _effective_role_definitions(planning_input: PlanningInput) -> list[PlanningR
     enabled = [definition for definition in _sort_role_definitions(role_definitions) if definition.enabled]
     if not enabled:
         raise ValueError("No enabled planning role definitions were provided")
-    required_role_keys = {"planner", "architect", "implementer", "coder", "qa", "reviewer"}
+    required_role_keys = {"planner", "architect", "implementer", "tester", "coder", "qa", "reviewer"}
     enabled_role_keys = {definition.key for definition in enabled}
     missing_required = sorted(required_role_keys - enabled_role_keys)
     if missing_required:
@@ -537,6 +537,25 @@ def _implementation_task(project_name: str, theme: str | None, note: str = "") -
     )
 
 
+def _tester_task(project_name: str, theme: str | None, guidance: str) -> PlannedTask:
+    theme_suffix = f" around {theme}" if theme else ""
+    guidance_suffix = f" {guidance}" if guidance else ""
+    return PlannedTask(
+        id=f"task-{uuid4().hex}",
+        title=f"Write tests for {project_name}{theme_suffix}",
+        description=f"Based on the implementation plan, write test cases and acceptance tests that the coder must satisfy. Define what success looks like before code is written.{guidance_suffix}",
+        agent_role=Role.TESTER.value,
+        status="queued",
+        priority=3,
+        acceptance_criteria=_task_acceptance(
+            "Test cases",
+            f"Concrete test cases exist that define the expected behavior for {project_name}",
+        ),
+        attempts=0,
+        blocker_reason=None,
+    )
+
+
 def _coder_task(project_name: str, theme: str | None, guidance: str) -> PlannedTask:
     theme_suffix = f" around {theme}" if theme else ""
     guidance_suffix = f" {guidance}" if guidance else ""
@@ -546,7 +565,7 @@ def _coder_task(project_name: str, theme: str | None, guidance: str) -> PlannedT
         description=f"Take the implementer's plan and execute it: write code, create or modify files, run available tests.{guidance_suffix}",
         agent_role=Role.CODER.value,
         status="queued",
-        priority=3,
+        priority=4,
         acceptance_criteria=_task_acceptance(
             "Code changes",
             f"The code changes match the implementation plan and the test suite passes for {project_name}",
@@ -568,7 +587,7 @@ def _verification_task(project_name: str, theme: str | None, note: str = "") -> 
         description=description,
         agent_role=Role.QA.value,
         status="queued",
-        priority=4,
+        priority=5,
         acceptance_criteria=_task_acceptance(
             "Verification coverage",
             f"At least one focused check or review path exists for the {topic} slice.",
@@ -589,7 +608,7 @@ def _fallback_task(project_name: str, note: str = "") -> PlannedTask:
         description=description,
         agent_role=Role.REVIEWER.value,
         status="queued",
-        priority=5,
+        priority=6,
         acceptance_criteria=_task_acceptance(
             "Operator handoff",
             "The plan is readable enough for an operator to approve the next step.",
@@ -615,6 +634,7 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
     tasks = [
         _architecture_task(planning_input.project_name, primary_theme, guidance_summary),
         _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
+        _tester_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
         _coder_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
         _verification_task(planning_input.project_name, primary_theme, guidance_summary),
         _fallback_task(planning_input.project_name, guidance_summary),
@@ -751,6 +771,11 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
                 for bit in (guidance_summary, _note_for_role_key(notes, "implementer") or _note_for(notes, Role.IMPLEMENTER))
                 if bit
             ),
+        ),
+        _tester_task(
+            planning_input.project_name,
+            secondary_theme or primary_theme,
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "tester") or _note_for(notes, Role.TESTER)) if bit),
         ),
         _coder_task(
             planning_input.project_name,

@@ -11,6 +11,7 @@ class Role(StrEnum):
     PLANNER = "planner"
     ARCHITECT = "architect"
     IMPLEMENTER = "implementer"
+    TESTER = "tester"
     CODER = "coder"
     QA = "qa"
     REVIEWER = "reviewer"
@@ -66,6 +67,7 @@ _ROLE_MODEL_ENV_NAMES = {
     "planner": "YEET2_ROLE_MODEL_DEFAULT_PLANNER",
     "architect": "YEET2_ROLE_MODEL_DEFAULT_ARCHITECT",
     "implementer": "YEET2_ROLE_MODEL_DEFAULT_IMPLEMENTER",
+    "tester": "YEET2_ROLE_MODEL_DEFAULT_TESTER",
     "coder": "YEET2_ROLE_MODEL_DEFAULT_CODER",
     "qa": "YEET2_ROLE_MODEL_DEFAULT_QA",
     "reviewer": "YEET2_ROLE_MODEL_DEFAULT_REVIEWER",
@@ -76,6 +78,7 @@ _ROLE_MODEL_DEFAULTS = {
     "planner": "openrouter/anthropic/claude-sonnet-4.6",
     "architect": "openrouter/anthropic/claude-sonnet-4.6",
     "implementer": "openrouter/openai/gpt-5.1-codex-mini",
+    "tester": "openrouter/openai/gpt-5.1-codex-mini",
     "coder": "openrouter/openai/gpt-5.3-codex",
     "qa": "openrouter/openai/gpt-4.1-mini",
     "reviewer": "openrouter/anthropic/claude-sonnet-4.6",
@@ -125,12 +128,20 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             sort_order=3,
         ),
         PlanningRoleDefinition(
+            key="tester",
+            label="Tester",
+            goal=f"Write test cases and acceptance tests for {project_label} based on the implementation plan before code is written.",
+            backstory="You define what success looks like with concrete tests, enabling test-driven development.",
+            enabled=True,
+            sort_order=4,
+        ),
+        PlanningRoleDefinition(
             key="coder",
             label="Coder",
             goal=f"Execute the implementation plan for {project_label} by writing and testing code.",
             backstory="You take the implementer's plan and turn it into concrete, verified file changes.",
             enabled=True,
-            sort_order=4,
+            sort_order=5,
         ),
         PlanningRoleDefinition(
             key="qa",
@@ -138,7 +149,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Add verification and acceptance coverage for the first {project_label} slice.",
             backstory="You look for missing checks, edge cases, and review gates.",
             enabled=True,
-            sort_order=5,
+            sort_order=6,
         ),
         PlanningRoleDefinition(
             key="reviewer",
@@ -146,7 +157,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Produce an operator-ready planning envelope for {project_label}.",
             backstory="You make sure the final plan is readable, grounded, and ready for handoff.",
             enabled=True,
-            sort_order=6,
+            sort_order=7,
         ),
         PlanningRoleDefinition(
             key="visual",
@@ -154,7 +165,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Surface presentation and visual polish concerns for {project_label}.",
             backstory="You look for user-facing clarity issues and presentation gaps.",
             enabled=False,
-            sort_order=7,
+            sort_order=8,
         ),
     ]
 

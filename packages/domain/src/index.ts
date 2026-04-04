@@ -15,9 +15,9 @@ export type TaskStatus =
 export type JobStatus = "queued" | "running" | "complete" | "failed" | "cancelled";
 export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
-export type AgentRole = "planner" | "architect" | "implementer" | "coder" | "qa" | "reviewer" | "visual";
-export type DispatchableAgentRole = "architect" | "implementer" | "coder" | "qa" | "reviewer";
-export type ProjectRoleKey = "planner" | "architect" | "implementer" | "coder" | "qa" | "reviewer" | "visual";
+export type AgentRole = "planner" | "architect" | "implementer" | "tester" | "coder" | "qa" | "reviewer" | "visual";
+export type DispatchableAgentRole = "architect" | "implementer" | "tester" | "coder" | "qa" | "reviewer";
+export type ProjectRoleKey = "planner" | "architect" | "implementer" | "tester" | "coder" | "qa" | "reviewer" | "visual";
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
 export type ProjectPullRequestDraftMode = "draft" | "ready";
@@ -34,6 +34,7 @@ export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
   planner: "openrouter/anthropic/claude-opus-4.6",
   architect: "openrouter/openai/gpt-5.4",
   implementer: "openrouter/openai/gpt-5.4",
+  tester: "openrouter/openai/gpt-5.1-codex-mini",
   coder: "openrouter/openai/gpt-5.3-codex",
   qa: "openrouter/openai/gpt-5.4",
   reviewer: "openrouter/anthropic/claude-opus-4.6",

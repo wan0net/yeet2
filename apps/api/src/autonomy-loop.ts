@@ -250,7 +250,7 @@ function missionHasAllDispatchableTasksComplete(project: ProjectSummary, mission
   }
 
   return mission.tasks
-    .filter((task) => task.agentRole === "implementer" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer")
+    .filter((task) => task.agentRole === "implementer" || task.agentRole === "tester" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer")
     .every((task) => task.status === "complete");
 }
 
@@ -258,7 +258,7 @@ function hasRemainingDispatchableTasks(project: ProjectSummary): boolean {
   return project.missions.some((mission) =>
     mission.tasks.some(
       (task) =>
-        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
+        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "tester" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
         (task.status === "ready" || task.status === "pending")
     )
   );
