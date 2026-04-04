@@ -80,11 +80,17 @@ class ExecutorApp:
                     return
                 try:
                     task_id = _require_text(payload, "task_id")
-                    repo_path = _require_text(payload, "repo_path")
-                    base_branch = _require_text(payload, "base_branch")
                     task_title = _require_text(payload, "task_title")
                     task_description = _require_text(payload, "task_description")
                     acceptance_criteria = _normalize_acceptance_criteria(payload)
+                    # Only require repo_path/base_branch for non-passthrough adapters
+                    adapter = str(payload.get("adapter", "")).strip().lower()
+                    if adapter != "passthrough":
+                        repo_path = _require_text(payload, "repo_path")
+                        base_branch = _require_text(payload, "base_branch")
+                    else:
+                        repo_path = str(payload.get("repo_path", "")).strip()
+                        base_branch = str(payload.get("base_branch", "")).strip()
                 except ValueError as exc:
                     self._send_json(
                         HTTPStatus.BAD_REQUEST,

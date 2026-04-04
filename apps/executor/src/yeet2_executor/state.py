@@ -12,7 +12,7 @@ from socket import gethostname
 from threading import Lock, Thread
 from typing import Any
 
-from .adapters import JobRecord, OpenHandsAdapter
+from .adapters import JobRecord, OpenHandsAdapter, PassthroughAdapter
 
 
 def _clean_text(value: str | None) -> str:
@@ -152,7 +152,11 @@ class WorkerRegistryClient:
 
 class JobStore:
     def __init__(self) -> None:
-        self._adapter = OpenHandsAdapter()
+        adapter_mode = (os.getenv("YEET2_EXECUTOR_MODE") or "openhands").strip().lower()
+        if adapter_mode == "passthrough":
+            self._adapter: OpenHandsAdapter | PassthroughAdapter = PassthroughAdapter()
+        else:
+            self._adapter = OpenHandsAdapter()
         self._worker_registry = WorkerRegistryClient.from_env()
         self._lock = Lock()
         self._jobs: dict[str, JobRecord] = {}
@@ -175,7 +179,15 @@ class JobStore:
     def submit_job(self, task_id: str, payload: dict[str, Any]) -> JobRecord:
         job_payload = dict(payload)
         job_payload.update(self._worker_registry.job_payload())
-        job = self._adapter.create_job(task_id=task_id, payload=job_payload)
+
+        # Per-job adapter override via payload["adapter"] field
+        adapter_override = str(job_payload.get("adapter", "")).strip().lower()
+        if adapter_override == "passthrough":
+            adapter: OpenHandsAdapter | PassthroughAdapter = PassthroughAdapter()
+        else:
+            adapter = self._adapter
+
+        job = adapter.create_job(task_id=task_id, payload=job_payload)
         with self._lock:
             self._jobs[job.id] = job
 
@@ -183,7 +195,7 @@ class JobStore:
         self._current_job_id = job.id
         self._worker_registry.heartbeat(job.id, status="busy")
         try:
-            return self._adapter.run_job(job)
+            return adapter.run_job(job)
         finally:
             self._current_job_id = None
             self._worker_registry.heartbeat(None, status="online")

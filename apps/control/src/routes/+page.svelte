@@ -22,6 +22,8 @@
       })
       .slice(0, 4)
   );
+
+  const agents = $derived(data.agents ?? []);
 </script>
 
 {#if data.error}
@@ -30,24 +32,22 @@
   </section>
 {/if}
 
-<section class="hero-card">
+<div class="page-header">
   <div class="stack">
     <span class="eyebrow">Control plane</span>
     <div>
-      <h1>Run the software factory from one place.</h1>
-      <p>
-        See what needs intervention, start or stop autonomy, and jump straight into the project or approval that matters next.
-      </p>
-    </div>
-    <div class="token-row">
-      <a class="btn" href="/approvals">Review approvals</a>
-      <a class="btn secondary" href="/blockers">Inspect blockers</a>
-      <a class="btn secondary" href="/projects/new">Add project</a>
-      <a class="btn secondary" href="/projects">Open projects</a>
-      <a class="btn secondary" href="/guide">Get started</a>
+      <h1>Mission Control</h1>
+      <p>Factory status at a glance</p>
     </div>
   </div>
-</section>
+  <div class="token-row">
+    <a class="btn" href="/approvals">Review approvals</a>
+    <a class="btn secondary" href="/blockers">Inspect blockers</a>
+    <a class="btn secondary" href="/projects/new">Add project</a>
+    <a class="btn secondary" href="/projects">Open projects</a>
+    <a class="btn secondary" href="/guide">Get started</a>
+  </div>
+</div>
 
 <section class="metrics">
   <div class="metric">
@@ -67,6 +67,29 @@
     <div class="metric-value">{data.overview.totals.openBlockers}</div>
   </div>
 </section>
+
+{#if agents.length === 0}
+  <section class="card">
+    <div class="card-body">
+      <div class="empty-state">
+        <p>No agents configured yet. <a href="/projects/new">Add a project</a> to get started.</p>
+      </div>
+    </div>
+  </section>
+{:else}
+  <section class="mission-control">
+    {#each agents as agent}
+      <a class="agent-card {agent.status}" href={`/projects/${agent.projectId}`}>
+        <div class="agent-character">{agent.characterName}</div>
+        <div class="agent-project">{agent.projectName}</div>
+        {#if agent.currentTask}
+          <div class="agent-task">{agent.currentTask}</div>
+        {/if}
+        <span class="pill {agent.status === 'working' ? 'info' : agent.status === 'blocked' ? 'danger' : agent.status === 'complete' ? 'success' : ''}">{agent.status}</span>
+      </a>
+    {/each}
+  </section>
+{/if}
 
 <section class="card">
   <div class="card-header">Needs attention now</div>
@@ -193,3 +216,62 @@
     </div>
   </div>
 </section>
+
+<style>
+  .mission-control {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: var(--space-3);
+  }
+
+  .agent-card {
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
+    border: 1px solid var(--color-border);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .agent-card:hover {
+    border-color: var(--color-accent);
+  }
+
+  .agent-card.working {
+    border-left: 3px solid var(--color-accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .agent-card.blocked {
+    border-left: 3px solid var(--color-status-error);
+  }
+
+  .agent-card.complete {
+    border-left: 3px solid var(--color-status-success);
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.85; }
+  }
+
+  .agent-character {
+    font-weight: 600;
+    font-size: var(--font-size-sm);
+  }
+
+  .agent-project {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+  }
+
+  .agent-task {
+    font-size: 0.8rem;
+    margin-top: var(--space-1);
+    color: var(--color-text-primary);
+  }
+</style>

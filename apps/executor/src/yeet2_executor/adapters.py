@@ -723,3 +723,106 @@ class OpenHandsAdapter:
                 raise OpenHandsRuntimeError(
                     f"timed out after {timeout_seconds} seconds"
                 ) from exc
+
+
+class PassthroughAdapter:
+    """LLM-only adapter. Sends the stage brief to a model, stores the response."""
+
+    def __init__(self, base_dir: str | Path | None = None) -> None:
+        root = base_dir or os.getenv("YEET2_EXECUTOR_BASE_DIR") or "/tmp/yeet2-executor"
+        self.base_dir = Path(root).expanduser().resolve()
+        self.logs_dir = self.base_dir / "logs"
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+
+    def create_job(self, task_id: str, payload: dict[str, Any]) -> JobRecord:
+        job_id = str(uuid4())
+        started_at = _utc_now()
+        task_title = str(payload.get("task_title", "task")).strip()
+        log_path = self.logs_dir / f"{job_id}.log"
+
+        record = JobRecord(
+            id=job_id,
+            task_id=task_id,
+            status="running",
+            executor_type="passthrough",
+            workspace_path="",
+            branch_name="",
+            log_path=str(log_path),
+            artifact_summary=None,
+            started_at=started_at,
+            completed_at=None,
+            payload=dict(payload, task_id=task_id, log_path=str(log_path)),
+        )
+
+        _write_log(log_path, [
+            f"[{started_at}] passthrough job created",
+            f"task_id: {task_id}",
+            f"task_title: {task_title}",
+        ])
+        return record
+
+    def run_job(self, record: JobRecord) -> JobRecord:
+        log_path = Path(record.log_path)
+        _append_log(log_path, "starting LLM passthrough call")
+
+        task_description = str(record.payload.get("task_description", "")).strip()
+        task_title = str(record.payload.get("task_title", "")).strip()
+        acceptance_criteria = record.payload.get("acceptance_criteria") or []
+
+        if not task_description:
+            return self._complete_job(record, status="failed", summary="No task description provided.")
+
+        # Build the prompt
+        parts = [task_description]
+        if acceptance_criteria:
+            parts.append("\nAcceptance criteria:")
+            for criterion in acceptance_criteria:
+                if isinstance(criterion, str):
+                    parts.append(f"- {criterion}")
+        prompt = "\n".join(parts)
+
+        # Resolve LLM settings
+        model = (
+            record.payload.get("llm_model")
+            or os.getenv("LLM_MODEL")
+            or os.getenv("YEET2_PASSTHROUGH_MODEL")
+            or "openrouter/anthropic/claude-sonnet-4-5"
+        )
+        api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("LLM_BASE_URL") or "https://openrouter.ai/api/v1"
+
+        if not api_key:
+            return self._complete_job(record, status="failed", summary="No LLM API key configured for passthrough adapter.")
+
+        _append_log(log_path, f"calling {model} via {base_url}")
+
+        try:
+            import openai  # noqa: PLC0415
+            client = openai.OpenAI(api_key=api_key, base_url=base_url)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": f"You are an AI agent working on task: {task_title}. Produce a thorough, actionable response."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+            )
+            content = response.choices[0].message.content or ""
+            _append_log(log_path, f"LLM response received ({len(content)} chars)")
+            return self._complete_job(record, status="complete", summary=content)
+        except Exception as exc:  # noqa: BLE001
+            error_msg = f"LLM call failed: {exc}"
+            _append_log(log_path, error_msg)
+            return self._complete_job(record, status="failed", summary=error_msg, error=error_msg)
+
+    def _complete_job(self, record: JobRecord, *, status: str, summary: str, error: str | None = None) -> JobRecord:
+        completed_at = _utc_now()
+        _append_log(Path(record.log_path), f"[{completed_at}] {summary[:200]}")
+        record.status = status
+        record.artifact_summary = summary
+        record.completed_at = completed_at
+        if error is None:
+            record.payload.pop("error", None)
+        else:
+            record.payload["error"] = error
+        return record

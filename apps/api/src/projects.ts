@@ -12,6 +12,7 @@ import type {
   Task as DbTask
 } from "@yeet2/db";
 import {
+  PIPELINE_TEMPLATES,
   RECOMMENDED_ROLE_MODELS,
   type GlobalBlockerQueueItem,
   type GlobalJobQueueItem,
@@ -72,6 +73,7 @@ export interface ProjectRegistrationInput {
   repoUrl?: string | null;
   defaultBranch: string;
   localPath?: string | null;
+  pipelineTemplate?: string | null;
 }
 
 export type ProjectTaskStatus = DbTask["status"];
@@ -1042,7 +1044,34 @@ function toPrismaRoleDefinition(definition: ProjectRoleDefinitionInput) {
   return rest;
 }
 
-async function defaultProjectRoleDefinitions(projectName?: string): Promise<ProjectRoleDefinitionInput[]> {
+async function defaultProjectRoleDefinitions(projectName?: string, pipelineTemplate?: string | null): Promise<ProjectRoleDefinitionInput[]> {
+  const templateKey = pipelineTemplate && PIPELINE_TEMPLATES[pipelineTemplate] ? pipelineTemplate : null;
+
+  if (templateKey && templateKey !== "software") {
+    const template = PIPELINE_TEMPLATES[templateKey];
+    const theme = await getAgentNameTheme();
+    const characters = pickCharacters(theme, template.stages.length, projectName || "default");
+    return template.stages.map((stage, index) => {
+      const character = characters[index];
+      const displayName = character && character.name !== stage.label
+        ? `${character.name} (${stage.label})`
+        : stage.label;
+      const backstory = character?.description
+        ? `${character.description}. ${stage.backstory}`
+        : stage.backstory;
+      return {
+        roleKey: stage.roleKey as ProjectRoleKey,
+        visualName: displayName,
+        label: displayName,
+        goal: stage.goal,
+        backstory,
+        model: null,
+        enabled: stage.enabled,
+        sortOrder: stage.sortOrder
+      };
+    });
+  }
+
   const theme = await getAgentNameTheme();
   const characters = pickCharacters(theme, PROJECT_ROLE_DEFAULTS.length, projectName || "default");
   return PROJECT_ROLE_DEFAULTS.map((definition, index) => {
@@ -4172,7 +4201,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
           roleDefinitions: {
-            create: (await defaultProjectRoleDefinitions()).map(toPrismaRoleDefinition) as any
+            create: (await defaultProjectRoleDefinitions(input.name, input.pipelineTemplate)).map(toPrismaRoleDefinition) as any
           },
           constitution: {
             create: constitutionData
@@ -4189,7 +4218,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
       githubRepoOwner: project.githubRepoOwner ?? null,
       githubRepoName: project.githubRepoName ?? null,
       githubRepoUrl: project.githubRepoUrl ?? null,
-      roleDefinitions: (await defaultProjectRoleDefinitions()).map((definition, index) => ({
+      roleDefinitions: (await defaultProjectRoleDefinitions(input.name, input.pipelineTemplate)).map((definition, index) => ({
         id: `seed-${project.id}-${definition.roleKey}-${index}`,
         projectId: project.id,
         roleKey: definition.roleKey,
