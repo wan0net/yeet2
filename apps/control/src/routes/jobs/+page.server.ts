@@ -1,6 +1,10 @@
 import type { PageServerLoad } from "./$types";
 import { loadGlobalJobs } from "$lib/server/control-data";
 
-export const load: PageServerLoad = async () => ({
-  jobs: await loadGlobalJobs()
-});
+export const load: PageServerLoad = async () => {
+  try {
+    return { jobs: await loadGlobalJobs(), error: null };
+  } catch {
+    return { jobs: [], error: "Unable to reach the API. Check that the API service is running." };
+  }
+};

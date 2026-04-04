@@ -12,6 +12,12 @@
   const readyTasks = $derived(data.tasks.filter((entry) => entryDispatchable(entry)));
 </script>
 
+{#if data.error}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{data.error}</div>
+  </section>
+{/if}
+
 <section class="page-header">
   <div class="stack">
     <span class="eyebrow">Task queue</span>

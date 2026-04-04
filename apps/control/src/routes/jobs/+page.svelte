@@ -9,6 +9,12 @@
   const queuedJobs = $derived(data.jobs.filter((entry) => entry.job.status === "queued" || entry.job.status === "pending"));
 </script>
 
+{#if data.error}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{data.error}</div>
+  </section>
+{/if}
+
 <section class="page-header">
   <div class="stack">
     <span class="eyebrow">Job activity</span>

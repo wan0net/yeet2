@@ -24,6 +24,12 @@
   );
 </script>
 
+{#if data.error}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{data.error}</div>
+  </section>
+{/if}
+
 <section class="hero-card">
   <div class="stack">
     <span class="eyebrow">Control plane</span>

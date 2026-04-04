@@ -4,6 +4,7 @@ import {
   advanceProject,
   createProjectPullRequest,
   dispatchTask,
+  forceFailStuckJob,
   getRegisteredProject,
   listRegisteredProjects,
   mergeProjectPullRequest,
@@ -76,6 +77,33 @@ export function resolveAutonomyLoopIntervalMs(): number {
 
 function resolveAutonomyLoopActor(): string {
   return envText("YEET2_AUTONOMY_LOOP_ACTOR") || "autonomy-loop";
+}
+
+export function resolveStuckJobTimeoutMs(): number {
+  const raw = envText("YEET2_STUCK_JOB_TIMEOUT_MS");
+  if (!raw) return 3_600_000; // default 1 hour
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(60_000, Math.floor(parsed)) : 3_600_000;
+}
+
+async function recoverStuckJobs(project: ProjectSummary, timeoutMs: number): Promise<void> {
+  const now = Date.now();
+  for (const mission of project.missions) {
+    for (const task of mission.tasks) {
+      for (const job of task.jobs) {
+        if (job.status !== "running" && job.status !== "queued") continue;
+        const startedAt = job.startedAt ? Date.parse(job.startedAt) : 0;
+        if (!startedAt || now - startedAt < timeoutMs) continue;
+
+        // Job is stuck — mark as failed
+        try {
+          await forceFailStuckJob(project.id, job.id, task.id, task.attempts);
+        } catch {
+          // Best effort
+        }
+      }
+    }
+  }
 }
 
 export function getAutonomyLoopTelemetry(projectId: string): AutonomyLoopTelemetry | null {
@@ -604,6 +632,12 @@ export class AutonomyLoopManager {
         await this.persistTelemetry(currentProject, "advance", "error", message);
         return;
       }
+    }
+
+    // After refreshing active jobs, check for stuck ones
+    const stuckTimeoutMs = resolveStuckJobTimeoutMs();
+    if (stuckTimeoutMs > 0) {
+      await recoverStuckJobs(currentProject, stuckTimeoutMs);
     }
 
     let decision;

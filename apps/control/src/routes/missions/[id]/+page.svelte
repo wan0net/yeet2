@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
+  import type { PageData, ActionData } from "./$types";
   import { planningProvenanceLabel } from "$lib/projects";
   import { formatTimestamp } from "$lib/project-detail";
   import Markdown from "$lib/ui/Markdown.svelte";
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <section class="page-header">
@@ -15,8 +15,19 @@
       <p>{data.project.name}</p>
     </div>
   </div>
-  <a class="btn secondary" href={`/projects/${data.project.id}`}>Back to project</a>
+  <div class="action-row">
+    <form method="POST">
+      <button formaction="?/replan" type="submit" class="btn secondary">Re-plan</button>
+    </form>
+    <a class="btn secondary" href={`/projects/${data.project.id}`}>Back to project</a>
+  </div>
 </section>
+
+{#if form && 'actionError' in form}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{(form as Record<string, unknown>).actionError}</div>
+  </section>
+{/if}
 
 <section class="split-grid">
   <div class="card">
@@ -50,15 +61,21 @@
             <th>Role</th>
             <th>Status</th>
             <th>Attempts</th>
+            <th>Jobs</th>
           </tr>
         </thead>
         <tbody>
           {#each data.mission.tasks as task}
             <tr>
               <td>{task.title}</td>
-              <td>{task.agentRole}</td>
-              <td><span class="pill">{task.status}</span></td>
+              <td><span class="pill">{task.agentRole}</span></td>
+              <td><span class="pill {task.status === 'blocked' ? 'danger' : task.status === 'complete' ? 'success' : task.status === 'running' || task.status === 'in_progress' ? 'info' : task.status === 'failed' ? 'warn' : ''}">{task.status}</span></td>
               <td>{task.attempts}</td>
+              <td>
+                {#each task.jobs as job}
+                  <a class="btn secondary" href={`/jobs/${job.id}`}>View job</a>
+                {/each}
+              </td>
             </tr>
           {/each}
         </tbody>

@@ -35,6 +35,7 @@ import {
 
 import { prisma } from "./db";
 import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
+import { getGitHubToken } from "./settings";
 import {
   buildGitHubCompareUrl,
   buildGitHubPullRequestBody,
@@ -52,6 +53,19 @@ import {
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "./openrouter-models";
 import { createInitialPlan, createTaskStageBrief, loadPlanningContext, readBrainJson, type PlanningDraft, type PlanningProject } from "./planning";
+
+let _cachedGitHubToken: string | null | undefined;
+let _cachedGitHubTokenAt = 0;
+
+async function resolveGitHubToken(): Promise<string | null> {
+  const now = Date.now();
+  if (_cachedGitHubToken !== undefined && now - _cachedGitHubTokenAt < 30_000) {
+    return _cachedGitHubToken;
+  }
+  _cachedGitHubToken = await getGitHubToken();
+  _cachedGitHubTokenAt = now;
+  return _cachedGitHubToken;
+}
 
 export interface ProjectRegistrationInput {
   name: string;
@@ -1545,7 +1559,7 @@ async function resolveJobBranchCleanupState(
   }
 
   const repository = resolveProjectGitHubRepository(project);
-  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  const token = await resolveGitHubToken();
   if (!repository || !token) {
     return {
       githubBranchCleanupState: "failed",
@@ -2593,7 +2607,7 @@ async function createProjectJobPullRequest(
     }
 
     const repository = resolveProjectGitHubRepository(project);
-    const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+    const token = await resolveGitHubToken();
     if (repository && token && job.githubPrNumber !== null) {
       try {
         const pullRequest = await fetchGitHubPullRequest({
@@ -2656,7 +2670,7 @@ async function createProjectJobPullRequest(
     throw new ProjectPullRequestError("missing_branch_name", "Job branchName is required before a pull request can be created.", 400);
   }
 
-  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  const token = await resolveGitHubToken();
   if (!token) {
     throw new ProjectPullRequestError("github_not_configured", "GITHUB_TOKEN is required to create GitHub pull requests.", 503);
   }
@@ -2783,7 +2797,7 @@ async function mergeProjectJobPullRequest(
     throw new ProjectPullRequestError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
   }
 
-  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  const token = await resolveGitHubToken();
   if (!token) {
     throw new ProjectPullRequestError("github_not_configured", "GITHUB_TOKEN is required to merge GitHub pull requests.", 503);
   }
@@ -2869,7 +2883,7 @@ async function refreshProjectJobPullRequestState(
   job: DbJob
 ): Promise<ProjectPullRequestResult> {
   const repository = resolveProjectGitHubRepository(project);
-  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  const token = await resolveGitHubToken();
   if (!repository || !token || job.githubPrNumber === null) {
     const hydratedProject = await loadProjectById(project.id);
     if (!hydratedProject) {
@@ -3352,7 +3366,7 @@ async function findApprovableImplementerJob(
   mission: ProjectMissionWithRelations
 ): Promise<{ task: ProjectWithRelations["missions"][number]["tasks"][number]; job: DbJob } | null> {
   const repository = resolveProjectGitHubRepository(project);
-  const token = normalizeOptionalString(process.env.GITHUB_TOKEN);
+  const token = await resolveGitHubToken();
   if (!repository || !token) {
     return null;
   }
@@ -3546,9 +3560,10 @@ export async function createProjectBlockerGitHubIssue(projectId: string, blocker
     throw new ProjectGitHubIssueError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
   }
 
+  const token = await resolveGitHubToken();
   try {
     const issue = await createGitHubIssue({
-      token: process.env.GITHUB_TOKEN,
+      token: token ?? undefined,
       repository,
       title: buildGitHubIssueTitle(project, task, blocker),
       body: buildGitHubIssueBody({
@@ -4506,4 +4521,48 @@ export async function conductConstitutionInterview(
   }
 
   throw new Error(`Unexpected Brain interview response action: ${response.action}`);
+}
+
+export async function forceFailStuckJob(projectId: string, jobId: string, taskId: string, attempts: number): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        status: "failed",
+        completedAt: new Date(),
+        artifactSummary: "Job timed out — marked as failed by stuck job recovery."
+      } as any
+    });
+
+    const taskStatus = attempts >= 2 ? "blocked" : "failed";
+    const blockerReason = taskStatus === "blocked" ? "Job timed out after repeated attempts." : null;
+
+    await tx.task.update({
+      where: { id: taskId },
+      data: { status: taskStatus, blockerReason }
+    });
+
+    if (taskStatus === "blocked") {
+      await tx.blocker.create({
+        data: {
+          taskId,
+          title: `Stuck job timeout for job ${jobId}`,
+          context: `Job ${jobId} was running for longer than the configured timeout and was force-failed by the autonomy loop.`,
+          options: ["Check executor logs", "Retry the task", "Dismiss if no longer needed"],
+          recommendation: "Check whether the executor process crashed or the OpenHands session hung.",
+          status: "open"
+        }
+      });
+    }
+  });
+
+  await recordDecisionLog({
+    projectId,
+    taskId,
+    jobId,
+    kind: "workflow",
+    actor: "autonomy-loop",
+    summary: `Force-failed stuck job ${jobId} after timeout.`,
+    detail: { source: "stuck_job_recovery", jobId, taskId, attempts }
+  });
 }
