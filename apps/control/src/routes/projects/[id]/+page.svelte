@@ -249,6 +249,29 @@
 </section>
 {/if}
 
+{#if currentTab === "overview" && mission}
+<section class="card">
+  <div class="card-header">Pipeline</div>
+  <div class="card-body">
+    <div class="pipeline">
+      {#each mission.tasks.sort((a, b) => a.priority - b.priority) as task, i}
+        {@const statusClass = task.status === "complete" ? "success" : task.status === "running" ? "info" : task.status === "blocked" || task.status === "failed" ? "danger" : ""}
+        <div class="pipeline-stage">
+          <div class="pipeline-node {statusClass}">
+            <div class="pipeline-role">{task.agentRole}</div>
+            <div class="pipeline-title">{task.title}</div>
+            <span class="pill {statusClass}" style="font-size: 0.625rem; margin-top: var(--space-1);">{task.status}</span>
+          </div>
+          {#if i < mission.tasks.length - 1}
+            <div class="pipeline-arrow">→</div>
+          {/if}
+        </div>
+      {/each}
+    </div>
+  </div>
+</section>
+{/if}
+
 {#if currentTab === "overview"}
 <section class="card">
   <div class="card-header">Task lanes</div>
@@ -404,6 +427,55 @@
 </section>
 
 <style>
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: var(--space-2, 0.5rem) 0;
+  }
+  .pipeline-stage {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .pipeline-node {
+    padding: var(--space-3, 0.75rem);
+    border-radius: var(--radius-md, 0.5rem);
+    border: 2px solid var(--color-border, #333);
+    background: var(--color-surface-raised, #1a1a1a);
+    min-width: 120px;
+    text-align: center;
+  }
+  .pipeline-node.success {
+    border-color: var(--color-status-success, #22c55e);
+    background: color-mix(in srgb, var(--color-status-success, #22c55e) 10%, var(--color-surface-raised, #1a1a1a));
+  }
+  .pipeline-node.info {
+    border-color: var(--color-accent, #60a5fa);
+    background: color-mix(in srgb, var(--color-accent, #60a5fa) 10%, var(--color-surface-raised, #1a1a1a));
+  }
+  .pipeline-node.danger {
+    border-color: var(--color-status-error, #ef4444);
+    background: color-mix(in srgb, var(--color-status-error, #ef4444) 10%, var(--color-surface-raised, #1a1a1a));
+  }
+  .pipeline-role {
+    font-weight: 600;
+    font-size: var(--font-size-sm, 0.8125rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary, #aaa);
+  }
+  .pipeline-title {
+    font-size: var(--font-size-sm, 0.8125rem);
+    margin-top: var(--space-1, 0.25rem);
+    color: var(--color-text-primary, #eee);
+  }
+  .pipeline-arrow {
+    padding: 0 var(--space-2, 0.5rem);
+    color: var(--color-text-secondary, #666);
+    font-size: 1.25rem;
+  }
   .chatroom {
     display: flex;
     flex-direction: column;
