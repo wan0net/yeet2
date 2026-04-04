@@ -238,10 +238,12 @@ class BrainApp:
                 )
                 try:
                     planning_result = plan_project(planning_input)
-                except Exception:
+                except Exception as exc:
+                    import traceback
+                    traceback.print_exc()
                     self._send_json(
                         HTTPStatus.SERVICE_UNAVAILABLE,
-                        {"error": "planning_failed", "message": "Brain planning failed"},
+                        {"error": "planning_failed", "message": f"Brain planning failed: {exc}"},
                     )
                     return
                 run = store.create_planning_run(planning_input, planning_result)
@@ -260,7 +262,8 @@ class BrainApp:
                 )
 
             def log_message(self, format: str, *args: object) -> None:  # noqa: A003
-                return
+                import sys
+                sys.stderr.write(f"[brain] {self.address_string()} {format % args}\n")
 
         return Handler
 

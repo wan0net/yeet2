@@ -215,15 +215,11 @@ def _effective_role_definitions(planning_input: PlanningInput) -> list[PlanningR
     role_definitions = planning_input.role_definitions or default_planning_role_definitions(planning_input.project_name)
     enabled = [definition for definition in _sort_role_definitions(role_definitions) if definition.enabled]
     if not enabled:
+        # Fall back to defaults if nothing is enabled
+        enabled = [d for d in default_planning_role_definitions(planning_input.project_name) if d.enabled]
+    if not enabled:
         raise ValueError("No enabled planning role definitions were provided")
-    required_role_keys = {"planner", "architect", "implementer", "tester", "coder", "qa", "reviewer"}
-    enabled_role_keys = {definition.key for definition in enabled}
-    missing_required = sorted(required_role_keys - enabled_role_keys)
-    if missing_required:
-        raise ValueError(
-            f"Missing required enabled planning role definitions: {', '.join(missing_required)}"
-        )
-    return enabled
+    return _sort_role_definitions(enabled)
 
 
 def _to_text_list(value: object) -> list[str]:
@@ -631,14 +627,24 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
     primary_theme = themes[0] if themes else None
     secondary_theme = themes[1] if len(themes) > 1 else None
 
-    tasks = [
-        _architecture_task(planning_input.project_name, primary_theme, guidance_summary),
-        _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
-        _tester_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
-        _coder_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
-        _verification_task(planning_input.project_name, primary_theme, guidance_summary),
-        _fallback_task(planning_input.project_name, guidance_summary),
+    # Only generate tasks for roles the project has enabled
+    enabled_roles = _effective_role_definitions(planning_input)
+    enabled_role_keys = {d.key for d in enabled_roles}
+
+    task_generators: list[tuple[str, PlannedTask]] = [
+        ("architect", _architecture_task(planning_input.project_name, primary_theme, guidance_summary)),
+        ("implementer", _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary)),
+        ("tester", _tester_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary)),
+        ("coder", _coder_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary)),
+        ("qa", _verification_task(planning_input.project_name, primary_theme, guidance_summary)),
+        ("reviewer", _fallback_task(planning_input.project_name, guidance_summary)),
     ]
+
+    tasks = [task for role_key, task in task_generators if role_key in enabled_role_keys]
+
+    # Re-number priorities sequentially
+    for i, task in enumerate(tasks):
+        task.priority = i + 1
 
     return PlanningResult(
         mission=mission,
