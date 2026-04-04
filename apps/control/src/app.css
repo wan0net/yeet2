@@ -323,6 +323,11 @@ label {
   letter-spacing: -0.03em;
 }
 
+.metric-value--compact {
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
 .panel-grid {
   display: grid;
   gap: 16px;

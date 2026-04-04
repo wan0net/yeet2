@@ -20,6 +20,7 @@
   const taskGroups = $derived(groupTasksByState(project));
   const staffOverview = $derived(agentPresenceOverview(project));
   const staff = $derived(staffOverview.roles);
+  const nextTask = $derived(project.missions.flatMap((entry) => entry.tasks).find((task) => task.id === project.nextDispatchableTaskId) ?? null);
   const currentTab = $derived((() => {
     const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
     return tab === "agents" || tab === "chat" ? tab : "overview";
@@ -78,9 +79,11 @@
     </div>
     <div class="token-row">
       <form method="POST">
+        <input name="returnTab" type="hidden" value={currentTab} />
         <button formaction="?/plan" type="submit">Plan</button>
       </form>
       <form method="POST">
+        <input name="returnTab" type="hidden" value={currentTab} />
         <button formaction="?/run" type="submit">Run now</button>
       </form>
       <a class="btn secondary" href="/projects">Back</a>
@@ -106,51 +109,77 @@
 
 <section class="metrics">
   <div class="metric">
-    <div class="metric-kicker">Active missions</div>
-    <div class="metric-value">{project.activeMissionCount || 0}</div>
+    <div class="metric-kicker">Autonomy</div>
+    <div class="metric-value metric-value--compact">{project.autonomy.mode}</div>
   </div>
   <div class="metric">
-    <div class="metric-kicker">Active tasks</div>
-    <div class="metric-value">{project.activeTaskCount || 0}</div>
+    <div class="metric-kicker">Next action</div>
+    <div class="metric-value metric-value--compact">{project.nextDispatchableTaskRole || "Waiting"}</div>
   </div>
   <div class="metric">
     <div class="metric-kicker">Blockers</div>
     <div class="metric-value">{project.blockerCount || 0}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Running scope</div>
+    <div class="metric-value">{project.activeTaskCount || 0}</div>
   </div>
 </section>
 
 {#if currentTab === "overview"}
 <section class="split-grid">
   <div class="card">
-    <div class="card-header">Repository</div>
+    <div class="card-header">Operate</div>
+    <div class="card-body stack">
+      <div class="stack">
+        <div class="metric-kicker">What needs attention</div>
+        {#if nextTask}
+          <div>
+            <strong>{nextTask.title}</strong>
+            <div class="muted">{nextTask.agentRole} · {nextTask.status}</div>
+          </div>
+        {:else if blockers[0]}
+          <div>
+            <strong>{blockers[0].title}</strong>
+            <div class="muted">Open blocker</div>
+          </div>
+        {:else}
+          <div>
+            <strong>No immediate action queued.</strong>
+            <div class="muted">Run planning or wait for the autonomy loop.</div>
+          </div>
+        {/if}
+      </div>
+      <div class="token-row">
+        <form method="POST">
+          <input name="returnTab" type="hidden" value="overview" />
+          <input name="autonomyMode" type="hidden" value="manual" />
+          <button class="secondary" formaction="?/autonomy" type="submit">Stop AI</button>
+        </form>
+        <form method="POST">
+          <input name="returnTab" type="hidden" value="overview" />
+          <input name="autonomyMode" type="hidden" value="supervised" />
+          <button class="secondary" formaction="?/autonomy" type="submit">Supervised</button>
+        </form>
+        <form method="POST">
+          <input name="returnTab" type="hidden" value="overview" />
+          <input name="autonomyMode" type="hidden" value="autonomous" />
+          <button formaction="?/autonomy" type="submit">Start AI</button>
+        </form>
+      </div>
+      <div class="muted">Last run: {formatTimestamp(project.autonomy.lastRunAt) || "Unknown"}</div>
+      <div class="muted">{project.autonomy.lastRunMessage || "No recent autonomy message."}</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Project facts</div>
     <div class="card-body stack">
       <div><strong>Repo:</strong> {project.repoUrl || "—"}</div>
       <div><strong>Local path:</strong> {project.localPath || "—"}</div>
       <div><strong>Default branch:</strong> {project.defaultBranch || "—"}</div>
       <div><strong>Constitution:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">Autonomy</div>
-    <div class="card-body stack">
-      <p>Current mode: <strong>{project.autonomy.mode}</strong></p>
-      <div class="token-row">
-        <form method="POST">
-          <input name="autonomyMode" type="hidden" value="manual" />
-          <button class="secondary" formaction="?/autonomy" type="submit">Stop AI</button>
-        </form>
-        <form method="POST">
-          <input name="autonomyMode" type="hidden" value="supervised" />
-          <button class="secondary" formaction="?/autonomy" type="submit">Supervised</button>
-        </form>
-        <form method="POST">
-          <input name="autonomyMode" type="hidden" value="autonomous" />
-          <button formaction="?/autonomy" type="submit">Start AI</button>
-        </form>
-      </div>
-      <p>Last run: {formatTimestamp(project.autonomy.lastRunAt) || "Unknown"}</p>
-      <p class="muted">{project.autonomy.lastRunMessage || "No recent autonomy message."}</p>
+      <div><strong>Planner source:</strong> {mission ? planningProvenanceLabel(mission.planningProvenance) : "No mission yet"}</div>
     </div>
   </div>
 </section>
@@ -158,7 +187,7 @@
 
 {#if currentTab === "overview"}
 <section class="card">
-  <div class="card-header">Mission</div>
+  <div class="card-header">Current mission</div>
   <div class="card-body">
     {#if mission}
       <div class="stack">
@@ -180,7 +209,7 @@
 
 {#if currentTab === "overview"}
 <section class="card">
-  <div class="card-header">Tasks by state</div>
+  <div class="card-header">Task lanes</div>
   <div class="card-body">
     <div class="split-grid">
       {#each taskGroups as group}
@@ -228,7 +257,7 @@
   </div>
 
   <div class="card">
-    <div class="card-header">Cost analysis</div>
+    <div class="card-header">Model cost analysis</div>
     <div class="card-body stack">
       {#each project.roleDefinitions.filter((entry) => entry.enabled) as role}
         <div class="hero-card">
@@ -293,6 +322,7 @@
         <textarea name="content" placeholder="Add operator guidance or @reply to a teammate."></textarea>
       </label>
       <div class="token-row">
+        <input name="returnTab" type="hidden" value="chat" />
         <button formaction="?/message" type="submit">Post to team chat</button>
       </div>
     </form>

@@ -16,27 +16,34 @@ export const load: PageServerLoad = async ({ params }) => {
 };
 
 export const actions: Actions = {
-  plan: async ({ params }) => {
+  plan: async ({ params, request }) => {
+    const form = await request.formData();
+    const returnTab = String(form.get("returnTab") || "").trim();
+
     try {
       await postJson(`/projects/${params.id}/plan`, {});
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to plan project" });
     }
 
-    throw redirect(303, `/projects/${params.id}`);
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
   },
-  run: async ({ params }) => {
+  run: async ({ params, request }) => {
+    const form = await request.formData();
+    const returnTab = String(form.get("returnTab") || "").trim();
+
     try {
       await postJson(`/projects/${params.id}/run`, {});
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to run project" });
     }
 
-    throw redirect(303, `/projects/${params.id}`);
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
   },
   autonomy: async ({ params, request }) => {
     const form = await request.formData();
     const autonomyMode = String(form.get("autonomyMode") || "").trim();
+    const returnTab = String(form.get("returnTab") || "").trim();
 
     try {
       await putJson(`/projects/${params.id}/autonomy`, { autonomyMode });
@@ -44,11 +51,12 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to update autonomy" });
     }
 
-    throw redirect(303, `/projects/${params.id}`);
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
   },
   message: async ({ params, request }) => {
     const form = await request.formData();
     const content = String(form.get("content") || "").trim();
+    const returnTab = String(form.get("returnTab") || "").trim();
     if (!content) {
       return fail(400, { actionError: "Message content is required" });
     }
@@ -62,6 +70,6 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to post message" });
     }
 
-    throw redirect(303, `/projects/${params.id}`);
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
   }
 };
