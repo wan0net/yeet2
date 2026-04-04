@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from http.client import HTTPConnection, HTTPSConnection
 from urllib.parse import urlparse
 from dataclasses import dataclass
 from socket import gethostname
-from threading import Lock
+from threading import Lock, Thread
 from typing import Any
 
 from .adapters import JobRecord, OpenHandsAdapter
@@ -158,6 +159,19 @@ class JobStore:
         self._worker_registry.ensure_registered()
         self._worker_registry.heartbeat(None, status="online")
 
+        self._current_job_id: str | None = None
+        self._stopping = False
+        heartbeat_seconds = 30
+        raw = os.getenv("YEET2_EXECUTOR_HEARTBEAT_INTERVAL_SECONDS", "").strip()
+        if raw:
+            try:
+                heartbeat_seconds = max(5, int(raw))
+            except ValueError:
+                pass
+        self._heartbeat_interval = heartbeat_seconds
+        self._heartbeat_thread = Thread(target=self._heartbeat_loop, daemon=True)
+        self._heartbeat_thread.start()
+
     def submit_job(self, task_id: str, payload: dict[str, Any]) -> JobRecord:
         job_payload = dict(payload)
         job_payload.update(self._worker_registry.job_payload())
@@ -166,12 +180,28 @@ class JobStore:
             self._jobs[job.id] = job
 
         self._worker_registry.ensure_registered()
+        self._current_job_id = job.id
         self._worker_registry.heartbeat(job.id, status="busy")
         try:
             return self._adapter.run_job(job)
         finally:
+            self._current_job_id = None
             self._worker_registry.heartbeat(None, status="online")
 
     def get(self, job_id: str) -> JobRecord | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stopping:
+            time.sleep(self._heartbeat_interval)
+            if self._stopping:
+                break
+            try:
+                status = "busy" if self._current_job_id else "online"
+                self._worker_registry.heartbeat(self._current_job_id, status=status)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def shutdown(self) -> None:
+        self._stopping = True

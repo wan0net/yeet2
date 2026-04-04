@@ -609,7 +609,28 @@ class OpenHandsAdapter:
             record.payload.pop("error", None)
         else:
             record.payload["error"] = error
+
+        self._cleanup_worktree(record, status)
         return record
+
+    def _cleanup_worktree(self, record: JobRecord, status: str) -> None:
+        cleanup_policy = (os.getenv("YEET2_EXECUTOR_WORKTREE_CLEANUP") or "on_success").strip().lower()
+        if cleanup_policy == "never":
+            return
+
+        if status != "complete" and cleanup_policy != "always":
+            return
+
+        repo_path = record.payload.get("repo_path")
+        workspace_path = record.workspace_path
+        if not repo_path or not workspace_path:
+            return
+
+        try:
+            _run_git(["git", "-C", str(repo_path), "worktree", "remove", "--force", str(workspace_path)])
+            _append_log(Path(record.log_path), f"[{_utc_now()}] worktree removed: {workspace_path}")
+        except Exception:  # noqa: BLE001
+            _append_log(Path(record.log_path), f"[{_utc_now()}] worktree cleanup skipped (non-fatal)")
 
     def _build_openhands_command(self, task_file: Path) -> list[str]:
         configured = os.getenv("YEET2_OPENHANDS_COMMAND")

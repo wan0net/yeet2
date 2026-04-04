@@ -12,6 +12,5 @@
 
   <div class="pb-right">
     <span class="top-note">autonomous software factory</span>
-    <span class="pill">10.42.10.101</span>
   </div>
 </header>

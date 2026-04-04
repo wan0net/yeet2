@@ -28,7 +28,7 @@ export type ProjectApprovalAction = "approve" | "reject";
 export type WorkerStatus = "online" | "busy" | "offline";
 export type WorkerHealthState = "healthy" | "stale" | "expired_lease" | "offline";
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
-export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message";
+export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message" | "verdict" | "workflow";
 
 export interface OperatorGuidanceSummary {
   id: string;

@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
-  let { data }: { data: PageData } = $props();
+  import type { PageData, ActionData } from "./$types";
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <section class="page-header">
@@ -23,6 +23,12 @@
     <div class="metric-value">{data.blockers.length}</div>
   </div>
 </section>
+
+{#if form?.actionError}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{form.actionError}</div>
+  </section>
+{/if}
 
 <section class="card">
   <div class="card-header">All blockers</div>
@@ -56,6 +62,20 @@
               </div>
             </div>
             <p>{entry.blocker.context}</p>
+            {#if entry.blocker.status === "open"}
+              <div class="token-row" style="margin-top: var(--space-3);">
+                <form method="POST" action="?/resolve">
+                  <input type="hidden" name="projectId" value={entry.projectId} />
+                  <input type="hidden" name="blockerId" value={entry.blocker.id} />
+                  <button class="btn primary" type="submit">Resolve</button>
+                </form>
+                <form method="POST" action="?/dismiss">
+                  <input type="hidden" name="projectId" value={entry.projectId} />
+                  <input type="hidden" name="blockerId" value={entry.blocker.id} />
+                  <button class="btn secondary" type="submit">Dismiss</button>
+                </form>
+              </div>
+            {/if}
           </article>
         {/each}
       </div>

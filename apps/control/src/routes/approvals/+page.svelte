@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
-  let { data }: { data: PageData } = $props();
+  import type { PageData, ActionData } from "./$types";
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
 <section class="page-header">
@@ -23,6 +23,12 @@
     <div class="metric-value">{data.approvals.length}</div>
   </div>
 </section>
+
+{#if form?.actionError}
+  <section class="card" style="border-color: var(--color-status-error);">
+    <div class="card-body">{form.actionError}</div>
+  </section>
+{/if}
 
 <section class="card">
   <div class="card-header">Approval queue</div>
@@ -57,6 +63,20 @@
               </div>
             </div>
             <p>{approval.blockerContext}</p>
+            {#if approval.blockerStatus === "open"}
+              <div class="token-row" style="margin-top: var(--space-3);">
+                <form method="POST" action="?/approve">
+                  <input type="hidden" name="projectId" value={approval.projectId} />
+                  <input type="hidden" name="blockerId" value={approval.blockerId} />
+                  <button class="btn primary" type="submit">Approve</button>
+                </form>
+                <form method="POST" action="?/reject">
+                  <input type="hidden" name="projectId" value={approval.projectId} />
+                  <input type="hidden" name="blockerId" value={approval.blockerId} />
+                  <button class="btn secondary" type="submit">Reject</button>
+                </form>
+              </div>
+            {/if}
           </article>
         {/each}
       </div>

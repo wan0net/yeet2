@@ -55,7 +55,10 @@
                   <p>{entry.projectName} · {entry.missionTitle}</p>
                 </div>
               </div>
-              <a class="btn secondary" href={`/projects/${entry.projectId}`}>Open project</a>
+              <div style="display: flex; gap: 0.5rem;">
+                <a class="btn secondary" href={`/jobs/${entry.job.id}`}>View</a>
+                <a class="btn secondary" href={`/projects/${entry.projectId}`}>Open project</a>
+              </div>
             </div>
             <div class="queue-meta">
               <div>

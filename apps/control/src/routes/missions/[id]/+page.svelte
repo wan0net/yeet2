@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   import { planningProvenanceLabel } from "$lib/projects";
+  import { formatTimestamp } from "$lib/project-detail";
 
   let { data }: { data: PageData } = $props();
 </script>
@@ -30,8 +31,8 @@
   <div class="card">
     <div class="card-header">Timing</div>
     <div class="card-body stack">
-      <div>Started: {data.mission.startedAt || "Unknown"}</div>
-      <div>Completed: {data.mission.completedAt || "Not completed"}</div>
+      <div>Started: {formatTimestamp(data.mission.startedAt) || "Unknown"}</div>
+      <div>Completed: {formatTimestamp(data.mission.completedAt) || "Not completed"}</div>
       <div>Created by: {data.mission.createdBy || "unknown"}</div>
     </div>
   </div>

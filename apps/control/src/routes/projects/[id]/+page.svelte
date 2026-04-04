@@ -178,7 +178,22 @@
       <div><strong>Repo:</strong> {project.repoUrl || "—"}</div>
       <div><strong>Local path:</strong> {project.localPath || "—"}</div>
       <div><strong>Default branch:</strong> {project.defaultBranch || "—"}</div>
-      <div><strong>Constitution:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}</div>
+      <div>
+        <strong>Constitution:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}
+        {#if project.constitution.files}
+          <div class="token-row" style="margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1);">
+            {#each Object.entries(project.constitution.files) as [name, present]}
+              <span class="pill {present ? 'success' : 'muted'}">{name}</span>
+            {/each}
+          </div>
+        {/if}
+        {#if project.constitution.missingRequiredFiles && project.constitution.missingRequiredFiles.length > 0}
+          <div class="muted" style="margin-top: var(--space-1);">Missing required: {project.constitution.missingRequiredFiles.join(", ")}</div>
+        {/if}
+        {#if project.constitution.inspectedAt}
+          <div class="muted" style="margin-top: var(--space-1);">Inspected: {formatTimestamp(project.constitution.inspectedAt)}</div>
+        {/if}
+      </div>
       <div><strong>Planner source:</strong> {mission ? planningProvenanceLabel(mission.planningProvenance) : "No mission yet"}</div>
     </div>
   </div>
@@ -282,10 +297,10 @@
         <div class="empty-state">No jobs recorded yet.</div>
       {:else}
         {#each jobs as entry}
-          <div class="hero-card">
+          <a class="hero-card" href={`/jobs/${entry.job.id}`} style="text-decoration: none; color: inherit;">
             <strong>{entry.job.branchName}</strong>
             <div class="muted">{entry.job.status} · {entry.job.executorType}</div>
-          </div>
+          </a>
         {/each}
       {/if}
     </div>

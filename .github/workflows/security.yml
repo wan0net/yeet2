@@ -27,7 +27,7 @@ jobs:
         run: pip install semgrep
 
       - name: Run Semgrep
-        run: semgrep scan --config auto --sarif --output semgrep.sarif
+        run: semgrep scan --config auto --error --sarif --output semgrep.sarif
 
       - name: Upload Semgrep SARIF
         if: always()
@@ -52,7 +52,7 @@ jobs:
           output: trivy-filesystem.sarif
           severity: CRITICAL,HIGH
           ignore-unfixed: true
-          exit-code: "0"
+          exit-code: "1"
 
       - name: Upload Trivy filesystem SARIF
         if: always()

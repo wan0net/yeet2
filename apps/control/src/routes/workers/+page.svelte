@@ -13,6 +13,7 @@
   </div>
 </section>
 
+{#if data.summary}
 <section class="metrics">
   <div class="metric">
     <div class="metric-kicker">Total workers</div>
@@ -27,6 +28,7 @@
     <div class="metric-value">{data.summary.availableWorkers}</div>
   </div>
 </section>
+{/if}
 
 <section class="card">
   <div class="card-header">Registered workers</div>

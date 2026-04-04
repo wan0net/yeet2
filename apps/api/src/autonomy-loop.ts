@@ -254,6 +254,16 @@ function missionHasAllDispatchableTasksComplete(project: ProjectSummary, mission
     .every((task) => task.status === "complete");
 }
 
+function hasRemainingDispatchableTasks(project: ProjectSummary): boolean {
+  return project.missions.some((mission) =>
+    mission.tasks.some(
+      (task) =>
+        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
+        (task.status === "ready" || task.status === "pending")
+    )
+  );
+}
+
 function isProjectPullRequestMergeAllowed(
   project: ProjectSummary,
   candidate: ReturnType<typeof findLatestCompletedImplementerJob>
@@ -680,17 +690,39 @@ export class AutonomyLoopManager {
         : await advanceProject(currentProject.id);
       await this.persistTelemetry(dispatched.project, "advance", "advanced", decision.reason);
 
-      const candidate = findLatestCompletedImplementerJob(dispatched.project);
-      if (candidate) {
+      if (decision.targetTaskRole) {
         try {
-          const automation = await processProjectPullRequestAutomation(dispatched.project, null, null);
-          if (automation) {
-            await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
+          await recordDecisionLog({
+            projectId: currentProject.id,
+            missionId: latestMissionId(currentProject),
+            taskId: decision.targetTaskId ?? null,
+            kind: "workflow",
+            actor: resolveAutonomyLoopActor(),
+            summary: `Stage dispatch: ${decision.targetTaskRole}`,
+            detail: {
+              stage: decision.targetTaskRole,
+              taskId: decision.targetTaskId,
+              reason: decision.reason
+            }
+          });
+        } catch {
+          // Best-effort stage log only.
+        }
+      }
+
+      if (!hasRemainingDispatchableTasks(dispatched.project)) {
+        const candidate = findLatestCompletedImplementerJob(dispatched.project);
+        if (candidate) {
+          try {
+            const automation = await processProjectPullRequestAutomation(dispatched.project, null, null);
+            if (automation) {
+              await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Pull request automation failed";
+            this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop pull request automation failed");
+            await this.persistTelemetry(dispatched.project, "merge", "error", message);
           }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : "Pull request automation failed";
-          this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop pull request automation failed");
-          await this.persistTelemetry(dispatched.project, "merge", "error", message);
         }
       }
     } catch (error) {

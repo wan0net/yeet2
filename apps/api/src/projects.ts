@@ -2024,6 +2024,53 @@ async function recordTaskOutcomeWorkflowMessage(input: {
   });
 }
 
+async function recordStageVerdictIfApplicable(input: {
+  projectId: string;
+  missionId: string;
+  taskId: string;
+  jobId: string;
+  agentRole: string;
+  actor: string;
+  taskStatus: ProjectTaskStatus;
+  previousTaskStatus?: ProjectTaskStatus | null;
+  artifactSummary?: string | null;
+}): Promise<void> {
+  if (input.previousTaskStatus === input.taskStatus) {
+    return;
+  }
+
+  if (input.agentRole !== "qa" && input.agentRole !== "reviewer") {
+    return;
+  }
+
+  if (input.taskStatus !== "complete" && input.taskStatus !== "failed" && input.taskStatus !== "blocked") {
+    return;
+  }
+
+  const verdict = input.taskStatus === "complete" ? "pass" : "fail";
+  const summaryPrefix = input.agentRole === "qa" ? "QA verdict" : "Reviewer verdict";
+  const summaryBody = input.artifactSummary?.trim() || (verdict === "pass" ? "Accepted." : "Issues found.");
+
+  try {
+    await recordDecisionLog({
+      projectId: input.projectId,
+      missionId: input.missionId,
+      taskId: input.taskId,
+      jobId: input.jobId,
+      kind: "verdict",
+      actor: input.actor,
+      summary: `${summaryPrefix}: ${verdict}. ${summaryBody}`,
+      detail: {
+        stage: input.agentRole,
+        verdict,
+        artifactSummary: input.artifactSummary ?? null
+      }
+    });
+  } catch {
+    // Best-effort verdict log only.
+  }
+}
+
 function guidanceAliasesForTask(
   task: ProjectWithRelations["missions"][number]["tasks"][number],
   assignedRoleDefinition: ProjectRoleDefinitionRecord | null
@@ -2373,6 +2420,18 @@ async function persistDispatchedJob(
     taskStatus,
     previousTaskStatus: task.status,
     jobId: createdJob.id,
+    artifactSummary: executorJob.artifact_summary ?? null
+  });
+
+  await recordStageVerdictIfApplicable({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId: createdJob.id,
+    agentRole: task.agentRole,
+    actor: assignedRoleDefinition?.label ?? task.agentRole,
+    taskStatus,
+    previousTaskStatus: task.status,
     artifactSummary: executorJob.artifact_summary ?? null
   });
 
@@ -2987,6 +3046,18 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
     taskStatus,
     previousTaskStatus,
     jobId,
+    artifactSummary: executorJob.artifact_summary ?? null
+  });
+
+  await recordStageVerdictIfApplicable({
+    projectId: project.id,
+    missionId: task.missionId,
+    taskId: task.id,
+    jobId,
+    agentRole: task.agentRole,
+    actor: match.job.assignedRoleDefinitionLabel ?? task.agentRole,
+    taskStatus,
+    previousTaskStatus,
     artifactSummary: executorJob.artifact_summary ?? null
   });
 
