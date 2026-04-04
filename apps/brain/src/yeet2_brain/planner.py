@@ -216,6 +216,13 @@ def _effective_role_definitions(planning_input: PlanningInput) -> list[PlanningR
     enabled = [definition for definition in _sort_role_definitions(role_definitions) if definition.enabled]
     if not enabled:
         raise ValueError("No enabled planning role definitions were provided")
+    required_role_keys = {"planner", "architect", "implementer", "qa", "reviewer"}
+    enabled_role_keys = {definition.key for definition in enabled}
+    missing_required = sorted(required_role_keys - enabled_role_keys)
+    if missing_required:
+        raise ValueError(
+            f"Missing required enabled planning role definitions: {', '.join(missing_required)}"
+        )
     return enabled
 
 
@@ -477,11 +484,11 @@ def _task_acceptance(label: str, detail: str) -> list[str]:
     ]
 
 
-def _primary_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
+def _architecture_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
     topic = theme or "the first roadmap slice"
-    title = f"Shape the first {topic} milestone"
+    title = f"Validate the {topic} implementation path"
     description = (
-        f"Turn the constitution for {project_name} into a concrete implementation slice centered on {topic}."
+        f"Review the constitution for {project_name} and validate the implementation boundary for {topic} before coding begins."
     )
     if note:
         description = f"{description} {note}"
@@ -489,12 +496,12 @@ def _primary_task(project_name: str, theme: str | None, note: str = "") -> Plann
         id=f"task-{uuid4().hex}",
         title=title,
         description=description,
-        agent_role=Role.PLANNER.value,
+        agent_role=Role.ARCHITECT.value,
         status="queued",
         priority=1,
         acceptance_criteria=_task_acceptance(
-            "Planning output",
-            f"The plan names the immediate {topic} work and the main implementation path.",
+            "Architecture validation",
+            f"The first {topic} slice has a clear implementation boundary, risks, and constraints before coding starts.",
         ),
     )
 
@@ -578,7 +585,7 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
     secondary_theme = themes[1] if len(themes) > 1 else None
 
     tasks = [
-        _primary_task(planning_input.project_name, primary_theme, guidance_summary),
+        _architecture_task(planning_input.project_name, primary_theme, guidance_summary),
         _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
         _verification_task(planning_input.project_name, primary_theme, guidance_summary),
         _fallback_task(planning_input.project_name, guidance_summary),
@@ -699,10 +706,10 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
     secondary_theme = themes_text[1] if len(themes_text) > 1 else None
 
     tasks_result = [
-        _primary_task(
+        _architecture_task(
             planning_input.project_name,
             primary_theme,
-            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "planner") or _note_for(notes, Role.PLANNER)) if bit),
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "architect") or _note_for(notes, Role.ARCHITECT)) if bit),
         ),
         _implementation_task(
             planning_input.project_name,
@@ -724,9 +731,6 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
         ),
     ]
 
-    if note := _note_for_role_key(notes, "architect") or _note_for(notes, Role.ARCHITECT):
-        tasks_result[0].description = f"{tasks_result[0].description} {note}"
-
     return PlanningResult(
         mission=mission,
         tasks=tasks_result,
@@ -742,6 +746,7 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
 
 
 def plan_project(planning_input: PlanningInput) -> PlanningResult:
+    _effective_role_definitions(planning_input)
     texts = [section.text for section in planning_input.constitution.values() if section.text.strip()]
     summary_source = " ".join(texts)
     summary = _summarize_text(summary_source)

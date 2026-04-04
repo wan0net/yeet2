@@ -16,7 +16,7 @@ export type JobStatus = "queued" | "running" | "complete" | "failed" | "cancelle
 export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
 export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
-export type DispatchableAgentRole = "implementer" | "qa" | "reviewer";
+export type DispatchableAgentRole = "architect" | "implementer" | "qa" | "reviewer";
 export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
@@ -179,6 +179,11 @@ export interface ConstitutionFileState {
   key: ConstitutionFileKey;
   path: string;
   exists: boolean;
+  readable?: boolean;
+  indexed?: boolean;
+  bytes?: number;
+  wordCount?: number;
+  headingCount?: number;
 }
 
 export interface ConstitutionSnapshot {

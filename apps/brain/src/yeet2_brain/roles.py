@@ -8,12 +8,12 @@ import os
 
 
 class Role(StrEnum):
-    PLANNER = "Planner"
-    ARCHITECT = "Architect"
-    IMPLEMENTER = "Implementer"
-    QA = "QA"
-    REVIEWER = "Reviewer"
-    VISUAL = "Visual"
+    PLANNER = "planner"
+    ARCHITECT = "architect"
+    IMPLEMENTER = "implementer"
+    QA = "qa"
+    REVIEWER = "reviewer"
+    VISUAL = "visual"
 
 
 @dataclass(slots=True)

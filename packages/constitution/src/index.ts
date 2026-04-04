@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 export const constitutionPaths = {
@@ -19,6 +19,11 @@ export interface ConstitutionFileState {
   path: string;
   absolutePath: string;
   exists: boolean;
+  readable: boolean;
+  indexed: boolean;
+  bytes: number;
+  wordCount: number;
+  headingCount: number;
 }
 
 export interface ConstitutionSnapshot {
@@ -56,6 +61,11 @@ export function determineConstitutionStatus(snapshot: ConstitutionSnapshot): Con
     return "pending";
   }
 
+  const indexedRequiredFiles = [snapshot.vision, snapshot.spec, snapshot.roadmap];
+  if (indexedRequiredFiles.some((file) => !file.readable || !file.indexed)) {
+    return "failed";
+  }
+
   const optionalFilesMissing =
     !snapshot.architecture.exists || !snapshot.decisions.exists || !snapshot.qualityBar.exists;
 
@@ -64,9 +74,21 @@ export function determineConstitutionStatus(snapshot: ConstitutionSnapshot): Con
 
 export async function inspectConstitution(repoRoot: string): Promise<ConstitutionInspection> {
   const files = defaultConstitutionSnapshot(repoRoot);
-  await Promise.all(Object.values(files).map(async file => {
-    file.exists = await exists(file.absolutePath);
-  }));
+  await Promise.all(
+    Object.values(files).map(async (file) => {
+      file.exists = await exists(file.absolutePath);
+      if (!file.exists) {
+        return;
+      }
+
+      const parsed = await inspectFileContents(file.absolutePath);
+      file.readable = parsed.readable;
+      file.indexed = parsed.indexed;
+      file.bytes = parsed.bytes;
+      file.wordCount = parsed.wordCount;
+      file.headingCount = parsed.headingCount;
+    }),
+  );
 
   return {
     repoRoot: resolve(repoRoot),
@@ -82,7 +104,12 @@ function fileState(key: ConstitutionPathKey, repoRoot: string): ConstitutionFile
     key,
     path,
     absolutePath: join(repoRoot, path),
-    exists: false
+    exists: false,
+    readable: false,
+    indexed: false,
+    bytes: 0,
+    wordCount: 0,
+    headingCount: 0,
   };
 }
 
@@ -92,5 +119,36 @@ async function exists(path: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function inspectFileContents(path: string): Promise<{
+  readable: boolean;
+  indexed: boolean;
+  bytes: number;
+  wordCount: number;
+  headingCount: number;
+}> {
+  try {
+    const text = await readFile(path, "utf8");
+    const trimmed = text.trim();
+    const words = trimmed ? trimmed.split(/\s+/).filter(Boolean) : [];
+    const headings = trimmed ? text.split(/\r?\n/).filter((line) => /^\s*#+\s+/.test(line)).length : 0;
+
+    return {
+      readable: true,
+      indexed: words.length > 0,
+      bytes: Buffer.byteLength(text, "utf8"),
+      wordCount: words.length,
+      headingCount: headings,
+    };
+  } catch {
+    return {
+      readable: false,
+      indexed: false,
+      bytes: 0,
+      wordCount: 0,
+      headingCount: 0,
+    };
   }
 }

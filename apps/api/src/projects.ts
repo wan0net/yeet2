@@ -446,7 +446,7 @@ interface ResolvedProjectRegistration {
   repoUrl: string | null;
 }
 
-const DISPATCHABLE_TASK_ROLES = ["implementer", "qa", "reviewer"] as const;
+const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "qa", "reviewer"] as const;
 const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
