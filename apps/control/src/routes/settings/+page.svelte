@@ -63,12 +63,12 @@
       Choose a naming theme for your agent roles. New projects will get character names from the selected franchise. Set via <code>YEET2_AGENT_NAME_THEME</code> in your environment.
     </p>
     <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-      {#each ["mythology", "star-trek", "star-wars", "firefly", "hitchhikers", "dune", "lotr", "matrix", "doctor-who", "expanse", "foundation", "red-dwarf", "futurama", "blade-runner", "westworld", "the-office", "it-crowd", "silicon-valley", "severance"] as theme}
+      {#each ["mythology", "norse", "star-trek-tos", "star-trek-tng", "star-trek-ds9", "star-trek-voyager", "star-wars", "stargate-sg1", "stargate-atlantis", "stargate-universe", "firefly", "hitchhikers", "dune", "lotr", "matrix", "doctor-who", "expanse", "red-dwarf", "futurama", "silicon-valley", "severance"] as theme}
         <span class="pill" style="cursor: default;">{theme}</span>
       {/each}
     </div>
     <p style="margin-top: 1rem; color: var(--color-text-muted); font-size: 0.8rem;">
-      Examples — <strong>mythology</strong>: Athena (Planner), Hephaestus (Architect), Pygmalion (Coder) &middot; <strong>star-trek</strong>: Picard, Scotty, LaForge &middot; <strong>lotr</strong>: Gandalf, Elrond, Legolas
+      Examples — <strong>star-trek-tng</strong>: Picard (Planner), LaForge (Architect), Data (Tester) &middot; <strong>stargate-sg1</strong>: Hammond, Carter, O'Neill &middot; <strong>lotr</strong>: Gandalf, Elrond, Legolas &middot; <strong>red-dwarf</strong>: Holly, Kryten, Rimmer
     </p>
   </div>
 </section>

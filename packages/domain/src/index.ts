@@ -41,6 +41,8 @@ export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
   visual: "openrouter/google/gemini-3.1-pro"
 };
 
+export { AGENT_THEMES, AGENT_THEME_NAMES, type AgentCharacter, type AgentThemeMap } from "./agent-themes";
+
 export interface OperatorGuidanceSummary {
   id: string;
   actor: string;

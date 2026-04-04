@@ -243,6 +243,8 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
     if "(" in role_label and ")" in role_label:
         character_name = role_label.split("(")[0].strip()
         character_note = f"You are {character_name}. Respond with {character_name}'s personality and communication style while staying focused on the technical work."
+    if input.assigned_role_backstory and "(" in role_label:
+        character_note = f"{character_note} Background: {input.assigned_role_backstory}" if character_note else ""
 
     parts = [
         f"You are acting as {role_label} for project {input.project_name}.",
