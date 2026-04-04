@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+from http.client import HTTPConnection, HTTPSConnection
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from socket import gethostname
 from threading import Lock
 from typing import Any
-from urllib import error, request
 
 from .adapters import JobRecord, OpenHandsAdapter
 
@@ -41,6 +42,17 @@ def _env_text(*names: str, default: str = "") -> str:
     return default
 
 
+def _normalize_api_base_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Worker registry API base URL must use http or https")
+    if not parsed.netloc:
+        raise ValueError("Worker registry API base URL must include a host")
+    if parsed.username or parsed.password:
+        raise ValueError("Worker registry API base URL must not include credentials")
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
+
+
 @dataclass(slots=True)
 class WorkerRegistryClient:
     api_base_url: str
@@ -58,7 +70,14 @@ class WorkerRegistryClient:
         executor_type = _env_text("YEET2_EXECUTOR_WORKER_EXECUTOR_TYPE", default="")
         host = _env_text("YEET2_EXECUTOR_WORKER_HOST", default="")
         endpoint = _env_text("YEET2_EXECUTOR_WORKER_ENDPOINT", default="")
-        api_base_url = _env_text("YEET2_EXECUTOR_API_BASE_URL", "YEET2_API_BASE_URL", "API_BASE_URL", default="http://127.0.0.1:3001").rstrip("/")
+        api_base_url = _normalize_api_base_url(
+            _env_text(
+                "YEET2_EXECUTOR_API_BASE_URL",
+                "YEET2_API_BASE_URL",
+                "API_BASE_URL",
+                default="http://127.0.0.1:3001",
+            ),
+        )
 
         resolved_worker_name = worker_name or f"local-worker@{gethostname()}"
         resolved_worker_id = worker_id or resolved_worker_name or gethostname() or "local-worker"
@@ -77,16 +96,24 @@ class WorkerRegistryClient:
 
     def _request(self, path: str, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode("utf-8")
-        req = request.Request(
-            f"{self.api_base_url}{path}",
-            data=body,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        parsed = urlparse(f"{self.api_base_url}{path}")
+        connection_class = HTTPSConnection if parsed.scheme == "https" else HTTPConnection
+        request_path = parsed.path or "/"
+        if parsed.query:
+            request_path = f"{request_path}?{parsed.query}"
         try:
-            with request.urlopen(req, timeout=2):
-                return
-        except (error.HTTPError, error.URLError, TimeoutError, OSError):
+            connection = connection_class(parsed.netloc, timeout=2)
+            connection.request(
+                "POST",
+                request_path,
+                body=body,
+                headers={"Content-Type": "application/json"},
+            )
+            response = connection.getresponse()
+            response.read()
+            connection.close()
+            return
+        except (TimeoutError, OSError, ValueError):
             return
 
     def ensure_registered(self) -> None:
