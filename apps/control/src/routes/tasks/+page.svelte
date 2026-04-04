@@ -1,6 +1,14 @@
 <script lang="ts">
   import type { PageData } from "./$types";
   let { data }: { data: PageData } = $props();
+
+  function entryDispatchable(entry: PageData["tasks"][number]): boolean {
+    return entry.task.dispatchable ?? false;
+  }
+
+  const blockedTasks = $derived(data.tasks.filter((entry) => entry.task.status === "blocked"));
+  const activeTasks = $derived(data.tasks.filter((entry) => entry.task.status === "running" || entry.task.status === "in_progress"));
+  const readyTasks = $derived(data.tasks.filter((entry) => entryDispatchable(entry)));
 </script>
 
 <section class="page-header">
@@ -8,8 +16,23 @@
     <span class="eyebrow">Task queue</span>
     <div>
       <h1>Tasks</h1>
-      <p>Inspect queued, active, and blocked work across every project.</p>
+      <p>Scan the global work queue and jump to the projects where work is ready, running, or blocked.</p>
     </div>
+  </div>
+</section>
+
+<section class="metrics">
+  <div class="metric">
+    <div class="metric-kicker">Ready</div>
+    <div class="metric-value">{readyTasks.length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Running</div>
+    <div class="metric-value">{activeTasks.length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Blocked</div>
+    <div class="metric-value">{blockedTasks.length}</div>
   </div>
 </section>
 
@@ -19,29 +42,39 @@
     {#if data.tasks.length === 0}
       <div class="empty-state">No tasks are available yet.</div>
     {:else}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Mission</th>
-              <th>Task</th>
-              <th>Role</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each data.tasks as entry}
-              <tr>
-                <td><a href={`/projects/${entry.projectId}`}>{entry.projectName}</a></td>
-                <td>{entry.missionTitle}</td>
-                <td>{entry.task.title}</td>
-                <td>{entry.task.agentRole}</td>
-                <td><span class="pill">{entry.task.status}</span></td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+      <div class="stack">
+        {#each data.tasks as entry}
+          <article class="hero-card">
+            <div class="page-header">
+              <div class="stack">
+                <div class="token-row">
+                  <span class={`pill ${entry.task.status === "blocked" ? "danger" : entry.task.status === "running" || entry.task.status === "in_progress" ? "info" : entryDispatchable(entry) ? "success" : "warn"}`}>{entry.task.status}</span>
+                  <span class="pill">{entry.task.agentRole}</span>
+                </div>
+                <div>
+                  <h2>{entry.task.title}</h2>
+                  <p>{entry.projectName} · {entry.missionTitle}</p>
+                </div>
+              </div>
+              <a class="btn secondary" href={`/projects/${entry.projectId}`}>Open project</a>
+            </div>
+            <div class="queue-meta">
+              <div>
+                <div class="metric-kicker">Priority</div>
+                <div>{entry.task.priority}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Attempts</div>
+                <div>{entry.task.attempts}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Dispatch</div>
+                <div>{entry.task.dispatchable ? "Ready to dispatch" : entry.task.dispatchBlockedReason || "Waiting on previous step"}</div>
+              </div>
+            </div>
+            <p>{entry.task.description}</p>
+          </article>
+        {/each}
       </div>
     {/if}
   </div>

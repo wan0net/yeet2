@@ -1,6 +1,11 @@
 <script lang="ts">
   import type { PageData } from "./$types";
+  import { formatTimestamp, jobStatusTone } from "$lib/project-detail";
   let { data }: { data: PageData } = $props();
+
+  const runningJobs = $derived(data.jobs.filter((entry) => entry.job.status === "running"));
+  const failedJobs = $derived(data.jobs.filter((entry) => entry.job.status === "failed"));
+  const queuedJobs = $derived(data.jobs.filter((entry) => entry.job.status === "queued" || entry.job.status === "pending"));
 </script>
 
 <section class="page-header">
@@ -8,40 +13,69 @@
     <span class="eyebrow">Job activity</span>
     <div>
       <h1>Jobs</h1>
-      <p>Track executor activity across all attached projects.</p>
+      <p>See what is running, what failed, and where executor work needs attention next.</p>
     </div>
   </div>
 </section>
 
+<section class="metrics">
+  <div class="metric">
+    <div class="metric-kicker">Running now</div>
+    <div class="metric-value">{runningJobs.length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Queued</div>
+    <div class="metric-value">{queuedJobs.length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Failed</div>
+    <div class="metric-value">{failedJobs.length}</div>
+  </div>
+</section>
+
 <section class="card">
-  <div class="card-header">All jobs</div>
+  <div class="card-header">Executor queue</div>
   <div class="card-body">
     {#if data.jobs.length === 0}
       <div class="empty-state">No jobs have been recorded yet.</div>
     {:else}
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Mission</th>
-              <th>Task</th>
-              <th>Status</th>
-              <th>Branch</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each data.jobs as entry}
-              <tr>
-                <td><a href={`/projects/${entry.projectId}`}>{entry.projectName}</a></td>
-                <td>{entry.missionTitle}</td>
-                <td>{entry.taskTitle}</td>
-                <td><span class="pill">{entry.job.status}</span></td>
-                <td class="mono">{entry.job.branchName}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+      <div class="stack">
+        {#each data.jobs as entry}
+          <article class="hero-card">
+            <div class="page-header">
+              <div class="stack">
+                <div class="token-row">
+                  <span class={`pill ${jobStatusTone(entry.job.status).includes("rose") ? "danger" : jobStatusTone(entry.job.status).includes("sky") ? "info" : jobStatusTone(entry.job.status).includes("amber") ? "warn" : "success"}`}>
+                    {entry.job.status}
+                  </span>
+                  <span class="pill">{entry.job.executorType}</span>
+                </div>
+                <div>
+                  <h2>{entry.taskTitle}</h2>
+                  <p>{entry.projectName} · {entry.missionTitle}</p>
+                </div>
+              </div>
+              <a class="btn secondary" href={`/projects/${entry.projectId}`}>Open project</a>
+            </div>
+            <div class="queue-meta">
+              <div>
+                <div class="metric-kicker">Branch</div>
+                <div class="mono">{entry.job.branchName}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Started</div>
+                <div>{formatTimestamp(entry.job.startedAt) || "Not started"}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Completed</div>
+                <div>{formatTimestamp(entry.job.completedAt) || "Still running"}</div>
+              </div>
+            </div>
+            {#if entry.job.artifactSummary}
+              <p>{entry.job.artifactSummary}</p>
+            {/if}
+          </article>
+        {/each}
       </div>
     {/if}
   </div>
