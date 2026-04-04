@@ -223,7 +223,7 @@ function cleanText(value: string | null | undefined): string {
   return (value ?? "").trim();
 }
 
-function normalizePlanningProvenance(value: unknown, fallback: PlanningProvenance): PlanningProvenance {
+export function normalizePlanningProvenance(value: unknown, fallback: PlanningProvenance): PlanningProvenance {
   if (typeof value !== "string") {
     return fallback;
   }
@@ -275,7 +275,7 @@ function requestedPlanningProvenance(): BrainRequestedBy {
   return runtimePrefersCrewAI() ? "crewai" : "brain";
 }
 
-function normalizeAgentRole(value: unknown): PlanningTaskDraft["agentRole"] | null {
+export function normalizeAgentRole(value: unknown): PlanningTaskDraft["agentRole"] | null {
   if (typeof value !== "string") {
     return null;
   }

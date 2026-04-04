@@ -254,7 +254,7 @@ function missionHasAllDispatchableTasksComplete(project: ProjectSummary, mission
     .every((task) => task.status === "complete");
 }
 
-function hasRemainingDispatchableTasks(project: ProjectSummary): boolean {
+export function hasRemainingDispatchableTasks(project: ProjectSummary): boolean {
   return project.missions.some((mission) =>
     mission.tasks.some(
       (task) =>

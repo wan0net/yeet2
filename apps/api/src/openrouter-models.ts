@@ -35,7 +35,7 @@ interface OpenRouterModelCatalogResponse {
   data?: unknown;
 }
 
-interface OpenRouterModelRecord {
+export interface OpenRouterModelRecord {
   id?: unknown;
   name?: unknown;
   description?: unknown;
@@ -56,7 +56,7 @@ function cleanText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeAuthorization(value: string): string {
+export function normalizeAuthorization(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
     return "";
@@ -115,7 +115,7 @@ function toPositiveNumber(value: unknown): number | null {
   return null;
 }
 
-function toUsdPerMillionTokens(value: unknown): number | null {
+export function toUsdPerMillionTokens(value: unknown): number | null {
   const perToken = toPositiveNumber(value);
   if (perToken === null) {
     return null;
@@ -124,7 +124,7 @@ function toUsdPerMillionTokens(value: unknown): number | null {
   return perToken * 1_000_000;
 }
 
-function toModelItem(record: OpenRouterModelRecord): OpenRouterModelCatalogItem {
+export function toModelItem(record: OpenRouterModelRecord): OpenRouterModelCatalogItem {
   const id = cleanText(record.id);
   const name = cleanText(record.name);
   if (!id || !name) {

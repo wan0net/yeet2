@@ -7,6 +7,8 @@
     "dev": "pnpm -r --parallel --if-present dev",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run",
+    "test:ts": "vitest run",
     "lint": "pnpm -r --if-present lint",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
@@ -17,6 +19,8 @@
     "dev:executor": "cd apps/executor && PYTHONPATH=src python3 -m yeet2_executor"
   },
   "devDependencies": {
-    "vitepress": "^1.6.4"
+    "vite": "^8.0.3",
+    "vitepress": "^1.6.4",
+    "vitest": "^4.1.2"
   }
 }
