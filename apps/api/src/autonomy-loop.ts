@@ -12,6 +12,7 @@ import {
   refreshProjectPullRequestState,
   type ProjectSummary
 } from "./projects";
+import { decideWorkflowAction } from "./planning";
 import { recordDecisionLog } from "./decision-logs";
 
 export type AutonomyLoopMode = "manual" | "supervised" | "autonomous";
@@ -247,6 +248,15 @@ interface PullRequestAutomationResult {
   message: string;
 }
 
+interface WorkflowDecisionCandidate {
+  latestCompletedJobId: string | null;
+  latestCompletedTaskId: string | null;
+  latestCompletedTaskTitle: string | null;
+  latestCompletedJobHasPullRequest: boolean;
+  latestCompletedReviewerComplete: boolean;
+  latestCompletedDispatchableTasksComplete: boolean;
+}
+
 async function processProjectPullRequestAutomation(
   project: ProjectSummary
 ): Promise<PullRequestAutomationResult | null> {
@@ -307,6 +317,41 @@ async function processProjectPullRequestAutomation(
     lastOutcome: "merged",
     message: `Merged pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
   };
+}
+
+function buildWorkflowDecisionCandidate(project: ProjectSummary): WorkflowDecisionCandidate {
+  const candidate = findLatestCompletedImplementerJob(project);
+  return {
+    latestCompletedJobId: candidate?.jobId ?? null,
+    latestCompletedTaskId: candidate?.taskId ?? null,
+    latestCompletedTaskTitle: candidate?.taskTitle ?? null,
+    latestCompletedJobHasPullRequest: candidate?.jobHasPullRequest ?? false,
+    latestCompletedReviewerComplete: candidate?.reviewerComplete ?? false,
+    latestCompletedDispatchableTasksComplete: candidate ? missionHasAllDispatchableTasksComplete(project, candidate.missionId) : false
+  };
+}
+
+async function requestWorkflowDecision(project: ProjectSummary) {
+  const candidate = buildWorkflowDecisionCandidate(project);
+  return decideWorkflowAction({
+    projectId: project.id,
+    projectName: project.name,
+    autonomyMode: project.autonomyMode,
+    hasInFlightJobs: hasInFlightJobs(project),
+    needsInitialPlanning: needsInitialPlanning(project),
+    needsBacklogPlanning: needsBacklogPlanning(project),
+    nextDispatchableTaskId: project.nextDispatchableTaskId ?? null,
+    nextDispatchableTaskRole: project.nextDispatchableTaskRole ?? null,
+    pullRequestMode: project.pullRequestMode,
+    pullRequestDraftMode: project.pullRequestDraftMode,
+    mergeApprovalMode: project.mergeApprovalMode,
+    latestCompletedJobId: candidate.latestCompletedJobId,
+    latestCompletedTaskId: candidate.latestCompletedTaskId,
+    latestCompletedTaskTitle: candidate.latestCompletedTaskTitle,
+    latestCompletedJobHasPullRequest: candidate.latestCompletedJobHasPullRequest,
+    latestCompletedReviewerComplete: candidate.latestCompletedReviewerComplete,
+    latestCompletedDispatchableTasksComplete: candidate.latestCompletedDispatchableTasksComplete
+  });
 }
 
 function buildTelemetry(
@@ -468,10 +513,17 @@ export class AutonomyLoopManager {
       }
     }
 
-    const isInitialPlanning = needsInitialPlanning(currentProject);
-    const shouldPlan = isInitialPlanning || needsBacklogPlanning(currentProject);
+    let decision;
+    try {
+      decision = await requestWorkflowDecision(currentProject);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Brain workflow decision failed";
+      this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop brain decision failed");
+      await this.persistTelemetry(currentProject, "skip", "error", message);
+      return;
+    }
 
-    if (shouldPlan) {
+    if (decision.action === "plan") {
       try {
         const plannedProject = await planProject(currentProject.id);
         if (!plannedProject) {
@@ -486,27 +538,42 @@ export class AutonomyLoopManager {
         await this.persistTelemetry(currentProject, "plan", "error", message);
         return;
       }
-    }
 
-    if (currentProject.autonomyMode === "supervised") {
-      if (shouldPlan) {
+      if (currentProject.autonomyMode === "supervised") {
         await this.persistTelemetry(
           currentProject,
           "plan",
           "planned",
-          isInitialPlanning ? "Initial planning completed" : "Backlog planning completed"
+          decision.reason
         );
-      } else {
-        await this.persistTelemetry(currentProject, "skip", "idle", "Supervised mode skipped dispatch");
+        return;
       }
+
+      try {
+        decision = await requestWorkflowDecision(currentProject);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Brain workflow decision failed";
+        this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop brain decision failed");
+        await this.persistTelemetry(currentProject, "skip", "error", message);
+        return;
+      }
+    }
+
+    if (currentProject.autonomyMode === "supervised") {
+      await this.persistTelemetry(currentProject, "skip", "idle", decision.reason);
       return;
     }
 
-    if (!currentProject.nextDispatchableTaskId) {
+    if (decision.action === "idle") {
+      await this.persistTelemetry(currentProject, "skip", "idle", decision.reason);
+      return;
+    }
+
+    if (decision.action === "pull_request" || decision.action == "merge") {
       try {
         const automation = await processProjectPullRequestAutomation(currentProject);
         if (!automation) {
-          await this.persistTelemetry(currentProject, "skip", "idle", "No dispatchable task or pull request action is available");
+          await this.persistTelemetry(currentProject, "skip", "idle", decision.reason);
           return;
         }
 
@@ -519,9 +586,14 @@ export class AutonomyLoopManager {
       return;
     }
 
+    if (decision.action !== "advance") {
+      await this.persistTelemetry(currentProject, "skip", "idle", decision.reason);
+      return;
+    }
+
     try {
       const dispatched = await advanceProject(currentProject.id);
-      await this.persistTelemetry(dispatched.project, "advance", "advanced", `Dispatched task ${dispatched.job.taskId}`);
+      await this.persistTelemetry(dispatched.project, "advance", "advanced", decision.reason);
 
       const candidate = findLatestCompletedImplementerJob(dispatched.project);
       if (candidate) {

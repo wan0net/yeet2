@@ -94,6 +94,16 @@ interface BrainPlanningResponse {
   } | null;
 }
 
+export interface BrainWorkflowDecision {
+  projectId: string;
+  action: "plan" | "advance" | "pull_request" | "merge" | "idle";
+  reason: string;
+  source: string;
+  targetTaskId?: string | null;
+  targetTaskRole?: string | null;
+  targetJobId?: string | null;
+}
+
 interface BrainPlanningRequestSection {
   title: string;
   text: string;
@@ -154,6 +164,36 @@ type PlanningBackend = "brain" | "crewai" | "deterministic";
 
 function brainBaseUrl(): string {
   return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
+}
+
+async function readBrainJson<T>(path: string, payload: Record<string, unknown>): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), brainPlanningTimeoutMs());
+
+  try {
+    const response = await fetch(`${brainBaseUrl()}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    const rawText = await response.text();
+    let parsed: unknown = null;
+    if (rawText) {
+      parsed = JSON.parse(rawText);
+    }
+
+    if (!response.ok || typeof parsed !== "object" || parsed === null) {
+      throw new Error(`Brain request failed for ${path}`);
+    }
+
+    return parsed as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function brainPlanningTimeoutMs(): number {
@@ -371,6 +411,46 @@ export async function loadPlanningContext(
     documents: Object.fromEntries(entries) as Partial<Record<ConstitutionFileKey, string | null>>,
     operatorGuidance
   };
+}
+
+export async function decideWorkflowAction(input: {
+  projectId: string;
+  projectName: string;
+  autonomyMode: string;
+  hasInFlightJobs: boolean;
+  needsInitialPlanning: boolean;
+  needsBacklogPlanning: boolean;
+  nextDispatchableTaskId: string | null;
+  nextDispatchableTaskRole: string | null;
+  pullRequestMode: string;
+  pullRequestDraftMode: string;
+  mergeApprovalMode: string;
+  latestCompletedJobId: string | null;
+  latestCompletedTaskId: string | null;
+  latestCompletedTaskTitle: string | null;
+  latestCompletedJobHasPullRequest: boolean;
+  latestCompletedReviewerComplete: boolean;
+  latestCompletedDispatchableTasksComplete: boolean;
+}): Promise<BrainWorkflowDecision> {
+  return readBrainJson<BrainWorkflowDecision>("/orchestration/decide", {
+    project_id: input.projectId,
+    project_name: input.projectName,
+    autonomy_mode: input.autonomyMode,
+    has_in_flight_jobs: input.hasInFlightJobs,
+    needs_initial_planning: input.needsInitialPlanning,
+    needs_backlog_planning: input.needsBacklogPlanning,
+    next_dispatchable_task_id: input.nextDispatchableTaskId,
+    next_dispatchable_task_role: input.nextDispatchableTaskRole,
+    pull_request_mode: input.pullRequestMode,
+    pull_request_draft_mode: input.pullRequestDraftMode,
+    merge_approval_mode: input.mergeApprovalMode,
+    latest_completed_job_id: input.latestCompletedJobId,
+    latest_completed_task_id: input.latestCompletedTaskId,
+    latest_completed_task_title: input.latestCompletedTaskTitle,
+    latest_completed_job_has_pull_request: input.latestCompletedJobHasPullRequest,
+    latest_completed_reviewer_complete: input.latestCompletedReviewerComplete,
+    latest_completed_dispatchable_tasks_complete: input.latestCompletedDispatchableTasksComplete
+  });
 }
 
 function buildFallbackDraft(context: PlanningContext): PlanningDraft {

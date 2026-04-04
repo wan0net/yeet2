@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from .planner import ConstitutionSection, PlanningInput, plan_project
+from .orchestrator import decide_next_action, workflow_decision_input_from_payload
 from .roles import PlanningRoleDefinition, normalize_planning_role_definitions
 from .plan_store import RunStore
 
@@ -163,7 +164,7 @@ class BrainApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
-                if path != "/orchestration/plan":
+                if path not in {"/orchestration/plan", "/orchestration/decide"}:
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                     return
                 length = int(self.headers.get("Content-Length", "0"))
@@ -176,6 +177,21 @@ class BrainApp:
                 project_id = str(payload.get("project_id", "")).strip()
                 if not project_id:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "project_id_required"})
+                    return
+                if path == "/orchestration/decide":
+                    decision = decide_next_action(workflow_decision_input_from_payload(payload))
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "projectId": project_id,
+                            "action": decision.action,
+                            "reason": decision.reason,
+                            "source": decision.source,
+                            "targetTaskId": decision.target_task_id,
+                            "targetTaskRole": decision.target_task_role,
+                            "targetJobId": decision.target_job_id,
+                        },
+                    )
                     return
                 project_name = str(payload.get("project_name", "")).strip() or project_id
                 role_definitions, role_definitions_provided = _extract_role_definitions(payload)
