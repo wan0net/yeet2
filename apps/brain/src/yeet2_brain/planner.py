@@ -216,7 +216,7 @@ def _effective_role_definitions(planning_input: PlanningInput) -> list[PlanningR
     enabled = [definition for definition in _sort_role_definitions(role_definitions) if definition.enabled]
     if not enabled:
         raise ValueError("No enabled planning role definitions were provided")
-    required_role_keys = {"planner", "architect", "implementer", "qa", "reviewer"}
+    required_role_keys = {"planner", "architect", "implementer", "coder", "qa", "reviewer"}
     enabled_role_keys = {definition.key for definition in enabled}
     missing_required = sorted(required_role_keys - enabled_role_keys)
     if missing_required:
@@ -517,9 +517,9 @@ def _architecture_task(project_name: str, theme: str | None, note: str = "") -> 
 
 def _implementation_task(project_name: str, theme: str | None, note: str = "") -> PlannedTask:
     topic = theme or "project state"
-    title = f"Implement the {topic} path"
+    title = f"Plan the implementation approach for {topic}"
     description = (
-        f"Use the project constitution to define the first shippable change for {project_name}, centered on {topic}."
+        f"Use the project constitution to define the implementation plan for the first shippable change for {project_name}, centered on {topic}. Produce a clear strategy and step list for the coder to execute."
     )
     if note:
         description = f"{description} {note}"
@@ -531,9 +531,28 @@ def _implementation_task(project_name: str, theme: str | None, note: str = "") -
         status="queued",
         priority=2,
         acceptance_criteria=_task_acceptance(
-            "Implementation slice",
-            f"The work produces a visible change for the {topic} area and is ready for review.",
+            "Implementation plan",
+            f"A clear implementation strategy exists for the {topic} area and is ready for the coder to execute.",
         ),
+    )
+
+
+def _coder_task(project_name: str, theme: str | None, guidance: str) -> PlannedTask:
+    theme_suffix = f" around {theme}" if theme else ""
+    guidance_suffix = f" {guidance}" if guidance else ""
+    return PlannedTask(
+        id=f"task-{uuid4().hex}",
+        title=f"Code the implementation for {project_name}{theme_suffix}",
+        description=f"Take the implementer's plan and execute it: write code, create or modify files, run available tests.{guidance_suffix}",
+        agent_role=Role.CODER.value,
+        status="queued",
+        priority=3,
+        acceptance_criteria=_task_acceptance(
+            "Code changes",
+            f"The code changes match the implementation plan and the test suite passes for {project_name}",
+        ),
+        attempts=0,
+        blocker_reason=None,
     )
 
 
@@ -549,7 +568,7 @@ def _verification_task(project_name: str, theme: str | None, note: str = "") -> 
         description=description,
         agent_role=Role.QA.value,
         status="queued",
-        priority=3,
+        priority=4,
         acceptance_criteria=_task_acceptance(
             "Verification coverage",
             f"At least one focused check or review path exists for the {topic} slice.",
@@ -570,7 +589,7 @@ def _fallback_task(project_name: str, note: str = "") -> PlannedTask:
         description=description,
         agent_role=Role.REVIEWER.value,
         status="queued",
-        priority=4,
+        priority=5,
         acceptance_criteria=_task_acceptance(
             "Operator handoff",
             "The plan is readable enough for an operator to approve the next step.",
@@ -596,6 +615,7 @@ def _deterministic_plan(planning_input: PlanningInput, summary: str, themes: lis
     tasks = [
         _architecture_task(planning_input.project_name, primary_theme, guidance_summary),
         _implementation_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
+        _coder_task(planning_input.project_name, secondary_theme or primary_theme, guidance_summary),
         _verification_task(planning_input.project_name, primary_theme, guidance_summary),
         _fallback_task(planning_input.project_name, guidance_summary),
     ]
@@ -731,6 +751,11 @@ def _crewai_plan(planning_input: PlanningInput, summary: str, themes: list[str])
                 for bit in (guidance_summary, _note_for_role_key(notes, "implementer") or _note_for(notes, Role.IMPLEMENTER))
                 if bit
             ),
+        ),
+        _coder_task(
+            planning_input.project_name,
+            secondary_theme or primary_theme,
+            " ".join(bit for bit in (guidance_summary, _note_for_role_key(notes, "coder") or _note_for(notes, Role.CODER)) if bit),
         ),
         _verification_task(
             planning_input.project_name,

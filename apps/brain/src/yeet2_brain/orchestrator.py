@@ -167,6 +167,8 @@ def _next_role_for(role_key: str) -> str | None:
     if normalized == "architect":
         return "implementer"
     if normalized == "implementer":
+        return "coder"
+    if normalized == "coder":
         return "qa"
     if normalized == "qa":
         return "reviewer"
@@ -180,10 +182,11 @@ def _dispatch_role_rank(role_key: str) -> int:
     order = {
         "architect": 0,
         "implementer": 1,
-        "qa": 2,
-        "reviewer": 3,
-        "planner": 4,
-        "visual": 5,
+        "coder": 2,
+        "qa": 3,
+        "reviewer": 4,
+        "planner": 5,
+        "visual": 6,
     }
     return order.get(normalized, 99)
 
@@ -223,7 +226,8 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
 
     role_focus = {
         "architect": "Validate scope, constraints, and technical direction before code changes begin.",
-        "implementer": "Execute the concrete change in the repo while staying within the approved boundary.",
+        "implementer": "Plan the implementation approach: define the strategy, constraints, and steps the coder will follow.",
+        "coder": "Execute the implementation plan: write code, run tests, and produce a clean diff.",
         "qa": "Verify the result against the acceptance criteria and surface regressions or missing checks.",
         "reviewer": "Review the completed work for correctness, maintainability, and spec alignment.",
         "planner": "Reconcile the mission against the constitution and decide the next clean step.",
@@ -248,7 +252,8 @@ def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
 
     working_summary = {
         "architect": f"Reviewing the implementation boundary for \"{input.task_title}\" and checking it against the constitution.",
-        "implementer": f"Implementing \"{input.task_title}\" while staying inside the approved architecture and acceptance criteria.",
+        "implementer": f"Planning the implementation approach for \"{input.task_title}\" within the approved architecture.",
+        "coder": f"Coding \"{input.task_title}\" based on the implementer's plan.",
         "qa": f"Verifying \"{input.task_title}\" against the expected checks and regressions.",
         "reviewer": f"Reviewing \"{input.task_title}\" for correctness, maintainability, and spec alignment.",
         "planner": f"Planning the next step around \"{input.task_title}\" and keeping the mission aligned.",

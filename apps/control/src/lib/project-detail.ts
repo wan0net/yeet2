@@ -59,7 +59,7 @@ export function stageLabel(agentRole: string): string {
 }
 
 function roleSupportsDispatch(agentRole: string): boolean {
-  return ["implementer", "qa", "reviewer"].includes(agentRole.toLowerCase());
+  return ["implementer", "coder", "qa", "reviewer"].includes(agentRole.toLowerCase());
 }
 
 function fallbackTaskCanDispatch(project: ProjectRecord, task: ProjectTaskRecord): boolean {
@@ -328,6 +328,11 @@ const AGENT_ROLE_VISUALS: Record<string, AgentPresenceRoleVisuals> = {
     stage: "Blueprints"
   },
   implementer: {
+    accent: "border-blue-200 bg-blue-50 text-blue-900",
+    dot: "bg-blue-400",
+    stage: "Planning"
+  },
+  coder: {
     accent: "border-emerald-200 bg-emerald-50 text-emerald-900",
     dot: "bg-emerald-400",
     stage: "Build"

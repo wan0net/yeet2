@@ -52,9 +52,13 @@
   </div>
   <div class="card-body stack">
     <p>
-      Each project uses five specialist roles: Planner, Architect, Implementer, QA, and Reviewer.
-      Each role can be assigned a different LLM model to balance cost and capability. All five core
+      Each project uses six specialist roles: Planner, Architect, Implementer, Coder, QA, and Reviewer.
+      Each role can be assigned a different LLM model to balance cost and capability. All six core
       roles must be enabled before planning will run.
+    </p>
+    <p>
+      The Implementer plans the concrete code changes (which files, what approach, what to test),
+      while the Coder executes that plan by writing and testing the actual code.
     </p>
     <p>
       Role configuration lives on the project detail page under the Roles section. Adjust model
@@ -92,8 +96,8 @@
       breaks it into tasks assigned to each specialist role.
     </p>
     <p>
-      The Architect validates scope and design, the Implementer writes the code, QA verifies
-      correctness, and the Reviewer checks everything before the branch is merged.
+      The Architect validates scope and design, the Implementer plans the changes, the Coder writes
+      the code, QA verifies correctness, and the Reviewer checks everything before the branch is merged.
     </p>
     <div class="token-row">
       <a class="btn secondary" href="/missions">View missions</a>
@@ -107,7 +111,7 @@
   </div>
   <div class="card-body stack">
     <p>
-      The autonomy loop dispatches tasks in stage order: Architect → Implementer → QA → Reviewer.
+      The autonomy loop dispatches tasks in stage order: Architect → Implementer → Coder → QA → Reviewer.
       Each stage runs as an isolated job in its own git worktree, so stages never interfere with each
       other. View job logs, artifact summaries, and stage verdicts in the Jobs page.
     </p>

@@ -15,9 +15,9 @@ export type TaskStatus =
 export type JobStatus = "queued" | "running" | "complete" | "failed" | "cancelled";
 export type BlockerStatus = "open" | "resolved" | "dismissed";
 export type ConstitutionFileKey = "vision" | "spec" | "roadmap" | "architecture" | "decisions" | "qualityBar";
-export type AgentRole = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
-export type DispatchableAgentRole = "architect" | "implementer" | "qa" | "reviewer";
-export type ProjectRoleKey = "planner" | "architect" | "implementer" | "qa" | "reviewer" | "visual";
+export type AgentRole = "planner" | "architect" | "implementer" | "coder" | "qa" | "reviewer" | "visual";
+export type DispatchableAgentRole = "architect" | "implementer" | "coder" | "qa" | "reviewer";
+export type ProjectRoleKey = "planner" | "architect" | "implementer" | "coder" | "qa" | "reviewer" | "visual";
 export type ProjectAutonomyMode = "manual" | "supervised" | "autonomous";
 export type ProjectPullRequestMode = "manual" | "after_implementer" | "after_reviewer";
 export type ProjectPullRequestDraftMode = "draft" | "ready";
@@ -31,12 +31,13 @@ export type PlanningProvenance = "crewai" | "brain" | "fallback";
 export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message" | "verdict" | "workflow";
 
 export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
-  planner: "openrouter/anthropic/claude-sonnet-4.6",
-  architect: "openrouter/anthropic/claude-sonnet-4.6",
-  implementer: "openrouter/openai/gpt-5.1-codex-mini",
-  qa: "openrouter/openai/gpt-4.1-mini",
-  reviewer: "openrouter/anthropic/claude-sonnet-4.6",
-  visual: "openrouter/google/gemini-2.5-pro-preview"
+  planner: "openrouter/anthropic/claude-opus-4.6",
+  architect: "openrouter/openai/gpt-5.4",
+  implementer: "openrouter/openai/gpt-5.4",
+  coder: "openrouter/openai/gpt-5.3-codex",
+  qa: "openrouter/openai/gpt-5.4",
+  reviewer: "openrouter/anthropic/claude-opus-4.6",
+  visual: "openrouter/google/gemini-3.1-pro"
 };
 
 export interface OperatorGuidanceSummary {

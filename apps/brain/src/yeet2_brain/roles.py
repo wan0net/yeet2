@@ -11,6 +11,7 @@ class Role(StrEnum):
     PLANNER = "planner"
     ARCHITECT = "architect"
     IMPLEMENTER = "implementer"
+    CODER = "coder"
     QA = "qa"
     REVIEWER = "reviewer"
     VISUAL = "visual"
@@ -65,6 +66,7 @@ _ROLE_MODEL_ENV_NAMES = {
     "planner": "YEET2_ROLE_MODEL_DEFAULT_PLANNER",
     "architect": "YEET2_ROLE_MODEL_DEFAULT_ARCHITECT",
     "implementer": "YEET2_ROLE_MODEL_DEFAULT_IMPLEMENTER",
+    "coder": "YEET2_ROLE_MODEL_DEFAULT_CODER",
     "qa": "YEET2_ROLE_MODEL_DEFAULT_QA",
     "reviewer": "YEET2_ROLE_MODEL_DEFAULT_REVIEWER",
     "visual": "YEET2_ROLE_MODEL_DEFAULT_VISUAL",
@@ -74,6 +76,7 @@ _ROLE_MODEL_DEFAULTS = {
     "planner": "openrouter/anthropic/claude-sonnet-4.6",
     "architect": "openrouter/anthropic/claude-sonnet-4.6",
     "implementer": "openrouter/openai/gpt-5.1-codex-mini",
+    "coder": "openrouter/openai/gpt-5.3-codex",
     "qa": "openrouter/openai/gpt-4.1-mini",
     "reviewer": "openrouter/anthropic/claude-sonnet-4.6",
     "visual": "openrouter/google/gemini-2.5-pro-preview",
@@ -116,10 +119,18 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
         PlanningRoleDefinition(
             key="implementer",
             label="Implementer",
-            goal=f"Convert the plan for {project_label} into the smallest shippable implementation slice.",
-            backstory="You focus on direct, executable steps that move the project forward.",
+            goal=f"Plan the approach for the smallest shippable slice of {project_label}.",
+            backstory="You define the strategy and execution plan that the coder will carry out.",
             enabled=True,
             sort_order=3,
+        ),
+        PlanningRoleDefinition(
+            key="coder",
+            label="Coder",
+            goal=f"Execute the implementation plan for {project_label} by writing and testing code.",
+            backstory="You take the implementer's plan and turn it into concrete, verified file changes.",
+            enabled=True,
+            sort_order=4,
         ),
         PlanningRoleDefinition(
             key="qa",
@@ -127,7 +138,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Add verification and acceptance coverage for the first {project_label} slice.",
             backstory="You look for missing checks, edge cases, and review gates.",
             enabled=True,
-            sort_order=4,
+            sort_order=5,
         ),
         PlanningRoleDefinition(
             key="reviewer",
@@ -135,7 +146,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Produce an operator-ready planning envelope for {project_label}.",
             backstory="You make sure the final plan is readable, grounded, and ready for handoff.",
             enabled=True,
-            sort_order=5,
+            sort_order=6,
         ),
         PlanningRoleDefinition(
             key="visual",
@@ -143,7 +154,7 @@ def default_planning_role_definitions(project_name: str | None = None) -> list[P
             goal=f"Surface presentation and visual polish concerns for {project_label}.",
             backstory="You look for user-facing clarity issues and presentation gaps.",
             enabled=False,
-            sort_order=6,
+            sort_order=7,
         ),
     ]
 

@@ -163,7 +163,7 @@ function findLatestCompletedImplementerJob(project: ProjectSummary): {
   const candidates = project.missions.flatMap((mission) => {
     const reviewerComplete = mission.tasks.some((task) => task.agentRole === "reviewer" && task.status === "complete");
     return mission.tasks.flatMap((task) => {
-      if (task.agentRole !== "implementer") {
+      if (task.agentRole !== "implementer" && task.agentRole !== "coder") {
         return [];
       }
 
@@ -200,7 +200,7 @@ function findCompletedImplementerJobById(
   for (const mission of project.missions) {
     const reviewerComplete = mission.tasks.some((task) => task.agentRole === "reviewer" && task.status === "complete");
     for (const task of mission.tasks) {
-      if (task.agentRole !== "implementer") {
+      if (task.agentRole !== "implementer" && task.agentRole !== "coder") {
         continue;
       }
 
@@ -250,7 +250,7 @@ function missionHasAllDispatchableTasksComplete(project: ProjectSummary, mission
   }
 
   return mission.tasks
-    .filter((task) => task.agentRole === "implementer" || task.agentRole === "qa" || task.agentRole === "reviewer")
+    .filter((task) => task.agentRole === "implementer" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer")
     .every((task) => task.status === "complete");
 }
 
@@ -258,7 +258,7 @@ function hasRemainingDispatchableTasks(project: ProjectSummary): boolean {
   return project.missions.some((mission) =>
     mission.tasks.some(
       (task) =>
-        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
+        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
         (task.status === "ready" || task.status === "pending")
     )
   );

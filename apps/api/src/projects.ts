@@ -563,7 +563,7 @@ interface ResolvedProjectRegistration {
   repoUrl: string | null;
 }
 
-const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "qa", "reviewer"] as const;
+const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "coder", "qa", "reviewer"] as const;
 const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
@@ -593,11 +593,21 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     roleKey: "implementer",
     visualName: "Implementer",
     label: "Implementer",
-    goal: "Deliver the smallest shippable slice of the plan.",
-    backstory: "You focus on executable changes that move the project forward quickly.",
+    goal: "Plan the approach for the smallest shippable slice of the work.",
+    backstory: "You define the strategy and execution plan that the coder will carry out.",
     model: null,
     enabled: true,
     sortOrder: 2
+  },
+  {
+    roleKey: "coder" as ProjectRoleKey,
+    visualName: "Coder",
+    label: "Coder",
+    goal: "Execute the implementation plan by writing, modifying, and testing code in the repository.",
+    backstory: "Takes the implementer's plan and turns it into concrete file changes, commits, and verified output.",
+    model: null,
+    enabled: true,
+    sortOrder: 3
   },
   {
     roleKey: "qa",
@@ -607,7 +617,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You design checks and acceptance coverage that make the change trustworthy.",
     model: null,
     enabled: true,
-    sortOrder: 3
+    sortOrder: 4
   },
   {
     roleKey: "reviewer",
@@ -617,7 +627,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You protect quality and ensure the plan is understandable to operators.",
     model: null,
     enabled: true,
-    sortOrder: 4
+    sortOrder: 5
   },
   {
     roleKey: "visual",
@@ -627,7 +637,7 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
     backstory: "You watch for layout, motion, and visual consistency risks.",
     model: null,
     enabled: true,
-    sortOrder: 5
+    sortOrder: 6
   }
 ];
 
@@ -2075,6 +2085,8 @@ function nextWorkflowRoleKeyForTask(task: ProjectTaskWithRelations): ProjectRole
     case "architect":
       return "implementer";
     case "implementer":
+      return "coder";
+    case "coder":
       return "qa";
     case "qa":
       return "reviewer";
