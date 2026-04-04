@@ -1003,6 +1003,11 @@ function asProjectInput(
   };
 }
 
+function toPrismaRoleDefinition(definition: ProjectRoleDefinitionInput) {
+  const { visualName: _, ...rest } = definition;
+  return rest;
+}
+
 function defaultProjectRoleDefinitions(): ProjectRoleDefinitionInput[] {
   return PROJECT_ROLE_DEFAULTS.map((definition) => ({
     roleKey: definition.roleKey,
@@ -1086,8 +1091,8 @@ async function ensureProjectRoleDefinitions(projectId: string, definitions: Proj
   await prisma.projectRoleDefinition.createMany({
     data: defaultProjectRoleDefinitions().map((definition) => ({
       projectId,
-      ...definition
-    })),
+      ...toPrismaRoleDefinition(definition)
+    })) as any,
     skipDuplicates: true
   });
 
@@ -4121,7 +4126,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
           localPath: inspection.repoRoot,
           constitutionStatus: inspection.status,
           roleDefinitions: {
-            create: defaultProjectRoleDefinitions()
+            create: defaultProjectRoleDefinitions().map(toPrismaRoleDefinition) as any
           },
           constitution: {
             create: constitutionData
@@ -4234,7 +4239,7 @@ export async function replaceProjectRoleDefinitions(
         model: definition.model || null,
         enabled: definition.enabled,
         sortOrder: definition.sortOrder ?? index
-      }))
+      })) as any
     });
   });
 
