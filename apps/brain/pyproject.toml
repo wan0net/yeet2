@@ -11,6 +11,7 @@ dependencies = []
 
 [project.optional-dependencies]
 crewai = ["crewai"]
+dev = ["pytest>=8"]
 
 [project.scripts]
 yeet2-brain = "yeet2_brain.main:main"

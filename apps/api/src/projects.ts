@@ -754,7 +754,7 @@ function dispatchBlockedReasonForTask(task: Pick<DbTask, "id" | "agentRole" | "s
   return null;
 }
 
-function executorBaseUrl(): string {
+export function executorBaseUrl(): string {
   return (process.env.YEET2_EXECUTOR_BASE_URL ?? process.env.EXECUTOR_BASE_URL ?? "http://127.0.0.1:8021").replace(/\/+$/, "");
 }
 
@@ -1757,7 +1757,7 @@ function parseDate(value: string | undefined | null): Date | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-function mapExecutorJobStatus(status: unknown): ProjectJobStatus {
+export function mapExecutorJobStatus(status: unknown): ProjectJobStatus {
   if (status === "completed") {
     return "complete";
   }
@@ -1769,7 +1769,7 @@ function mapExecutorJobStatus(status: unknown): ProjectJobStatus {
   return "queued";
 }
 
-function taskStatusFromJobStatus(status: ProjectJobStatus, attempts: number, role: string): ProjectTaskStatus {
+export function taskStatusFromJobStatus(status: ProjectJobStatus, attempts: number, role: string): ProjectTaskStatus {
   if (status === "queued" || status === "running") {
     return "running";
   }
