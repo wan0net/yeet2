@@ -55,3 +55,20 @@
     {/if}
   </div>
 </section>
+
+<section class="card">
+  <div class="card-header">Agent name theme</div>
+  <div class="card-body">
+    <p style="margin-bottom: 1rem;">
+      Choose a naming theme for your agent roles. New projects will get character names from the selected franchise. Set via <code>YEET2_AGENT_NAME_THEME</code> in your environment.
+    </p>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+      {#each ["mythology", "star-trek", "star-wars", "firefly", "hitchhikers", "dune", "lotr", "matrix", "doctor-who", "expanse", "foundation", "red-dwarf", "futurama", "blade-runner", "westworld", "the-office", "it-crowd", "silicon-valley", "severance"] as theme}
+        <span class="pill" style="cursor: default;">{theme}</span>
+      {/each}
+    </div>
+    <p style="margin-top: 1rem; color: var(--color-text-muted); font-size: 0.8rem;">
+      Examples — <strong>mythology</strong>: Athena (Planner), Hephaestus (Architect), Pygmalion (Coder) &middot; <strong>star-trek</strong>: Picard, Scotty, LaForge &middot; <strong>lotr</strong>: Gandalf, Elrond, Legolas
+    </p>
+  </div>
+</section>

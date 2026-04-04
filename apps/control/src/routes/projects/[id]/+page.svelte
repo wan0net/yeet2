@@ -26,20 +26,23 @@
     const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
     return tab === "agents" || tab === "chat" ? tab : "overview";
   })());
+  const operatorGuidanceIds = $derived(new Set(project.operatorGuidance.map((entry) => entry.id)));
   const chatEntries = $derived(
     [
-      ...project.decisionLogs.map((entry) => ({
-        id: `decision-${entry.id}`,
-        actor: entry.actor || "system",
-        kind: entry.eventType || "workflow",
-        summary: entry.summary || entry.title,
-        createdAt: entry.createdAt,
-        tone: "info"
-      })),
+      ...project.decisionLogs
+        .filter((entry) => !operatorGuidanceIds.has(entry.id))
+        .map((entry) => ({
+          id: `decision-${entry.id}`,
+          actor: entry.actor || "system",
+          kind: entry.eventType || "workflow",
+          summary: entry.summary || entry.title,
+          createdAt: entry.createdAt,
+          tone: "info"
+        })),
       ...project.operatorGuidance.map((entry) => ({
         id: `guidance-${entry.id}`,
         actor: entry.actor || "operator",
-        kind: entry.mentions.length > 0 ? `mentions ${entry.mentions.map((mention) => `@${mention}`).join(" ")}` : "operator note",
+        kind: entry.mentions.length > 0 ? `@${entry.mentions.join(" @")}` : "message",
         summary: entry.content,
         createdAt: entry.createdAt,
         tone: "success"

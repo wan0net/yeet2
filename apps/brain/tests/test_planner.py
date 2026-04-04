@@ -164,3 +164,33 @@ def test_compose_mission_caps_objective():
     # The raw long_objective should NOT be used; generated one should be shorter
     assert mission.objective != long_objective
     assert len(mission.objective) < 500
+
+
+# ---------------------------------------------------------------------------
+# New role tests: tester and coder
+# ---------------------------------------------------------------------------
+
+
+def test_deterministic_plan_includes_tester_and_coder():
+    """Task roles include both 'tester' and 'coder' in the plan."""
+    inp = _make_planning_input()
+    result = _deterministic_plan(inp, "Build the system.", ["API boundary"])
+    roles = [t.agent_role for t in result.tasks]
+    assert "tester" in roles, f"Expected 'tester' in roles: {roles}"
+    assert "coder" in roles, f"Expected 'coder' in roles: {roles}"
+
+
+def test_deterministic_plan_priority_ordering_with_new_roles():
+    """Priorities satisfy: architect < implementer < tester < coder < qa < reviewer."""
+    inp = _make_planning_input()
+    result = _deterministic_plan(inp, "Build the system.", ["API boundary"])
+    by_role = {t.agent_role: t.priority for t in result.tasks}
+
+    expected_order = ["architect", "implementer", "tester", "coder", "qa", "reviewer"]
+    for i in range(len(expected_order) - 1):
+        earlier = expected_order[i]
+        later = expected_order[i + 1]
+        assert by_role[earlier] < by_role[later], (
+            f"Expected priority({earlier})={by_role[earlier]} < "
+            f"priority({later})={by_role[later]}"
+        )

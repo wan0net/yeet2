@@ -582,6 +582,41 @@ const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 
+// Agent name themes — each maps roles to character names from a franchise
+const AGENT_NAME_THEMES: Record<string, Record<string, string>> = {
+  mythology: { planner: "Athena", architect: "Hephaestus", implementer: "Prometheus", tester: "Nemesis", coder: "Pygmalion", qa: "Argus", reviewer: "Momus", visual: "Apollo" },
+  "star-trek": { planner: "Picard", architect: "Scotty", implementer: "Spock", tester: "Data", coder: "LaForge", qa: "Worf", reviewer: "Riker", visual: "Troi" },
+  "star-wars": { planner: "Leia", architect: "Vader", implementer: "Obi-Wan", tester: "Yoda", coder: "R2-D2", qa: "C-3PO", reviewer: "Mace", visual: "Padme" },
+  firefly: { planner: "Mal", architect: "Wash", implementer: "Zoe", tester: "River", coder: "Kaylee", qa: "Jayne", reviewer: "Inara", visual: "Simon" },
+  "hitchhikers": { planner: "Trillian", architect: "Slartibartfast", implementer: "Zaphod", tester: "Marvin", coder: "Deep Thought", qa: "Arthur", reviewer: "Ford", visual: "Eddie" },
+  dune: { planner: "Leto", architect: "Stilgar", implementer: "Paul", tester: "Thufir", coder: "Duncan", qa: "Gurney", reviewer: "Jessica", visual: "Chani" },
+  lotr: { planner: "Gandalf", architect: "Elrond", implementer: "Aragorn", tester: "Gimli", coder: "Legolas", qa: "Sam", reviewer: "Galadriel", visual: "Arwen" },
+  matrix: { planner: "Morpheus", architect: "The Architect", implementer: "Neo", tester: "Oracle", coder: "Trinity", qa: "Tank", reviewer: "Niobe", visual: "Switch" },
+  "doctor-who": { planner: "The Doctor", architect: "River Song", implementer: "Clara", tester: "K-9", coder: "Jack", qa: "Martha", reviewer: "Donna", visual: "Amy" },
+  expanse: { planner: "Avasarala", architect: "Naomi", implementer: "Holden", tester: "Amos", coder: "Alex", qa: "Bobbie", reviewer: "Miller", visual: "Drummer" },
+  foundation: { planner: "Seldon", architect: "Demerzel", implementer: "Gaal", tester: "Salvor", coder: "Hober", qa: "Bel Riose", reviewer: "Bayta", visual: "Dornick" },
+  "red-dwarf": { planner: "Holly", architect: "Kryten", implementer: "Lister", tester: "Rimmer", coder: "Cat", qa: "Talkie Toaster", reviewer: "Hilly", visual: "Ace" },
+  futurama: { planner: "Professor", architect: "Hermes", implementer: "Fry", tester: "Bender", coder: "Leela", qa: "Zoidberg", reviewer: "Amy", visual: "Kif" },
+  "blade-runner": { planner: "Tyrell", architect: "Deckard", implementer: "Roy Batty", tester: "Rachael", coder: "Pris", qa: "Gaff", reviewer: "K", visual: "Joi" },
+  westworld: { planner: "Ford", architect: "Arnold", implementer: "Dolores", tester: "Maeve", coder: "Bernard", qa: "Stubbs", reviewer: "Charlotte", visual: "Clementine" },
+  "the-office": { planner: "Michael", architect: "Dwight", implementer: "Jim", tester: "Oscar", coder: "Pam", qa: "Angela", reviewer: "Stanley", visual: "Kelly" },
+  "it-crowd": { planner: "Denholm", architect: "Moss", implementer: "Roy", tester: "Richmond", coder: "Jen", qa: "Douglas", reviewer: "Postman Pat", visual: "Noel" },
+  "silicon-valley": { planner: "Richard", architect: "Gilfoyle", implementer: "Dinesh", tester: "Jared", coder: "Erlich", qa: "Monica", reviewer: "Gavin", visual: "Bighead" },
+  severance: { planner: "Milchick", architect: "Helly", implementer: "Mark", tester: "Irving", coder: "Dylan", qa: "Burt", reviewer: "Cobel", visual: "Gemma" },
+  default: { planner: "Planner", architect: "Architect", implementer: "Implementer", tester: "Tester", coder: "Coder", qa: "QA", reviewer: "Reviewer", visual: "Visual" }
+};
+
+function getAgentNameTheme(): string {
+  // Synchronous check — the setting is loaded once at startup or cached
+  return process.env.YEET2_AGENT_NAME_THEME?.trim().toLowerCase() || "mythology";
+}
+
+function generateRoleName(roleKey: string, theme?: string): string {
+  const selectedTheme = theme || getAgentNameTheme();
+  const themeMap = AGENT_NAME_THEMES[selectedTheme] || AGENT_NAME_THEMES["default"];
+  return themeMap[roleKey] || roleKey.charAt(0).toUpperCase() + roleKey.slice(1);
+}
+
 const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder"> & { sortOrder: number }> = [
   {
     roleKey: "planner",
@@ -1022,17 +1057,21 @@ function toPrismaRoleDefinition(definition: ProjectRoleDefinitionInput) {
   return rest;
 }
 
-function defaultProjectRoleDefinitions(): ProjectRoleDefinitionInput[] {
-  return PROJECT_ROLE_DEFAULTS.map((definition) => ({
-    roleKey: definition.roleKey,
-    visualName: definition.visualName,
-    label: definition.label,
-    goal: definition.goal,
-    backstory: definition.backstory,
-    model: definition.model,
-    enabled: definition.enabled,
-    sortOrder: definition.sortOrder
-  }));
+function defaultProjectRoleDefinitions(projectName?: string): ProjectRoleDefinitionInput[] {
+  return PROJECT_ROLE_DEFAULTS.map((definition) => {
+    const funName = generateRoleName(definition.roleKey);
+    const displayName = funName !== definition.label ? `${funName} (${definition.label})` : definition.label;
+    return {
+      roleKey: definition.roleKey,
+      visualName: displayName,
+      label: displayName,
+      goal: definition.goal,
+      backstory: definition.backstory,
+      model: definition.model,
+      enabled: definition.enabled,
+      sortOrder: definition.sortOrder
+    };
+  });
 }
 
 function toProjectRoleDefinitionSummary(definition: ProjectRoleDefinitionRecord): ProjectRoleDefinitionSummary {
