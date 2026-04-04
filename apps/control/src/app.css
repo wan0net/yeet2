@@ -205,7 +205,7 @@ label {
 .app-frame {
   margin-top: 24px;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   gap: 28px;
   align-items: start;
 }
@@ -449,18 +449,31 @@ label {
   letter-spacing: 0.1em;
 }
 
-.pb-right {
+.pb-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: var(--space-1, 0.25rem);
+  margin-left: auto;
 }
 
-.top-note {
-  color: var(--text-dim);
-  font: 600 10.5px/1 var(--font-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.pb-link {
+  padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
+  color: var(--text-mid);
+  text-decoration: none;
+  font-size: 13px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pb-link:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.pb-link--active {
+  color: var(--text);
+  background: var(--bg-subtle);
 }
 
 .table-wrap {
@@ -495,6 +508,7 @@ td {
   top: 18px;
   display: grid;
   gap: 18px;
+  width: 200px;
 }
 
 .sidebar-group {

@@ -2,6 +2,8 @@
   import "../app.css";
   import PlatformBar from "$lib/ui/PlatformBar.svelte";
   import ControlSidebar from "$lib/ui/ControlSidebar.svelte";
+
+  let { children } = $props();
 </script>
 
 <div class="app-shell">
@@ -9,7 +11,7 @@
   <div class="app-frame">
     <ControlSidebar />
     <main class="app-main">
-      <slot />
+      {@render children()}
     </main>
   </div>
 </div>
