@@ -289,6 +289,15 @@ interface PullRequestAutomationResult {
 }
 
 interface WorkflowDecisionCandidate {
+  dispatchableTasks: Array<{
+    id: string;
+    title: string;
+    agentRole: string;
+    priority: number;
+    attempts: number;
+    missionId: string;
+    missionTitle: string;
+  }>;
   latestCompletedJobId: string | null;
   latestCompletedTaskId: string | null;
   latestCompletedTaskTitle: string | null;
@@ -380,7 +389,21 @@ async function processProjectPullRequestAutomation(
 
 function buildWorkflowDecisionCandidate(project: ProjectSummary): WorkflowDecisionCandidate {
   const candidate = findLatestCompletedImplementerJob(project);
+  const dispatchableTasks = project.missions.flatMap((mission) =>
+    mission.tasks
+      .filter((task) => task.dispatchable)
+      .map((task) => ({
+        id: task.id,
+        title: task.title,
+        agentRole: task.agentRole,
+        priority: task.priority,
+        attempts: task.attempts,
+        missionId: mission.id,
+        missionTitle: mission.title
+      }))
+  );
   return {
+    dispatchableTasks,
     latestCompletedJobId: candidate?.jobId ?? null,
     latestCompletedTaskId: candidate?.taskId ?? null,
     latestCompletedTaskTitle: candidate?.taskTitle ?? null,
@@ -399,6 +422,7 @@ async function requestWorkflowDecision(project: ProjectSummary) {
     hasInFlightJobs: hasInFlightJobs(project),
     needsInitialPlanning: needsInitialPlanning(project),
     needsBacklogPlanning: needsBacklogPlanning(project),
+    dispatchableTasks: candidate.dispatchableTasks,
     nextDispatchableTaskId: project.nextDispatchableTaskId ?? null,
     nextDispatchableTaskRole: project.nextDispatchableTaskRole ?? null,
     pullRequestMode: project.pullRequestMode,

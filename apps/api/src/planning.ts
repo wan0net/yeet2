@@ -429,6 +429,15 @@ export async function decideWorkflowAction(input: {
   hasInFlightJobs: boolean;
   needsInitialPlanning: boolean;
   needsBacklogPlanning: boolean;
+  dispatchableTasks: Array<{
+    id: string;
+    title: string;
+    agentRole: string;
+    priority: number;
+    attempts: number;
+    missionId: string;
+    missionTitle: string;
+  }>;
   nextDispatchableTaskId: string | null;
   nextDispatchableTaskRole: string | null;
   pullRequestMode: string;
@@ -448,6 +457,15 @@ export async function decideWorkflowAction(input: {
     has_in_flight_jobs: input.hasInFlightJobs,
     needs_initial_planning: input.needsInitialPlanning,
     needs_backlog_planning: input.needsBacklogPlanning,
+    dispatchable_tasks: input.dispatchableTasks.map((task) => ({
+      id: task.id,
+      title: task.title,
+      agent_role: task.agentRole,
+      priority: task.priority,
+      attempts: task.attempts,
+      mission_id: task.missionId,
+      mission_title: task.missionTitle
+    })),
     next_dispatchable_task_id: input.nextDispatchableTaskId,
     next_dispatchable_task_role: input.nextDispatchableTaskRole,
     pull_request_mode: input.pullRequestMode,

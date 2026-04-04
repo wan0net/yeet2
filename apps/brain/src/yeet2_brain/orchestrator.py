@@ -14,6 +14,7 @@ class WorkflowDecisionInput:
     has_in_flight_jobs: bool
     needs_initial_planning: bool
     needs_backlog_planning: bool
+    dispatchable_tasks: list[dict[str, Any]]
     next_dispatchable_task_id: str | None
     next_dispatchable_task_role: str | None
     pull_request_mode: str
@@ -100,6 +101,8 @@ def _clean_text_list(value: object) -> list[str]:
 
 
 def workflow_decision_input_from_payload(payload: dict[str, Any]) -> WorkflowDecisionInput:
+    dispatchable_tasks = payload.get("dispatchable_tasks")
+    normalized_dispatchable_tasks = [item for item in dispatchable_tasks if isinstance(item, dict)] if isinstance(dispatchable_tasks, list) else []
     return WorkflowDecisionInput(
         project_id=_clean_text(payload.get("project_id")),
         project_name=_clean_text(payload.get("project_name")),
@@ -107,6 +110,7 @@ def workflow_decision_input_from_payload(payload: dict[str, Any]) -> WorkflowDec
         has_in_flight_jobs=_clean_flag(payload.get("has_in_flight_jobs")),
         needs_initial_planning=_clean_flag(payload.get("needs_initial_planning")),
         needs_backlog_planning=_clean_flag(payload.get("needs_backlog_planning")),
+        dispatchable_tasks=normalized_dispatchable_tasks,
         next_dispatchable_task_id=_clean_text(payload.get("next_dispatchable_task_id")) or None,
         next_dispatchable_task_role=_clean_text(payload.get("next_dispatchable_task_role")) or None,
         pull_request_mode=_clean_text(payload.get("pull_request_mode")) or "manual",
@@ -169,6 +173,39 @@ def _next_role_for(role_key: str) -> str | None:
     if normalized == "reviewer":
         return "planner"
     return None
+
+
+def _dispatch_role_rank(role_key: str) -> int:
+    normalized = role_key.strip().lower()
+    order = {
+        "architect": 0,
+        "implementer": 1,
+        "qa": 2,
+        "reviewer": 3,
+        "planner": 4,
+        "visual": 5,
+    }
+    return order.get(normalized, 99)
+
+
+def _choose_dispatchable_task(input: WorkflowDecisionInput) -> dict[str, Any] | None:
+    if not input.dispatchable_tasks:
+        if input.next_dispatchable_task_id:
+            return {
+                "id": input.next_dispatchable_task_id,
+                "agent_role": input.next_dispatchable_task_role or None,
+                "priority": 999,
+            }
+        return None
+
+    def sort_key(item: dict[str, Any]) -> tuple[int, int, str]:
+        role_key = _clean_text(item.get("agent_role"))
+        priority = _clean_int(item.get("priority"), 999)
+        title = _clean_text(item.get("title"))
+        return (_dispatch_role_rank(role_key), priority, title)
+
+    ranked = sorted(input.dispatchable_tasks, key=sort_key)
+    return ranked[0] if ranked else None
 
 
 def build_stage_brief(input: WorkflowStageBriefInput) -> WorkflowStageBrief:
@@ -242,12 +279,15 @@ def decide_next_action(input: WorkflowDecisionInput) -> WorkflowDecision:
     if input.autonomy_mode == "supervised":
         return WorkflowDecision(action="idle", reason="Supervised mode allows planning, but waits for operator approval before dispatch.")
 
-    if input.next_dispatchable_task_id:
+    selected_task = _choose_dispatchable_task(input)
+    if selected_task:
+        task_id = _clean_text(selected_task.get("id")) or input.next_dispatchable_task_id
+        task_role = _clean_text(selected_task.get("agent_role")) or input.next_dispatchable_task_role
         return WorkflowDecision(
             action="advance",
-            reason=f"Task {input.next_dispatchable_task_id} is ready for {input.next_dispatchable_task_role or 'the next specialist'}.",
-            target_task_id=input.next_dispatchable_task_id,
-            target_task_role=input.next_dispatchable_task_role,
+            reason=f"Task {task_id} is ready for {task_role or 'the next specialist'}.",
+            target_task_id=task_id or None,
+            target_task_role=task_role or None,
         )
 
     if not input.latest_completed_job_id:
