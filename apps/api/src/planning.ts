@@ -104,6 +104,15 @@ export interface BrainWorkflowDecision {
   targetJobId?: string | null;
 }
 
+export interface BrainStageBrief {
+  projectId: string;
+  instructions: string;
+  workingSummary: string;
+  handoffTargetRole: string | null;
+  successSignals: string[];
+  source: string;
+}
+
 interface BrainPlanningRequestSection {
   title: string;
   text: string;
@@ -450,6 +459,51 @@ export async function decideWorkflowAction(input: {
     latest_completed_job_has_pull_request: input.latestCompletedJobHasPullRequest,
     latest_completed_reviewer_complete: input.latestCompletedReviewerComplete,
     latest_completed_dispatchable_tasks_complete: input.latestCompletedDispatchableTasksComplete
+  });
+}
+
+export async function createTaskStageBrief(input: {
+  projectId: string;
+  projectName: string;
+  missionId: string;
+  missionTitle: string;
+  missionObjective: string;
+  taskId: string;
+  taskTitle: string;
+  taskDescription: string;
+  taskAgentRole: string;
+  taskPriority: number;
+  taskAttempts: number;
+  acceptanceCriteria: string[];
+  assignedRoleLabel: string | null;
+  assignedRoleGoal: string | null;
+  assignedRoleBackstory: string | null;
+  operatorGuidance: OperatorGuidanceSummary[];
+}): Promise<BrainStageBrief> {
+  return readBrainJson<BrainStageBrief>("/orchestration/brief", {
+    project_id: input.projectId,
+    project_name: input.projectName,
+    mission_id: input.missionId,
+    mission_title: input.missionTitle,
+    mission_objective: input.missionObjective,
+    task_id: input.taskId,
+    task_title: input.taskTitle,
+    task_description: input.taskDescription,
+    task_agent_role: input.taskAgentRole,
+    task_priority: input.taskPriority,
+    task_attempts: input.taskAttempts,
+    acceptance_criteria: input.acceptanceCriteria,
+    assigned_role_label: input.assignedRoleLabel,
+    assigned_role_goal: input.assignedRoleGoal,
+    assigned_role_backstory: input.assignedRoleBackstory,
+    operator_guidance: input.operatorGuidance.map((entry) => ({
+      id: entry.id,
+      actor: entry.actor,
+      content: entry.content,
+      mentions: entry.mentions,
+      reply_to_id: entry.replyToId ?? null,
+      created_at: entry.createdAt
+    }))
   });
 }
 

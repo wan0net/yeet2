@@ -10,7 +10,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 from .planner import ConstitutionSection, PlanningInput, plan_project
-from .orchestrator import decide_next_action, workflow_decision_input_from_payload
+from .orchestrator import (
+    build_stage_brief,
+    decide_next_action,
+    workflow_decision_input_from_payload,
+    workflow_stage_brief_input_from_payload,
+)
 from .roles import PlanningRoleDefinition, normalize_planning_role_definitions
 from .plan_store import RunStore
 
@@ -164,7 +169,7 @@ class BrainApp:
 
             def do_POST(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
-                if path not in {"/orchestration/plan", "/orchestration/decide"}:
+                if path not in {"/orchestration/plan", "/orchestration/decide", "/orchestration/brief"}:
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                     return
                 length = int(self.headers.get("Content-Length", "0"))
@@ -190,6 +195,20 @@ class BrainApp:
                             "targetTaskId": decision.target_task_id,
                             "targetTaskRole": decision.target_task_role,
                             "targetJobId": decision.target_job_id,
+                        },
+                    )
+                    return
+                if path == "/orchestration/brief":
+                    brief = build_stage_brief(workflow_stage_brief_input_from_payload(payload))
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "projectId": project_id,
+                            "instructions": brief.instructions,
+                            "workingSummary": brief.working_summary,
+                            "handoffTargetRole": brief.handoff_target_role,
+                            "successSignals": brief.success_signals,
+                            "source": brief.source,
                         },
                     )
                     return

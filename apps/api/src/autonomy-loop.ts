@@ -3,6 +3,7 @@ import type { FastifyBaseLogger } from "fastify";
 import {
   advanceProject,
   createProjectPullRequest,
+  dispatchTask,
   getRegisteredProject,
   listRegisteredProjects,
   mergeProjectPullRequest,
@@ -187,6 +188,45 @@ function findLatestCompletedImplementerJob(project: ProjectSummary): {
   return candidates[0] ?? null;
 }
 
+function findCompletedImplementerJobById(
+  project: ProjectSummary,
+  jobId: string
+): ReturnType<typeof findLatestCompletedImplementerJob> {
+  const normalizedJobId = jobId.trim();
+  if (!normalizedJobId) {
+    return null;
+  }
+
+  for (const mission of project.missions) {
+    const reviewerComplete = mission.tasks.some((task) => task.agentRole === "reviewer" && task.status === "complete");
+    for (const task of mission.tasks) {
+      if (task.agentRole !== "implementer") {
+        continue;
+      }
+
+      const job = task.jobs.find((candidate) => candidate.id === normalizedJobId && candidate.status === "complete");
+      if (!job) {
+        continue;
+      }
+
+      return {
+        missionId: mission.id,
+        missionTitle: mission.title,
+        taskId: task.id,
+        taskTitle: task.title,
+        taskStatus: task.status,
+        jobId: job.id,
+        jobBranchName: job.branchName,
+        jobHasPullRequest: job.githubPrNumber !== null || job.githubPrUrl !== null || job.githubPrTitle !== null,
+        reviewerComplete,
+        completedAt: job.completedAt
+      };
+    }
+  }
+
+  return null;
+}
+
 function isPullRequestPolicySatisfied(project: ProjectSummary, candidate: ReturnType<typeof findLatestCompletedImplementerJob>): string | null {
   if (!candidate) {
     return "No completed implementer job is available for pull request automation.";
@@ -258,9 +298,11 @@ interface WorkflowDecisionCandidate {
 }
 
 async function processProjectPullRequestAutomation(
-  project: ProjectSummary
+  project: ProjectSummary,
+  targetJobId: string | null = null,
+  requestedAction: "pull_request" | "merge" | null = null
 ): Promise<PullRequestAutomationResult | null> {
-  const candidate = findLatestCompletedImplementerJob(project);
+  const candidate = targetJobId ? findCompletedImplementerJobById(project, targetJobId) : findLatestCompletedImplementerJob(project);
   if (!candidate) {
     return null;
   }
@@ -292,12 +334,29 @@ async function processProjectPullRequestAutomation(
   if (!candidate.jobHasPullRequest) {
     const created = await createProjectPullRequest(project.id, candidate.jobId);
     currentProject = created.project;
+    if (requestedAction === "pull_request") {
+      return {
+        project: created.project,
+        lastAction: "pull_request",
+        lastOutcome: "created_pr",
+        message: `Created pull request for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
+      };
+    }
   } else if (project.mergeApprovalMode === "human_approval" && project.pullRequestDraftMode === "ready") {
     try {
       await createProjectPullRequest(project.id, candidate.jobId);
     } catch {
       // Best-effort blocker refresh only.
     }
+  }
+
+  if (requestedAction === "pull_request") {
+    return {
+      project: currentProject,
+      lastAction: "pull_request",
+      lastOutcome: "created_pr",
+      message: `Pull request is ready for implementer job ${candidate.jobId} on branch ${candidate.jobBranchName}`
+    };
   }
 
   const mergePolicyMessage = isProjectPullRequestMergeAllowed(currentProject, candidate);
@@ -569,9 +628,9 @@ export class AutonomyLoopManager {
       return;
     }
 
-    if (decision.action === "pull_request" || decision.action == "merge") {
+    if (decision.action === "pull_request" || decision.action === "merge") {
       try {
-        const automation = await processProjectPullRequestAutomation(currentProject);
+        const automation = await processProjectPullRequestAutomation(currentProject, decision.targetJobId ?? null, decision.action);
         if (!automation) {
           await this.persistTelemetry(currentProject, "skip", "idle", decision.reason);
           return;
@@ -592,13 +651,15 @@ export class AutonomyLoopManager {
     }
 
     try {
-      const dispatched = await advanceProject(currentProject.id);
+      const dispatched = decision.targetTaskId
+        ? await dispatchTask(currentProject.id, decision.targetTaskId)
+        : await advanceProject(currentProject.id);
       await this.persistTelemetry(dispatched.project, "advance", "advanced", decision.reason);
 
       const candidate = findLatestCompletedImplementerJob(dispatched.project);
       if (candidate) {
         try {
-          const automation = await processProjectPullRequestAutomation(dispatched.project);
+          const automation = await processProjectPullRequestAutomation(dispatched.project, null, null);
           if (automation) {
             await this.persistTelemetry(automation.project, automation.lastAction, automation.lastOutcome, automation.message);
           }

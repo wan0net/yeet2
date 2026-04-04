@@ -50,7 +50,7 @@ import {
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "./openrouter-models";
-import { createInitialPlan, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
+import { createInitialPlan, createTaskStageBrief, loadPlanningContext, type PlanningDraft, type PlanningProject } from "./planning";
 
 export interface ProjectRegistrationInput {
   name: string;
@@ -1814,6 +1814,14 @@ interface ExecutorDispatchPayload {
   llm_model?: string;
 }
 
+interface TaskStageBriefResult {
+  instructions: string;
+  workingSummary: string;
+  handoffTargetRole: string | null;
+  successSignals: string[];
+  source: string;
+}
+
 function dispatchableTaskForProject(project: ProjectWithRelations, taskId: string) {
   for (const mission of project.missions) {
     const task = mission.tasks.find((candidate) => candidate.id === taskId);
@@ -2067,6 +2075,33 @@ function guidanceLogDetail(entries: OperatorGuidanceSummary[]): {
   };
 }
 
+async function buildTaskStageBrief(
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  assignedRoleDefinition: ProjectRoleDefinitionRecord | null,
+  operatorGuidance: OperatorGuidanceSummary[]
+): Promise<TaskStageBriefResult> {
+  const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
+  return createTaskStageBrief({
+    projectId: project.id,
+    projectName: project.name,
+    missionId: task.missionId,
+    missionTitle: mission?.title ?? "Current mission",
+    missionObjective: mission?.objective ?? "",
+    taskId: task.id,
+    taskTitle: task.title,
+    taskDescription: task.description,
+    taskAgentRole: task.agentRole,
+    taskPriority: task.priority,
+    taskAttempts: task.attempts,
+    acceptanceCriteria: normalizeAcceptanceCriteria(task.acceptanceCriteria),
+    assignedRoleLabel: assignedRoleDefinition?.label ?? null,
+    assignedRoleGoal: assignedRoleDefinition?.goal ?? null,
+    assignedRoleBackstory: assignedRoleDefinition?.backstory ?? null,
+    operatorGuidance
+  });
+}
+
 function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectChatMessageSummary | null {
   if (log.kind !== "message") {
     return null;
@@ -2107,7 +2142,8 @@ function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectCha
 
 async function submitTaskToExecutor(
   project: ProjectWithRelations,
-  task: ProjectWithRelations["missions"][number]["tasks"][number]
+  task: ProjectWithRelations["missions"][number]["tasks"][number],
+  stageBrief: TaskStageBriefResult
 ): Promise<ExecutorJobRecord> {
   const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
   const assignedRoleModel = assignedRoleDefinition?.model?.trim() || recommendedRoleModel(assignedRoleDefinition?.roleKey ?? (task.agentRole as ProjectRoleKey)) || null;
@@ -2121,8 +2157,8 @@ async function submitTaskToExecutor(
       repo_path: project.localPath,
       base_branch: project.defaultBranch,
       task_title: task.title,
-      task_description: task.description,
-      acceptance_criteria: normalizeAcceptanceCriteria(task.acceptanceCriteria),
+      task_description: stageBrief.instructions,
+      acceptance_criteria: stageBrief.successSignals,
       task_id: task.id,
       project_id: project.id,
       mission_id: task.missionId,
@@ -2139,6 +2175,13 @@ async function submitTaskToExecutor(
         assigned_role_definition_id: assignedRoleDefinition?.id ?? null,
         assigned_role_definition_label: assignedRoleDefinition?.label ?? null,
         assigned_role_definition_model: assignedRoleModel,
+        stage_brief: {
+          instructions: stageBrief.instructions,
+          working_summary: stageBrief.workingSummary,
+          handoff_target_role: stageBrief.handoffTargetRole,
+          success_signals: stageBrief.successSignals,
+          source: stageBrief.source
+        },
         operator_guidance: operatorGuidance.map((entry) => ({
           id: entry.id,
           actor: entry.actor,
@@ -2229,7 +2272,8 @@ async function persistDispatchedJob(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number],
   executorJob: ExecutorJobRecord,
-  attempts: number
+  attempts: number,
+  stageBrief: TaskStageBriefResult
 ): Promise<ProjectJobSummary> {
   const jobStatus = mapExecutorJobStatus(executorJob.status);
   const taskStatus = taskStatusFromJobStatus(jobStatus, attempts, task.agentRole);
@@ -2301,6 +2345,9 @@ async function persistDispatchedJob(
       jobStatus,
       branchName: executorJob.branch_name,
       attempts,
+      stageBriefSource: stageBrief.source,
+      stageBriefWorkingSummary: stageBrief.workingSummary,
+      stageBriefHandoffTargetRole: stageBrief.handoffTargetRole,
       ...guidanceLogDetail(operatorGuidance),
       assignedRoleDefinitionId: createdJobWithAssignment.assignedRoleDefinitionId ?? null,
       assignedRoleDefinitionLabel: createdJobWithAssignment.assignedRoleDefinitionLabel ?? null,
@@ -2315,7 +2362,7 @@ async function persistDispatchedJob(
     jobId: createdJob.id,
     actor: assignedRoleDefinition?.label ?? task.agentRole,
     mode: "working",
-    summary: `Working on "${task.title}" in ${executorJob.branch_name}. Staying within the spec and acceptance criteria.`,
+    summary: `${stageBrief.workingSummary} Branch: ${executorJob.branch_name}.`,
     mentions: []
   });
 
@@ -2729,8 +2776,11 @@ async function dispatchTaskFromProject(
   });
 
   try {
-    const executorJob = await submitTaskToExecutor(project, task);
-    const job = await persistDispatchedJob(project, task, executorJob, attempts);
+    const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
+    const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentActionableGuidance(project.id, 8)).slice(0, 4);
+    const stageBrief = await buildTaskStageBrief(project, task, assignedRoleDefinition, operatorGuidance);
+    const executorJob = await submitTaskToExecutor(project, task, stageBrief);
+    const job = await persistDispatchedJob(project, task, executorJob, attempts, stageBrief);
     const hydratedProject = await loadProjectById(project.id);
     if (!hydratedProject) {
       throw new ProjectDispatchError("project_not_found", "Project not found after dispatch", 404);
