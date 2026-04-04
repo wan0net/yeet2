@@ -187,17 +187,34 @@ Task outputs expand beyond code diffs:
 
 Operators need a frictionless way to define custom pipelines without editing config files or understanding the internals.
 
-**Approach 1: Visual builder in the Control UI**
+**Approach 1: Visual flow editor (n8n / NiFi style)**
 
-A drag-and-drop pipeline editor on the project creation page:
-1. Start from a template or blank
-2. Add roles by clicking "Add stage" → name it, describe what it does
-3. Drag to reorder
-4. Set adapter per role (passthrough by default)
-5. Set model per role (recommended defaults based on role type)
-6. Save → creates the project with that pipeline
+A node-based canvas editor where operators build pipelines visually:
 
-The builder stores the pipeline as a list of `ProjectRoleDefinition` records — the same data model already used. No new schema needed.
+1. **Canvas**: drag stage nodes onto a 2D canvas
+2. **Nodes**: each node represents a role/stage — click to configure name, goal, adapter, model, character
+3. **Edges**: connect nodes with directional arrows to define the flow order
+4. **Branching**: support conditional paths (e.g., if QA fails → loop back to Coder, if passes → proceed to Reviewer)
+5. **Templates**: start from a pre-built template or blank canvas
+6. **Groups**: cluster related stages visually (e.g., "Implementation" group containing Tester + Coder)
+7. **Live preview**: as nodes are placed, the pipeline diagram updates in real-time
+
+Each node opens a config panel:
+- **Name**: "Writer", "Fact Checker", etc.
+- **Goal**: one-line description of what this stage does
+- **Adapter**: dropdown (passthrough, document, openhands, research, shell)
+- **Model**: dropdown populated from OpenRouter catalog with pricing
+- **Character**: auto-assigned from theme or manually set
+- **Acceptance criteria**: what "done" means for this stage
+
+The canvas serialises to the same `ProjectRoleDefinition` records used internally — the visual builder is a UI over the existing data model, not a separate system.
+
+Implementation options:
+- **Svelte Flow** (svelteflow.dev) — Svelte-native node editor, built for exactly this
+- **Xyflow/React Flow** adapted for Svelte — well-established, large ecosystem
+- **Custom canvas** — more work but fully aligned with yeet2's design system
+
+The editor stores the pipeline as a list of `ProjectRoleDefinition` records. No new schema needed for the linear case. For branching/conditional flows, add an optional `edges` JSON field on the project.
 
 **Approach 2: Chat-driven pipeline design**
 
