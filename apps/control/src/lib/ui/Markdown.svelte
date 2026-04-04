@@ -6,12 +6,20 @@
   const renderer = new marked.Renderer();
   const options = { async: false as const, renderer };
 
+  function ensureNewlines(text: string): string {
+    return text
+      .replace(/ (#{1,6} )/g, "\n\n$1")
+      .replace(/ (- )/g, "\n$1")
+      .replace(/ (\d+\. )/g, "\n$1");
+  }
+
   const rendered = $derived((() => {
     if (!content) return "";
     try {
+      const normalized = inline ? content : ensureNewlines(content);
       return inline
-        ? (marked.parseInline(content, options) as string)
-        : (marked.parse(content, options) as string);
+        ? (marked.parseInline(normalized, options) as string)
+        : (marked.parse(normalized, options) as string);
     } catch {
       return content;
     }
