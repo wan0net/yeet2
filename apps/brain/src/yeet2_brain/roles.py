@@ -71,11 +71,11 @@ _ROLE_MODEL_ENV_NAMES = {
 }
 
 _ROLE_MODEL_DEFAULTS = {
-    "planner": "openrouter/anthropic/claude-sonnet-4-5",
-    "architect": "openrouter/anthropic/claude-sonnet-4-5",
-    "implementer": "openrouter/anthropic/claude-sonnet-4-5",
+    "planner": "openrouter/anthropic/claude-sonnet-4.6",
+    "architect": "openrouter/anthropic/claude-sonnet-4.6",
+    "implementer": "openrouter/openai/gpt-5.1-codex-mini",
     "qa": "openrouter/openai/gpt-4.1-mini",
-    "reviewer": "openrouter/anthropic/claude-sonnet-4-5",
+    "reviewer": "openrouter/anthropic/claude-sonnet-4.6",
     "visual": "openrouter/google/gemini-2.5-pro-preview",
 }
 

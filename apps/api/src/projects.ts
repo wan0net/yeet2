@@ -31,6 +31,7 @@ import type {
   ProjectPullRequestMode,
   ProjectRoleKey
 } from "@yeet2/domain";
+import { RECOMMENDED_ROLE_MODELS } from "@yeet2/domain";
 
 import { prisma } from "./db";
 import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
@@ -630,14 +631,6 @@ const PROJECT_ROLE_DEFAULTS: Array<Omit<ProjectRoleDefinitionInput, "sortOrder">
   }
 ];
 
-const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
-  planner: "openrouter/anthropic/claude-sonnet-4-5",
-  architect: "openrouter/anthropic/claude-sonnet-4-5",
-  implementer: "openrouter/anthropic/claude-sonnet-4-5",
-  qa: "openrouter/openai/gpt-4.1-mini",
-  reviewer: "openrouter/anthropic/claude-sonnet-4-5",
-  visual: "openrouter/google/gemini-2.5-pro-preview"
-};
 
 function recommendedRoleModel(roleKey: ProjectRoleKey): string | null {
   const envName = `YEET2_ROLE_MODEL_DEFAULT_${roleKey.toUpperCase()}`;

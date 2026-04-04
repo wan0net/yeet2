@@ -109,14 +109,8 @@ export interface ProjectRoleDefinition {
   backstory: string;
 }
 
-const RECOMMENDED_ROLE_MODELS: Record<string, string> = {
-  planner: "openrouter/anthropic/claude-sonnet-4-5",
-  architect: "openrouter/anthropic/claude-sonnet-4-5",
-  implementer: "openrouter/anthropic/claude-sonnet-4-5",
-  qa: "openrouter/openai/gpt-4.1-mini",
-  reviewer: "openrouter/anthropic/claude-sonnet-4-5",
-  visual: "openrouter/google/gemini-2.5-pro-preview"
-};
+import { RECOMMENDED_ROLE_MODELS as _ROLE_MODELS } from "@yeet2/domain";
+const RECOMMENDED_ROLE_MODELS: Record<string, string> = _ROLE_MODELS;
 
 export function recommendedRoleModel(roleKey: string): string | null {
   return RECOMMENDED_ROLE_MODELS[roleKey.trim().toLowerCase()] ?? null;

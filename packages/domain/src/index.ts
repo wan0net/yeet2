@@ -30,6 +30,15 @@ export type WorkerHealthState = "healthy" | "stale" | "expired_lease" | "offline
 export type PlanningProvenance = "crewai" | "brain" | "fallback";
 export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge" | "autonomy" | "approval" | "message" | "verdict" | "workflow";
 
+export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
+  planner: "openrouter/anthropic/claude-sonnet-4.6",
+  architect: "openrouter/anthropic/claude-sonnet-4.6",
+  implementer: "openrouter/openai/gpt-5.1-codex-mini",
+  qa: "openrouter/openai/gpt-4.1-mini",
+  reviewer: "openrouter/anthropic/claude-sonnet-4.6",
+  visual: "openrouter/google/gemini-2.5-pro-preview"
+};
+
 export interface OperatorGuidanceSummary {
   id: string;
   actor: string;
