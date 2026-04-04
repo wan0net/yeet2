@@ -343,6 +343,17 @@ label {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }
 
+.queue-meta {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle);
+}
+
 .stack {
   display: grid;
   gap: 12px;

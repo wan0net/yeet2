@@ -8,8 +8,19 @@
     <span class="eyebrow">Approvals</span>
     <div>
       <h1>Approvals</h1>
-      <p>Review human-gated approvals that were raised as blockers.</p>
+      <p>Review the human decisions currently holding work at the gate.</p>
     </div>
+  </div>
+</section>
+
+<section class="metrics">
+  <div class="metric">
+    <div class="metric-kicker">Waiting now</div>
+    <div class="metric-value">{data.approvals.filter((approval) => approval.blockerStatus === "open").length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Total tracked</div>
+    <div class="metric-value">{data.approvals.length}</div>
   </div>
 </section>
 
@@ -26,6 +37,7 @@
               <div class="stack">
                 <div class="token-row">
                   <span class="pill {approval.blockerStatus === 'open' ? 'warn' : 'success'}">{approval.blockerStatus}</span>
+                  <span class="pill">{approval.taskAgentRole}</span>
                 </div>
                 <div>
                   <h2>{approval.blockerTitle}</h2>
@@ -33,6 +45,16 @@
                 </div>
               </div>
               <a class="btn secondary" href={`/projects/${approval.projectId}`}>Open project</a>
+            </div>
+            <div class="queue-meta">
+              <div>
+                <div class="metric-kicker">Mission</div>
+                <div>{approval.missionTitle}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Recommendation</div>
+                <div>{approval.blockerRecommendation || "No recommendation recorded."}</div>
+              </div>
             </div>
             <p>{approval.blockerContext}</p>
           </article>

@@ -8,8 +8,19 @@
     <span class="eyebrow">Blocker queue</span>
     <div>
       <h1>Blockers</h1>
-      <p>Review blockers across attached projects with open items at the top.</p>
+      <p>See where work is stuck and jump straight into the project that needs help.</p>
     </div>
+  </div>
+</section>
+
+<section class="metrics">
+  <div class="metric">
+    <div class="metric-kicker">Open now</div>
+    <div class="metric-value">{data.blockers.filter((entry) => entry.blocker.status === "open").length}</div>
+  </div>
+  <div class="metric">
+    <div class="metric-kicker">Tracked blockers</div>
+    <div class="metric-value">{data.blockers.length}</div>
   </div>
 </section>
 
@@ -31,6 +42,17 @@
                   <h2>{entry.blocker.title}</h2>
                   <p>{entry.projectName} · {entry.taskTitle}</p>
                 </div>
+              </div>
+              <a class="btn secondary" href={`/projects/${entry.projectId}`}>Open project</a>
+            </div>
+            <div class="queue-meta">
+              <div>
+                <div class="metric-kicker">Task</div>
+                <div>{entry.taskTitle}</div>
+              </div>
+              <div>
+                <div class="metric-kicker">Recommendation</div>
+                <div>{entry.blocker.recommendation || "No recommendation recorded."}</div>
               </div>
             </div>
             <p>{entry.blocker.context}</p>
