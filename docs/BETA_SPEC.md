@@ -94,6 +94,169 @@ New functions in `github.ts`:
 - Settings: per-project toggle for GitHub sync
 - Decision logs: record when issues are created/moved/closed
 
+## Generic Pipeline Platform
+
+### Concept
+
+yeet2's alpha is software-focused, but the core architecture (ordered roles → tasks → dispatch → execute → review) is domain-agnostic. The beta opens this up: any team workflow can be modelled as a pipeline of specialist roles operating on a shared repository of artifacts.
+
+The software development pipeline is just one template. The same engine supports content production, solution architecture, research, compliance review, and any other multi-stage knowledge work.
+
+### Execution Adapters
+
+The executor becomes pluggable. Each project selects an adapter (or multiple adapters, one per role):
+
+| Adapter | Use Case | What It Does |
+|---|---|---|
+| `openhands` | Software dev | Git worktrees, code changes, PRs (current default) |
+| `document` | Content/docs | Read/write markdown and document files in a repo |
+| `research` | Research/analysis | Web search, summarise, produce structured reports |
+| `canvas` | Design | Generate/modify images and mockups via API integrations |
+| `shell` | Ops/infra | Run commands, scripts, deployment pipelines |
+| `passthrough` | Generic | Sends the stage brief to the LLM, stores the response as the artifact. No git, no files — pure text in, text out. |
+
+The `passthrough` adapter is the universal fallback. It works for any workflow where the output is a document, decision, analysis, or recommendation. It unlocks non-code use cases with zero additional infrastructure.
+
+Adapter selection is per-project or per-role. A solution architecture project might use `document` for the architect (produces ADRs) and `passthrough` for the reviewer (produces a review verdict).
+
+### Pipeline Templates
+
+Pre-built role sets for common workflows. The operator picks a template at project creation, or builds a custom pipeline:
+
+**Software Development** (current default):
+- Architect → Implementer → Tester → Coder → QA → Reviewer
+
+**Content Development:**
+- Researcher → Writer → Editor → Fact Checker → Publisher
+- *Use case: blog posts, documentation, knowledge bases, technical writing*
+
+**Solution Architecture:**
+- Discovery → Solution Architect → Technical Writer → Reviewer → Approver
+- *Use case: ADRs, system designs, API contracts, infrastructure specs, RFCs*
+- *Outputs: architecture decision records, mermaid diagrams, OpenAPI specs, terraform plans*
+
+**Marketing:**
+- Strategist → Copywriter → Designer → Reviewer → Publisher
+- *Use case: campaigns, landing pages, email sequences, social content*
+
+**Legal / Compliance:**
+- Analyst → Drafter → Reviewer → Compliance Officer → Approver
+- *Use case: policy documents, contract review, regulatory filings*
+
+**Data Analysis:**
+- Collector → Analyst → Visualiser → Narrator → Reviewer
+- *Use case: reports, dashboards, data stories, quarterly reviews*
+
+**Product:**
+- PM → Designer → Engineer → QA → Reviewer
+- *Use case: feature specs, wireframes, prototypes, acceptance criteria*
+
+**Research:**
+- Question Framer → Investigator → Synthesiser → Critic → Publisher
+- *Use case: literature reviews, competitive analysis, due diligence*
+
+### Constitution Generalisation
+
+The "constitution" concept (project-level source of truth documents) generalises naturally:
+
+| Software | Generic | Purpose |
+|---|---|---|
+| VISION.md | PROJECT_BRIEF.md | What are we building and why |
+| SPEC.md | REQUIREMENTS.md | What specifically needs to be produced |
+| ROADMAP.md | MILESTONES.md | What order to tackle things |
+| ARCHITECTURE.md | STANDARDS.md | How work should be structured |
+| QUALITY_BAR.md | QUALITY_BAR.md | What "done" looks like |
+| DECISIONS.md | DECISIONS.md | Log of key choices made |
+
+The system accepts any of the original or generic filenames. The interview adapts its questions based on the selected pipeline template.
+
+### Artifact Types
+
+Task outputs expand beyond code diffs:
+
+| Type | Description | Storage |
+|---|---|---|
+| `code` | Source code changes in a git branch (current) | Git worktree + PR |
+| `document` | Markdown/text document | Committed to repo |
+| `report` | Structured analysis or summary | Stored as job artifact |
+| `decision` | ADR or approval record | Committed to repo |
+| `diagram` | Mermaid, PlantUML, or image | Committed to repo |
+| `review` | Verdict / feedback on prior work | Stored as decision log |
+
+### Pipeline Builder
+
+Operators need a frictionless way to define custom pipelines without editing config files or understanding the internals.
+
+**Approach 1: Visual builder in the Control UI**
+
+A drag-and-drop pipeline editor on the project creation page:
+1. Start from a template or blank
+2. Add roles by clicking "Add stage" → name it, describe what it does
+3. Drag to reorder
+4. Set adapter per role (passthrough by default)
+5. Set model per role (recommended defaults based on role type)
+6. Save → creates the project with that pipeline
+
+The builder stores the pipeline as a list of `ProjectRoleDefinition` records — the same data model already used. No new schema needed.
+
+**Approach 2: Chat-driven pipeline design**
+
+Extend the constitution interview to also design the pipeline:
+- "What kind of work is this project about?" → suggests a template
+- "Who should be involved?" → maps answers to roles
+- "What order should work flow through?" → sets sort order
+- Generates both the constitution AND the role definitions
+
+This is the most natural UX — the operator describes what they want, and the system figures out the pipeline. The visual builder serves as the editing surface after the initial interview creates the pipeline.
+
+**Approach 3: YAML/JSON pipeline file**
+
+A `pipeline.yml` in the repo (alongside the constitution):
+```yaml
+# pipeline.yml
+stages:
+  - role: researcher
+    adapter: research
+    model: openrouter/anthropic/claude-sonnet-4.6
+    goal: "Find and summarise relevant sources"
+
+  - role: writer
+    adapter: document
+    model: openrouter/anthropic/claude-opus-4.6
+    goal: "Produce a first draft from the research"
+
+  - role: editor
+    adapter: passthrough
+    goal: "Review for clarity, accuracy, and tone"
+
+  - role: fact-checker
+    adapter: research
+    model: openrouter/openai/gpt-5.4
+    goal: "Verify all claims against primary sources"
+
+  - role: publisher
+    adapter: document
+    goal: "Format and commit the final version"
+```
+
+The system reads this file during constitution inspection, same as VISION.md / SPEC.md. Operators who prefer config-as-code get it; UI users never need to touch it.
+
+**Recommendation**: Build all three. The interview creates the initial pipeline, the visual builder edits it, and `pipeline.yml` is the export/import format. The interview is the primary onboarding path.
+
+### Database Changes
+
+- `Project.pipelineTemplate`: string — which template was used
+- `Project.executorAdapter`: string — default adapter for the project
+- `ProjectRoleDefinition.executorAdapter`: string | null — per-role adapter override
+- `Job.artifactType`: string — what kind of output this job produced
+
+### UI Changes
+
+- Project registration: template picker (software, content, architecture, custom...)
+- Project detail: show pipeline as a visual stage diagram
+- Role editor: set adapter per role
+- Job detail: render artifacts by type (code diff, markdown preview, diagram render)
+
 ## Other Beta Features
 
 ### Custom Roles
