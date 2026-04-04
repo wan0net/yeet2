@@ -339,6 +339,10 @@ label {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
 .stack {
   display: grid;
   gap: 12px;
