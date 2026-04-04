@@ -118,3 +118,13 @@ Projects may configure role definitions and per-role model selection, but the ab
 - OpenHands is the first coding execution backend behind a yeet2-owned adapter
 - GitHub is the primary artifact and collaboration ledger
 - Nomad is the intended long-term distributed execution substrate
+
+## Supporting Reference Docs
+
+Use these companion docs for the fuller system picture:
+
+- [ARCHITECTURE.md](/Users/icd/Workspace/nas/yeet2/docs/ARCHITECTURE.md)
+- [DATA_FLOWS.md](/Users/icd/Workspace/nas/yeet2/docs/DATA_FLOWS.md)
+- [OPERATIONS.md](/Users/icd/Workspace/nas/yeet2/docs/OPERATIONS.md)
+- [DEVELOPMENT.md](/Users/icd/Workspace/nas/yeet2/docs/DEVELOPMENT.md)
+- [CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)

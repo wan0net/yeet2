@@ -18,6 +18,24 @@ This repo is intended to grow into a monorepo with these major areas:
 - `infra/docker` and `infra/nomad` for local and future execution infrastructure
 - `docs` for product and implementation decisions
 
+## Documentation Map
+
+Core docs:
+
+- [docs/VISION.md](/Users/icd/Workspace/nas/yeet2/docs/VISION.md)
+- [docs/SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/SPEC.md)
+- [docs/ROADMAP.md](/Users/icd/Workspace/nas/yeet2/docs/ROADMAP.md)
+- [docs/PRODUCT_SPEC.md](/Users/icd/Workspace/nas/yeet2/docs/PRODUCT_SPEC.md)
+
+System reference docs:
+
+- [docs/ARCHITECTURE.md](/Users/icd/Workspace/nas/yeet2/docs/ARCHITECTURE.md)
+- [docs/DATA_FLOWS.md](/Users/icd/Workspace/nas/yeet2/docs/DATA_FLOWS.md)
+- [docs/OPERATIONS.md](/Users/icd/Workspace/nas/yeet2/docs/OPERATIONS.md)
+- [docs/DEVELOPMENT.md](/Users/icd/Workspace/nas/yeet2/docs/DEVELOPMENT.md)
+- [docs/CI_CD.md](/Users/icd/Workspace/nas/yeet2/docs/CI_CD.md)
+- [docs/DECISIONS.md](/Users/icd/Workspace/nas/yeet2/docs/DECISIONS.md)
+
 ## Local Development
 
 1. Copy `.env.example` to `.env` and fill in local values.
