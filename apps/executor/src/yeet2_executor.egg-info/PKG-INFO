@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: yeet2-executor
+Version: 0.1.0
+Summary: yeet2 Executor service skeleton
+Requires-Python: >=3.11
+Requires-Dist: langfuse>=2.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"

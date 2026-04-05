@@ -45,6 +45,12 @@ jobs:
       - name: Run API unit tests
         run: pnpm --filter @yeet2/api exec vitest run
 
+      - name: Run domain tests
+        run: pnpm --filter @yeet2/domain exec vitest run
+
+      - name: Run control lib tests
+        run: pnpm --filter @yeet2/control exec vitest run
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

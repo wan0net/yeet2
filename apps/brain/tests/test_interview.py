@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -10,8 +12,11 @@ from yeet2_brain.interview import (
     INTERVIEW_QUESTIONS,
     InterviewResult,
     _count_answered,
+    _get_active_questions,
     _is_system_message,
+    _make_openai_client,
     _message_content,
+    _suggest_template,
     _template_synthesis,
     interview_step,
     serialize_interview_result,
@@ -297,3 +302,146 @@ def test_serialize_interview_result_synthesize_has_no_question():
     serialized = serialize_interview_result(result)
     assert "question" not in serialized
     assert "interviewStep" not in serialized
+
+
+def test_serialize_interview_result_suggested_template_included():
+    """Synthesize result includes suggestedTemplate when set."""
+    result = InterviewResult(
+        action="synthesize",
+        total_steps=6,
+        files={"vision": "v", "spec": "s", "roadmap": "r"},
+        suggested_template="software",
+    )
+    serialized = serialize_interview_result(result)
+    assert serialized.get("suggestedTemplate") == "software"
+
+
+def test_serialize_interview_result_no_suggested_template_when_absent():
+    """Synthesize result omits suggestedTemplate when not set."""
+    result = InterviewResult(
+        action="synthesize",
+        total_steps=5,
+        files={"vision": "", "spec": "", "roadmap": ""},
+    )
+    serialized = serialize_interview_result(result)
+    assert "suggestedTemplate" not in serialized
+
+
+# ---------------------------------------------------------------------------
+# _make_openai_client
+# ---------------------------------------------------------------------------
+
+
+def test_make_openai_client_uses_langfuse_when_keys_present(monkeypatch):
+    """When LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are set and langfuse
+    is importable, the returned client comes from langfuse.openai."""
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+
+    fake_client = MagicMock(name="LangfuseOpenAI-instance")
+    fake_langfuse_openai = MagicMock()
+    fake_langfuse_openai.OpenAI.return_value = fake_client
+
+    with patch.dict(sys.modules, {"langfuse": MagicMock(), "langfuse.openai": fake_langfuse_openai}):
+        client = _make_openai_client("key", "https://openrouter.ai/api/v1")
+
+    assert client is fake_client
+    fake_langfuse_openai.OpenAI.assert_called_once_with(
+        api_key="key", base_url="https://openrouter.ai/api/v1"
+    )
+
+
+def test_make_openai_client_uses_plain_openai_when_no_langfuse_keys(monkeypatch):
+    """When LANGFUSE keys are absent, openai.OpenAI is used directly."""
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+
+    fake_client = MagicMock(name="openai-plain")
+    fake_openai = MagicMock()
+    fake_openai.OpenAI.return_value = fake_client
+
+    with patch.dict(sys.modules, {"openai": fake_openai}):
+        client = _make_openai_client("mykey", "https://example.com")
+
+    assert client is fake_client
+    fake_openai.OpenAI.assert_called_once_with(api_key="mykey", base_url="https://example.com")
+
+
+# ---------------------------------------------------------------------------
+# _get_active_questions
+# ---------------------------------------------------------------------------
+
+
+def test_get_active_questions_no_rerun_returns_all():
+    """Without rerun flag, all questions are returned regardless of existing_files."""
+    result = _get_active_questions(["vision", "spec", "roadmap"], rerun=False)
+    assert result == INTERVIEW_QUESTIONS
+
+
+def test_get_active_questions_rerun_skips_completed_targets():
+    """With rerun=True, questions whose targets all exist are skipped.
+    The template question is never skipped."""
+    # vision, spec, and roadmap all exist
+    existing = ["vision", "spec", "roadmap", "architecture"]
+    result = _get_active_questions(existing, rerun=True)
+    # template question (step 0) must always be present
+    steps = [q["step"] for q in result]
+    assert 0 in steps
+    # steps 1 (vision only) and 3 (spec only) should be skipped
+    assert 1 not in steps
+    assert 3 not in steps
+
+
+def test_get_active_questions_rerun_keeps_partial_targets():
+    """With rerun=True, a question whose target is multi-file is kept
+    if at least one target is missing."""
+    # "vision+spec" question (step 2) — only vision exists, spec missing
+    existing = ["vision"]
+    result = _get_active_questions(existing, rerun=True)
+    steps = [q["step"] for q in result]
+    assert 2 in steps
+
+
+def test_get_active_questions_rerun_empty_existing_returns_all():
+    """With rerun=True but no existing files, all questions are returned."""
+    result = _get_active_questions([], rerun=True)
+    assert len(result) == len(INTERVIEW_QUESTIONS)
+
+
+# ---------------------------------------------------------------------------
+# _suggest_template
+# ---------------------------------------------------------------------------
+
+
+def test_suggest_template_none_input_returns_software():
+    """None input defaults to 'software'."""
+    assert _suggest_template(None) == "software"
+
+
+def test_suggest_template_keyword_match_content():
+    """A writing/content answer returns 'content'."""
+    with patch("yeet2_brain.interview._llm_suggest_template", return_value=None):
+        result = _suggest_template("We are writing blog articles and editorial copy")
+    assert result == "content"
+
+
+def test_suggest_template_keyword_match_research():
+    """A research-oriented answer returns 'research'."""
+    with patch("yeet2_brain.interview._llm_suggest_template", return_value=None):
+        result = _suggest_template("An academic investigation and study of survey data")
+    assert result == "research"
+
+
+def test_suggest_template_unknown_answer_returns_custom():
+    """An answer with no matching keywords returns 'custom'."""
+    with patch("yeet2_brain.interview._llm_suggest_template", return_value=None):
+        # No substring of any keyword list appears here
+        result = _suggest_template("frobnicator blorptastic zzmrph 99999")
+    assert result == "custom"
+
+
+def test_suggest_template_llm_result_takes_precedence():
+    """When the LLM returns a valid template key it overrides keyword matching."""
+    with patch("yeet2_brain.interview._llm_suggest_template", return_value="legal"):
+        result = _suggest_template("marketing campaign social media")
+    assert result == "legal"

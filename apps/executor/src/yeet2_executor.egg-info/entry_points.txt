@@ -1,0 +1,2 @@
+[console_scripts]
+yeet2-executor = yeet2_executor.main:main

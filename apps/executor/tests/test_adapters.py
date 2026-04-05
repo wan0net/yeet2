@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +15,7 @@ from yeet2_executor.adapters import (
     _build_task_file,
     _filter_allowed_domains,
     _is_dangerous_allowed_host,
+    _make_openai_client,
     _mandatory_deny_read_paths,
     _slugify,
     _summarize_jsonl_output,
@@ -447,3 +449,143 @@ def test_cleanup_worktree_never_policy(tmp_path, monkeypatch):
     with patch("yeet2_executor.adapters._run_git") as mock_git:
         adapter._cleanup_worktree(record, status="complete")
         mock_git.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _summarize_jsonl_output — structured JSON behavior
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_jsonl_output_returns_valid_json(tmp_path):
+    """Return value must always be valid JSON."""
+    log = tmp_path / "log.log"
+    log.write_text("", encoding="utf-8")
+    raw = _summarize_jsonl_output(log, exit_code=0)
+    parsed = json.loads(raw)
+    assert isinstance(parsed, dict)
+
+
+def test_summarize_jsonl_output_build_status_pass_on_zero(tmp_path):
+    """exit_code=0 yields buildStatus='pass'."""
+    log = tmp_path / "log.log"
+    log.write_text("", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    assert artifact["buildStatus"] == "pass"
+
+
+def test_summarize_jsonl_output_build_status_fail_on_nonzero(tmp_path):
+    """exit_code!=0 yields buildStatus='fail'."""
+    log = tmp_path / "log.log"
+    log.write_text("", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=2))
+    assert artifact["buildStatus"] == "fail"
+
+
+def test_summarize_jsonl_output_required_keys(tmp_path):
+    """Artifact always has summary, handoffNote, buildStatus, diffSummary, testOutput."""
+    log = tmp_path / "log.log"
+    log.write_text("", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    for key in ("summary", "handoffNote", "buildStatus", "diffSummary", "testOutput"):
+        assert key in artifact, f"Missing key: {key}"
+
+
+def test_summarize_jsonl_output_diff_summary_lists_written_paths(tmp_path):
+    """Files mentioned in 'path' fields appear in diffSummary."""
+    log = tmp_path / "log.log"
+    lines = [
+        json.dumps({"action": "write", "path": "/repo/src/main.py"}),
+        json.dumps({"action": "write", "path": "/repo/tests/test_main.py"}),
+    ]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    assert "/repo/src/main.py" in artifact["diffSummary"]
+    assert "/repo/tests/test_main.py" in artifact["diffSummary"]
+
+
+def test_summarize_jsonl_output_test_output_parsed_from_pytest_style(tmp_path):
+    """testOutput is populated when pytest-style '5 passed, 2 failed' appears in content."""
+    log = tmp_path / "log.log"
+    event = json.dumps({"action": "run", "content": "===== 5 passed, 2 failed in 1.23s ====="})
+    log.write_text(event + "\n", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=1))
+    assert artifact["testOutput"] is not None
+    assert artifact["testOutput"]["passed"] == 5
+    assert artifact["testOutput"]["failed"] == 2
+    assert artifact["testOutput"]["total"] == 7
+
+
+def test_summarize_jsonl_output_test_output_none_when_no_tests(tmp_path):
+    """testOutput is None when no test result data appears in the log."""
+    log = tmp_path / "log.log"
+    log.write_text(json.dumps({"action": "write", "path": "/f"}) + "\n", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    assert artifact["testOutput"] is None
+
+
+def test_summarize_jsonl_output_malformed_lines_skipped(tmp_path):
+    """Lines that are not valid JSON or are non-dict payloads are silently skipped."""
+    log = tmp_path / "log.log"
+    log.write_text(
+        "not json at all\n"
+        '{"action": "write", "path": "/ok.py"}\n'
+        "{broken json\n",
+        encoding="utf-8",
+    )
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    assert "/ok.py" in artifact["diffSummary"]
+
+
+def test_summarize_jsonl_output_error_in_handoff_note_on_failure(tmp_path):
+    """When an error event is present and exit_code!=0, handoffNote contains the error."""
+    log = tmp_path / "log.log"
+    error_line = json.dumps({"type": "error", "content": "Permission denied"})
+    log.write_text(error_line + "\n", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=1))
+    assert "Permission denied" in artifact["handoffNote"]
+
+
+def test_summarize_jsonl_output_diff_summary_limited_to_ten(tmp_path):
+    """diffSummary is capped at 10 entries even if more paths appear."""
+    log = tmp_path / "log.log"
+    lines = [json.dumps({"action": "write", "path": f"/file{i}.py"}) for i in range(15)]
+    log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    artifact = json.loads(_summarize_jsonl_output(log, exit_code=0))
+    assert len(artifact["diffSummary"]) <= 10
+
+
+# ---------------------------------------------------------------------------
+# _make_openai_client (executor)
+# ---------------------------------------------------------------------------
+
+
+def test_make_openai_client_executor_uses_langfuse_when_keys_present(monkeypatch):
+    """When LANGFUSE keys are set and langfuse.openai is importable, it is used."""
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-exec")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-exec")
+
+    fake_client = MagicMock(name="LangfuseClient")
+    fake_langfuse_openai = MagicMock()
+    fake_langfuse_openai.OpenAI.return_value = fake_client
+
+    with patch.dict(sys.modules, {"langfuse": MagicMock(), "langfuse.openai": fake_langfuse_openai}):
+        client = _make_openai_client("api-key", "https://api.example.com")
+
+    assert client is fake_client
+    fake_langfuse_openai.OpenAI.assert_called_once_with(api_key="api-key", base_url="https://api.example.com")
+
+
+def test_make_openai_client_executor_uses_plain_openai_when_no_keys(monkeypatch):
+    """When LANGFUSE keys are absent, openai.OpenAI is returned directly."""
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+
+    fake_client = MagicMock(name="PlainOpenAI")
+    fake_openai = MagicMock()
+    fake_openai.OpenAI.return_value = fake_client
+
+    with patch.dict(sys.modules, {"openai": fake_openai}):
+        client = _make_openai_client("api-key", "https://api.example.com")
+
+    assert client is fake_client
+    fake_openai.OpenAI.assert_called_once_with(api_key="api-key", base_url="https://api.example.com")
