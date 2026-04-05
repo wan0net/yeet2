@@ -74,7 +74,7 @@
         {#each data.activity as entry}
           {@const project = data.projects.find((p) => p.id === entry.projectId)}
           <div class="audit-row">
-            <span class="audit-ts muted">{formatTimestamp(entry.createdAt) || "—"}</span>
+            <span class="audit-ts muted">{formatTimestamp(entry.createdAt ?? null) || "—"}</span>
             <span class="audit-project">
               {#if project}
                 <a href="/projects/{project.id}">{project.name}</a>
