@@ -7,7 +7,9 @@ name = "yeet2-brain"
 version = "0.1.0"
 description = "yeet2 Brain service skeleton"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "langfuse>=2.0.0",
+]
 
 [project.optional-dependencies]
 crewai = ["crewai"]

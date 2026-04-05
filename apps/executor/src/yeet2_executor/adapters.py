@@ -119,6 +119,20 @@ def _is_dangerous_allowed_host(value: str) -> bool:
     return False
 
 
+def _make_openai_client(api_key: str, base_url: str) -> Any:
+    """Return an OpenAI-compatible client. Uses Langfuse wrapper when configured."""
+    public_key = (os.getenv("LANGFUSE_PUBLIC_KEY") or "").strip()
+    secret_key = (os.getenv("LANGFUSE_SECRET_KEY") or "").strip()
+    if public_key and secret_key:
+        try:
+            from langfuse.openai import OpenAI as LangfuseOpenAI  # noqa: PLC0415
+            return LangfuseOpenAI(api_key=api_key, base_url=base_url)
+        except ImportError:
+            pass
+    import openai  # noqa: PLC0415
+    return openai.OpenAI(api_key=api_key, base_url=base_url)
+
+
 def _mandatory_deny_read_paths() -> list[str]:
     home = Path.home()
     return [
@@ -797,8 +811,7 @@ class PassthroughAdapter:
         _append_log(log_path, f"calling {model} via {base_url}")
 
         try:
-            import openai  # noqa: PLC0415
-            client = openai.OpenAI(api_key=api_key, base_url=base_url)
+            client = _make_openai_client(api_key, base_url)
             response = client.chat.completions.create(
                 model=model,
                 messages=[

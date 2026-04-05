@@ -87,6 +87,10 @@ export const registerSettingsRoutes: FastifyPluginAsync = async (app: FastifyIns
     }
   });
 
+  app.get("/settings/github-oauth-configured", async (_request, reply) => {
+    return reply.code(200).send({ configured: !!process.env.GITHUB_OAUTH_CLIENT_ID });
+  });
+
   app.delete("/settings/github-token", async (_request, reply) => {
     try {
       await deleteSetting("github_token");

@@ -9,7 +9,8 @@ export const actions: Actions = {
       name: String(form.get("name") || "").trim(),
       repoUrl: String(form.get("repo_url") || "").trim() || null,
       defaultBranch: String(form.get("default_branch") || "main").trim() || "main",
-      localPath: String(form.get("local_path") || "").trim() || null
+      localPath: String(form.get("local_path") || "").trim() || null,
+      pipelineTemplate: String(form.get("pipeline_template") || "").trim() || null
     };
 
     let response: { project?: { id?: string } } | null = null;
@@ -22,7 +23,8 @@ export const actions: Actions = {
           name: payload.name,
           repoUrl: payload.repoUrl ?? "",
           defaultBranch: payload.defaultBranch,
-          localPath: payload.localPath ?? ""
+          localPath: payload.localPath ?? "",
+          pipelineTemplate: payload.pipelineTemplate ?? "software"
         }
       });
     }

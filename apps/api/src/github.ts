@@ -512,3 +512,370 @@ export async function createGitHubIssue(input: GitHubIssueInput & { repository: 
     htmlUrl: candidate.html_url
   };
 }
+
+export async function commentOnGitHubIssue(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+}): Promise<void> {
+  const response = await fetch(`https://api.github.com/repos/${input.owner}/${input.repo}/issues/${input.issueNumber}/comments`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({ body: input.body })
+  });
+
+  if (!response.ok) {
+    const rawText = await response.text();
+    let parsed: unknown = null;
+    if (rawText) {
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        throw new Error(`GitHub returned invalid JSON when commenting on issue (${response.status}).`);
+      }
+    }
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new Error(message || `Unable to comment on GitHub issue #${input.issueNumber}.`);
+  }
+}
+
+export async function closeGitHubIssue(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}): Promise<void> {
+  const response = await fetch(`https://api.github.com/repos/${input.owner}/${input.repo}/issues/${input.issueNumber}`, {
+    method: "PATCH",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({ state: "closed" })
+  });
+
+  if (!response.ok) {
+    const rawText = await response.text();
+    let parsed: unknown = null;
+    if (rawText) {
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        throw new Error(`GitHub returned invalid JSON when closing issue (${response.status}).`);
+      }
+    }
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new Error(message || `Unable to close GitHub issue #${input.issueNumber}.`);
+  }
+}
+
+export async function createGitHubTaskIssue(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  title: string;
+  body: string;
+  labels: string[];
+}): Promise<{ number: number; nodeId: string; htmlUrl: string }> {
+  const response = await fetch(`https://api.github.com/repos/${input.owner}/${input.repo}/issues`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    body: JSON.stringify({ title: input.title, body: input.body, labels: input.labels })
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error(`GitHub returned invalid JSON when creating task issue (${response.status}).`);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new Error(message || "Unable to create GitHub task issue.");
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("GitHub returned an empty payload when creating task issue.");
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  if (typeof candidate.number !== "number" || typeof candidate.node_id !== "string" || typeof candidate.html_url !== "string") {
+    throw new Error("GitHub returned an incomplete payload when creating task issue.");
+  }
+
+  return {
+    number: candidate.number,
+    nodeId: candidate.node_id,
+    htmlUrl: candidate.html_url
+  };
+}
+
+export async function ensureGitHubLabels(input: {
+  token: string;
+  owner: string;
+  repo: string;
+  labels: Array<{ name: string; color: string; description?: string }>;
+}): Promise<void> {
+  for (const label of input.labels) {
+    const response = await fetch(`https://api.github.com/repos/${input.owner}/${input.repo}/labels`, {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${input.token}`,
+        "Content-Type": "application/json",
+        "User-Agent": "yeet2",
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      body: JSON.stringify({ name: label.name, color: label.color, description: label.description ?? "" })
+    });
+
+    if (response.status === 422) {
+      // Label already exists — ignore
+      continue;
+    }
+
+    if (!response.ok) {
+      const rawText = await response.text();
+      let parsed: unknown = null;
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          throw new Error(`GitHub returned invalid JSON when ensuring label "${label.name}" (${response.status}).`);
+        }
+      }
+      const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+      throw new Error(message || `Unable to ensure GitHub label "${label.name}".`);
+    }
+  }
+}
+
+async function graphqlRequest(input: { token: string; query: string; variables: Record<string, unknown> }): Promise<Record<string, unknown>> {
+  const response = await fetch("https://api.github.com/graphql", {
+    method: "POST",
+    headers: {
+      Authorization: `bearer ${input.token}`,
+      "Content-Type": "application/json",
+      "User-Agent": "yeet2"
+    },
+    body: JSON.stringify({ query: input.query, variables: input.variables })
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error(`GitHub GraphQL returned invalid JSON (${response.status}).`);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new Error(message || `GitHub GraphQL request failed (${response.status}).`);
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("GitHub GraphQL returned an empty response.");
+  }
+
+  const result = parsed as Record<string, unknown>;
+  if (Array.isArray(result.errors) && result.errors.length > 0) {
+    const firstError = result.errors[0] as Record<string, unknown>;
+    const errorMessage = typeof firstError.message === "string" ? firstError.message : "Unknown GraphQL error";
+    throw new Error(`GitHub GraphQL error: ${errorMessage}`);
+  }
+
+  return result;
+}
+
+export async function createGitHubProjectV2(input: {
+  token: string;
+  ownerId: string;
+  title: string;
+  columnNames: string[];
+}): Promise<{ projectId: string; projectNumber: number; url: string }> {
+  // Step 1: Create the project
+  const createResult = await graphqlRequest({
+    token: input.token,
+    query: `
+      mutation CreateProject($ownerId: ID!, $title: String!) {
+        createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+          projectV2 { id number url }
+        }
+      }
+    `,
+    variables: { ownerId: input.ownerId, title: input.title }
+  });
+
+  const createData = createResult.data as Record<string, unknown>;
+  const projectV2 = (createData.createProjectV2 as Record<string, unknown>).projectV2 as Record<string, unknown>;
+  const projectId = projectV2.id as string;
+  const projectNumber = projectV2.number as number;
+  const url = projectV2.url as string;
+
+  // Step 2: Find the Status field
+  const fieldsResult = await graphqlRequest({
+    token: input.token,
+    query: `
+      query GetProjectFields($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            fields(first: 20) {
+              nodes {
+                ... on ProjectV2SingleSelectField {
+                  id name options { id name }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    variables: { projectId }
+  });
+
+  const nodeData = (fieldsResult.data as Record<string, unknown>).node as Record<string, unknown>;
+  const fields = (nodeData.fields as Record<string, unknown>).nodes as Array<Record<string, unknown>>;
+  const statusField = fields.find((f) => f.name === "Status");
+
+  if (statusField) {
+    const fieldId = statusField.id as string;
+    const existingOptions = (statusField.options as Array<Record<string, unknown>>).map((o) => o.name as string);
+
+    // Step 3: Add missing column options
+    const allOptions = [
+      ...(statusField.options as Array<Record<string, unknown>>).map((o) => ({ id: o.id as string, name: o.name as string, color: "GRAY", description: "" })),
+      ...input.columnNames.filter((name) => !existingOptions.includes(name)).map((name) => ({ name, color: "GRAY", description: "" }))
+    ];
+
+    if (allOptions.length > (statusField.options as Array<unknown>).length) {
+      await graphqlRequest({
+        token: input.token,
+        query: `
+          mutation UpdateStatusField($projectId: ID!, $fieldId: ID!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+            updateProjectV2Field(input: {
+              projectId: $projectId
+              fieldId: $fieldId
+              singleSelectOptions: $options
+            }) {
+              projectV2Field { id }
+            }
+          }
+        `,
+        variables: { projectId, fieldId, options: allOptions }
+      });
+    }
+  }
+
+  return { projectId, projectNumber, url };
+}
+
+export async function addGitHubProjectV2Item(input: {
+  token: string;
+  projectId: string;
+  issueNodeId: string;
+}): Promise<{ itemId: string }> {
+  const result = await graphqlRequest({
+    token: input.token,
+    query: `
+      mutation AddItem($projectId: ID!, $contentId: ID!) {
+        addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+          item { id }
+        }
+      }
+    `,
+    variables: { projectId: input.projectId, contentId: input.issueNodeId }
+  });
+
+  const data = result.data as Record<string, unknown>;
+  const item = (data.addProjectV2ItemById as Record<string, unknown>).item as Record<string, unknown>;
+  return { itemId: item.id as string };
+}
+
+export async function moveGitHubProjectV2Item(input: {
+  token: string;
+  projectId: string;
+  itemId: string;
+  fieldId: string;
+  optionId: string;
+}): Promise<void> {
+  await graphqlRequest({
+    token: input.token,
+    query: `
+      mutation MoveItem($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+        updateProjectV2ItemFieldValue(input: {
+          projectId: $projectId
+          itemId: $itemId
+          fieldId: $fieldId
+          value: { singleSelectOptionId: $optionId }
+        }) {
+          projectV2Item { id }
+        }
+      }
+    `,
+    variables: { projectId: input.projectId, itemId: input.itemId, fieldId: input.fieldId, optionId: input.optionId }
+  });
+}
+
+export async function getGitHubAuthenticatedUserNodeId(input: {
+  token: string;
+}): Promise<{ nodeId: string; login: string }> {
+  const response = await fetch("https://api.github.com/user", {
+    method: "GET",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new Error(`GitHub returned invalid JSON when fetching authenticated user (${response.status}).`);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new Error(message || "Unable to fetch GitHub authenticated user.");
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Error("GitHub returned an empty payload when fetching authenticated user.");
+  }
+
+  const candidate = parsed as Record<string, unknown>;
+  if (typeof candidate.node_id !== "string" || typeof candidate.login !== "string") {
+    throw new Error("GitHub returned an incomplete payload when fetching authenticated user.");
+  }
+
+  return { nodeId: candidate.node_id, login: candidate.login };
+}

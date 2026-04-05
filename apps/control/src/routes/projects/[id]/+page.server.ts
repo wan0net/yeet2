@@ -83,5 +83,55 @@ export const actions: Actions = {
     }
 
     throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+  },
+  toggleGithubSync: async ({ params, request }) => {
+    const form = await request.formData();
+    const enabled = String(form.get("enabled") || "").trim();
+    const returnTab = String(form.get("returnTab") || "").trim();
+
+    try {
+      await putJson(`/projects/${params.id}/github-sync`, { enabled: enabled === "true" });
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to update GitHub sync" });
+    }
+
+    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+  },
+  saveRoles: async ({ params, request }) => {
+    const form = await request.formData();
+    const rolesRaw = String(form.get("roles") || "").trim();
+
+    let roleDefinitions: unknown;
+    try {
+      roleDefinitions = JSON.parse(rolesRaw);
+    } catch {
+      return fail(400, { actionError: "Invalid roles JSON" });
+    }
+
+    try {
+      await putJson(`/projects/${params.id}/roles`, { roleDefinitions });
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to save roles" });
+    }
+
+    throw redirect(303, `/projects/${params.id}?tab=agents`);
+  },
+  steer: async ({ params, request }) => {
+    const form = await request.formData();
+    const jobId = String(form.get("jobId") || "").trim();
+    const steerContent = String(form.get("steerContent") || "").trim();
+    const returnTab = String(form.get("returnTab") || "chat").trim();
+
+    if (!jobId || !steerContent) {
+      return fail(400, { actionError: "Job ID and steering content are required" });
+    }
+
+    try {
+      await postJson(`/projects/${params.id}/jobs/${jobId}/steer`, { content: steerContent });
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to steer job" });
+    }
+
+    throw redirect(303, `/projects/${params.id}?tab=${returnTab}`);
   }
 };

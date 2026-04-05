@@ -16,7 +16,14 @@
     "dev:control": "pnpm --filter @yeet2/control dev",
     "dev:api": "pnpm --filter @yeet2/api dev",
     "dev:brain": "cd apps/brain && PYTHONPATH=src .venv/bin/python -m yeet2_brain",
-    "dev:executor": "cd apps/executor && PYTHONPATH=src python3 -m yeet2_executor"
+    "dev:executor": "cd apps/executor && PYTHONPATH=src python3 -m yeet2_executor",
+    "db:generate": "pnpm --filter @yeet2/db exec prisma generate",
+    "db:migrate": "pnpm --filter @yeet2/db exec prisma migrate dev",
+    "db:migrate:deploy": "pnpm --filter @yeet2/db exec prisma migrate deploy",
+    "db:migrate:status": "pnpm --filter @yeet2/db exec prisma migrate status",
+    "db:push": "pnpm --filter @yeet2/db exec prisma db push",
+    "db:backup": "pg_dump \"$DATABASE_URL\" --no-owner --no-acl -F c -f \"yeet2-backup-$(date +%Y%m%d-%H%M%S).dump\" && echo 'Backup complete'",
+    "db:restore": "pg_restore --no-owner --no-acl -d \"$DATABASE_URL\" \"$npm_config_file\""
   },
   "devDependencies": {
     "vite": "^8.0.3",

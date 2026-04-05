@@ -1,6 +1,8 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
+  import { onDestroy } from "svelte";
   import type { ActionData, PageData } from "./$types";
   import {
     activeMission,
@@ -24,6 +26,33 @@
   const staffOverview = $derived(agentPresenceOverview(project));
   const staff = $derived(staffOverview.roles);
   const nextTask = $derived(project.missions.flatMap((entry) => entry.tasks).find((task) => task.id === project.nextDispatchableTaskId) ?? null);
+  const hasRunningTasks = $derived(
+    project.missions.flatMap((m) => m.tasks).some((t) => t.status === "running")
+  );
+  const runningJobs = $derived(
+    recentJobs(project)
+      .filter((entry) => entry.job.status === "running" || entry.job.status === "queued")
+      .slice(0, 3)
+  );
+
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+  $effect(() => {
+    if (hasRunningTasks) {
+      if (!pollInterval) {
+        pollInterval = setInterval(() => { invalidateAll(); }, 5000);
+      }
+    } else {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+    }
+  });
+
+  onDestroy(() => {
+    if (pollInterval) clearInterval(pollInterval);
+  });
   const currentTab = $derived((() => {
     const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
     return tab === "agents" || tab === "chat" ? tab : "overview";
@@ -77,6 +106,74 @@
 
   function tabHref(tab: "overview" | "agents" | "chat"): string {
     return tab === "overview" ? `/projects/${project.id}` : `/projects/${project.id}?tab=${tab}`;
+  }
+
+  const ALL_ROLE_KEYS = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer", "visual"] as const;
+  type RoleKey = typeof ALL_ROLE_KEYS[number];
+
+  type EditableRole = {
+    roleKey: RoleKey;
+    visualName: string;
+    goal: string;
+    backstory: string;
+    model: string | null;
+    enabled: boolean;
+    sortOrder: number;
+  };
+
+  let editableRoles = $state<EditableRole[]>(
+    [...project.roleDefinitions]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r, i) => ({
+        roleKey: r.roleKey as RoleKey,
+        visualName: r.visualName,
+        goal: r.goal,
+        backstory: r.backstory,
+        model: r.model ?? null,
+        enabled: r.enabled,
+        sortOrder: i
+      }))
+  );
+
+  let addRoleKey = $state<RoleKey | "">("");
+
+  const usedRoleKeys = $derived(new Set(editableRoles.map((r) => r.roleKey)));
+  const availableRoleKeys = $derived(ALL_ROLE_KEYS.filter((k) => !usedRoleKeys.has(k)));
+
+  function rolesJson(): string {
+    return JSON.stringify(
+      editableRoles.map((r, i) => ({ ...r, sortOrder: i }))
+    );
+  }
+
+  function moveRole(index: number, direction: -1 | 1) {
+    const next = index + direction;
+    if (next < 0 || next >= editableRoles.length) return;
+    const copy = [...editableRoles];
+    [copy[index], copy[next]] = [copy[next], copy[index]];
+    editableRoles = copy;
+  }
+
+  function removeRole(index: number) {
+    editableRoles = editableRoles.filter((_, i) => i !== index);
+  }
+
+  function addRole() {
+    if (!addRoleKey) return;
+    const key = addRoleKey as RoleKey;
+    editableRoles = [
+      ...editableRoles,
+      {
+        roleKey: key,
+        visualName: key.charAt(0).toUpperCase() + key.slice(1),
+        goal: "",
+        backstory: "",
+        model: null,
+        enabled: true,
+        sortOrder: editableRoles.length
+      }
+    ];
+    addRoleKey = "";
   }
 </script>
 
@@ -227,6 +324,25 @@
 </section>
 {/if}
 
+{#if currentTab === "overview" && project.githubRepoOwner}
+<section class="card">
+  <div class="card-header">GitHub sync</div>
+  <div class="card-body stack">
+    <div class="token-row">
+      <span>Status:</span>
+      <span class="pill {project.githubProjectSync ? 'success' : 'muted'}">{project.githubProjectSync ? "enabled" : "disabled"}</span>
+    </div>
+    <form method="POST">
+      <input name="returnTab" type="hidden" value="overview" />
+      <input name="enabled" type="hidden" value={project.githubProjectSync ? "false" : "true"} />
+      <button class={project.githubProjectSync ? "secondary" : ""} formaction="?/toggleGithubSync" type="submit">
+        {project.githubProjectSync ? "Disable sync" : "Enable sync"}
+      </button>
+    </form>
+  </div>
+</section>
+{/if}
+
 {#if currentTab === "overview"}
 <section class="card">
   <div class="card-header">Current mission</div>
@@ -260,7 +376,17 @@
           <div class="pipeline-node {statusClass}">
             <div class="pipeline-role">{task.agentRole}</div>
             <div class="pipeline-title">{task.title}</div>
-            <span class="pill {statusClass}" style="font-size: 0.625rem; margin-top: var(--space-1);">{task.status}</span>
+            <div class="pipeline-status-row">
+              {#if task.status === "complete"}
+                <span class="pipeline-badge success">✓ done</span>
+              {:else if task.status === "running"}
+                <span class="pipeline-badge info">⟳ running</span>
+              {:else if task.status === "blocked" || task.status === "failed"}
+                <span class="pipeline-badge danger">✕ {task.status}</span>
+              {:else}
+                <span class="pipeline-badge">{task.status}</span>
+              {/if}
+            </div>
           </div>
           {#if i < mission.tasks.length - 1}
             <div class="pipeline-arrow">→</div>
@@ -297,6 +423,63 @@
         </div>
       {/each}
     </div>
+  </div>
+</section>
+{/if}
+
+{#if currentTab === "agents"}
+<section class="card">
+  <div class="card-header">Role editor</div>
+  <div class="card-body">
+    <form method="POST" action="?/saveRoles">
+      <input type="hidden" name="roles" value={rolesJson()} />
+      <div class="role-editor-list">
+        {#each editableRoles as role, i}
+          <div class="role-editor-row">
+            <span class="pill muted role-key-tag">{role.roleKey}</span>
+            <input
+              class="role-input"
+              type="text"
+              placeholder="Display name"
+              bind:value={role.visualName}
+            />
+            <input
+              class="role-input role-input--wide"
+              type="text"
+              placeholder="Goal"
+              bind:value={role.goal}
+            />
+            <input
+              class="role-input"
+              type="text"
+              placeholder={project.roleDefinitions.find((r) => r.roleKey === role.roleKey)?.recommendedModel || "Default model"}
+              bind:value={role.model}
+            />
+            <label class="role-toggle" title="Enabled">
+              <input type="checkbox" bind:checked={role.enabled} />
+              <span class="muted" style="font-size: 0.75rem;">{role.enabled ? "On" : "Off"}</span>
+            </label>
+            <div class="role-actions">
+              <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, -1)} disabled={i === 0} title="Move up">▲</button>
+              <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, 1)} disabled={i === editableRoles.length - 1} title="Move down">▼</button>
+              <button type="button" class="btn secondary role-btn role-btn--remove" onclick={() => removeRole(i)} title="Remove">×</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+      <div class="role-editor-footer">
+        <div class="token-row">
+          <select class="role-select" bind:value={addRoleKey} disabled={availableRoleKeys.length === 0}>
+            <option value="">Add role...</option>
+            {#each availableRoleKeys as key}
+              <option value={key}>{key}</option>
+            {/each}
+          </select>
+          <button type="button" class="btn secondary" onclick={addRole} disabled={!addRoleKey}>Add</button>
+        </div>
+        <button type="submit" class="btn">Save roles</button>
+      </div>
+    </form>
   </div>
 </section>
 {/if}
@@ -386,6 +569,11 @@
         <input name="returnTab" type="hidden" value="chat" />
         <button class="btn primary" formaction="?/interview" type="submit">Start project interview</button>
       </form>
+    {:else if project.constitutionStatus === "parsed" || project.constitutionStatus === "stale"}
+      <form method="POST" style="margin-left: auto;">
+        <input name="returnTab" type="hidden" value="chat" />
+        <button class="btn secondary" formaction="?/interview" type="submit">Update constitution</button>
+      </form>
     {/if}
   </div>
 
@@ -418,13 +606,29 @@
   </div>
 
   <div class="chatroom-input">
+    {#if runningJobs.length > 0}
+      <div class="steer-bar">
+        <span class="steer-label">Steer running agent:</span>
+        {#each runningJobs as entry}
+          <form method="POST" class="steer-form" use:enhance={() => {
+            return async ({ update }) => { await update(); };
+          }}>
+            <input name="returnTab" type="hidden" value="chat" />
+            <input name="jobId" type="hidden" value={entry.job.id} />
+            <input class="steer-input" type="text" name="steerContent" placeholder="Redirect this agent..." />
+            <button class="btn secondary steer-btn" formaction="?/steer" type="submit">→ {entry.job.id.slice(0, 6)}</button>
+          </form>
+        {/each}
+      </div>
+    {/if}
     <form method="POST" class="chatroom-form">
       <input name="returnTab" type="hidden" value="chat" />
-      <textarea name="content" class="chatroom-textarea" placeholder="Type a message..." rows="2"></textarea>
+      <textarea name="content" class="chatroom-textarea" placeholder="Type a message... Use @role to address a specific agent." rows="2"></textarea>
       <button class="btn primary" formaction="?/message" type="submit">Send</button>
     </form>
   </div>
 </section>
+{/if}
 
 <style>
   .pipeline {
@@ -454,6 +658,11 @@
   .pipeline-node.info {
     border-color: var(--color-accent, #60a5fa);
     background: color-mix(in srgb, var(--color-accent, #60a5fa) 10%, var(--color-surface-raised, #1a1a1a));
+    animation: pipeline-pulse 2s ease-in-out infinite;
+  }
+  @keyframes pipeline-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent, #60a5fa) 40%, transparent); }
+    50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent, #60a5fa) 0%, transparent); }
   }
   .pipeline-node.danger {
     border-color: var(--color-status-error, #ef4444);
@@ -476,6 +685,20 @@
     color: var(--color-text-secondary, #666);
     font-size: 1.25rem;
   }
+  .pipeline-status-row {
+    margin-top: var(--space-1, 0.25rem);
+  }
+  .pipeline-badge {
+    display: inline-block;
+    font-size: 0.625rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-secondary, #aaa);
+  }
+  .pipeline-badge.success { background: color-mix(in srgb, var(--color-status-success, #22c55e) 15%, transparent); color: var(--color-status-success, #22c55e); }
+  .pipeline-badge.info { background: color-mix(in srgb, var(--color-accent, #60a5fa) 15%, transparent); color: var(--color-accent, #60a5fa); }
+  .pipeline-badge.danger { background: color-mix(in srgb, var(--color-status-error, #ef4444) 15%, transparent); color: var(--color-status-error, #ef4444); }
   .chatroom {
     display: flex;
     flex-direction: column;
@@ -561,5 +784,118 @@
     outline-offset: -1px;
     border-color: transparent;
   }
+  .role-editor-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 0.5rem);
+  }
+  .role-editor-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    flex-wrap: wrap;
+    padding: var(--space-2, 0.5rem);
+    background: var(--color-surface-raised, #1a1a1a);
+    border-radius: var(--radius-md, 0.5rem);
+    border: 1px solid var(--color-border, #333);
+  }
+  .role-key-tag {
+    font-size: 0.6875rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 80px;
+    text-align: center;
+  }
+  .role-input {
+    font-family: inherit;
+    font-size: var(--font-size-sm, 0.8125rem);
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-primary, #eee);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-sm, 0.375rem);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    min-width: 0;
+    width: 140px;
+    flex-shrink: 0;
+  }
+  .role-input--wide {
+    width: 240px;
+  }
+  .role-input:focus {
+    outline: 2px solid var(--color-accent, #60a5fa);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+  .role-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1, 0.25rem);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .role-actions {
+    display: flex;
+    gap: var(--space-1, 0.25rem);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .role-btn {
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    font-size: 0.75rem;
+    line-height: 1;
+  }
+  .role-btn--remove {
+    color: var(--color-status-error, #ef4444);
+  }
+  .role-editor-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--space-3, 0.75rem);
+    flex-wrap: wrap;
+    gap: var(--space-2, 0.5rem);
+  }
+  .role-select {
+    font-family: inherit;
+    font-size: var(--font-size-sm, 0.8125rem);
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-primary, #eee);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-sm, 0.375rem);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  }
+  .steer-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    flex-wrap: wrap;
+    padding: var(--space-2, 0.5rem) 0;
+    border-bottom: 1px solid var(--color-border, #333);
+    margin-bottom: var(--space-2, 0.5rem);
+  }
+  .steer-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary, #888);
+    white-space: nowrap;
+  }
+  .steer-form {
+    display: flex;
+    gap: var(--space-1, 0.25rem);
+    align-items: center;
+  }
+  .steer-input {
+    font-family: inherit;
+    font-size: var(--font-size-sm, 0.8125rem);
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-primary, #eee);
+    border: 1px solid var(--color-accent-dim, #2563eb33);
+    border-radius: var(--radius-sm, 0.375rem);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    width: 200px;
+  }
+  .steer-btn {
+    font-size: 0.75rem;
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    white-space: nowrap;
+  }
 </style>
-{/if}

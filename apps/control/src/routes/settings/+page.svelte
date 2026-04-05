@@ -27,9 +27,20 @@
     </p>
 
     {#if !data.githubTokenConfigured}
-      <p style="margin-bottom: 1.5rem; color: var(--color-text-muted);">
-        Paste a GitHub personal access token (PAT) with <code>repo</code> scope. This is required for pull request and issue operations. Falls back to the <code>GITHUB_TOKEN</code> environment variable if not set here.
-      </p>
+      {#if data.githubOAuthConfigured}
+        <div style="margin-bottom: 1.5rem;">
+          <a href="/auth/github/start" class="btn">Connect GitHub</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; color: var(--color-text-muted); font-size: 0.85rem;">
+          <hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" />
+          <span>Or enter a token manually</span>
+          <hr style="flex: 1; border: none; border-top: 1px solid var(--color-border);" />
+        </div>
+      {:else}
+        <p style="margin-bottom: 1.5rem; color: var(--color-text-muted);">
+          Paste a GitHub personal access token (PAT) with <code>repo</code> scope. This is required for pull request and issue operations. Falls back to the <code>GITHUB_TOKEN</code> environment variable if not set here.
+        </p>
+      {/if}
       <form method="POST" action="?/saveToken" style="display: flex; flex-direction: column; gap: 0.75rem; max-width: 480px;">
         <label for="token" style="font-size: 0.85rem; font-weight: 500;">Personal access token</label>
         <input

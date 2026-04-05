@@ -7,7 +7,9 @@ name = "yeet2-executor"
 version = "0.1.0"
 description = "yeet2 Executor service skeleton"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "langfuse>=2.0.0",
+]
 
 [project.scripts]
 yeet2-executor = "yeet2_executor.main:main"

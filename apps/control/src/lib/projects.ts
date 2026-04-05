@@ -174,6 +174,7 @@ export interface ProjectRecord {
   githubRepoOwner?: string;
   githubRepoName?: string;
   githubRepoUrl?: string;
+  githubProjectSync?: boolean;
   defaultBranch: string;
   localPath: string;
   constitutionStatus: ConstitutionStatus;
@@ -1341,6 +1342,7 @@ export function normalizeProjectRecord(value: unknown, fallbackIndex = 0): Proje
     githubRepoOwner,
     githubRepoName,
     githubRepoUrl,
+    githubProjectSync: booleanValue(raw.githubProjectSync, raw.github_project_sync),
     defaultBranch,
     localPath,
     constitutionStatus: normalizeConstitutionStatus(

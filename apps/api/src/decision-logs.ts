@@ -111,6 +111,46 @@ function decisionLogMatchesQuery(log: ProjectDecisionLogSummary, query: Decision
   return true;
 }
 
+export interface GlobalDecisionLogQuery {
+  take?: number;
+  projectId?: string | null;
+  kind?: string | null;
+  actor?: string | null;
+  search?: string | null;
+}
+
+export async function listGlobalDecisionLogs(query: GlobalDecisionLogQuery = {}): Promise<ProjectDecisionLogSummary[]> {
+  const take = Math.max(1, Math.min(200, Math.trunc(query.take ?? 100)));
+  const where: Record<string, unknown> = {};
+  if (normalizeFilterText(query.projectId)) {
+    where.projectId = normalizeFilterText(query.projectId);
+  }
+  if (normalizeFilterText(query.kind)) {
+    where.kind = normalizeFilterText(query.kind);
+  }
+  if (normalizeFilterText(query.actor)) {
+    where.actor = normalizeFilterText(query.actor);
+  }
+
+  const logs = await prisma.decisionLog.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: take * 4
+  });
+
+  const search = normalizeFilterText(query.search)?.toLowerCase();
+  const results = logs.map(toDecisionLogSummary).filter((log) => {
+    if (!search) return true;
+    return (
+      log.summary?.toLowerCase().includes(search) ||
+      log.actor?.toLowerCase().includes(search) ||
+      log.kind?.toLowerCase().includes(search)
+    );
+  });
+
+  return results.slice(0, take);
+}
+
 export async function listProjectDecisionLogs(projectId: string, query: DecisionLogQuery = {}): Promise<ProjectDecisionLogSummary[]> {
   const take = Math.max(1, Math.min(200, Math.trunc(query.take ?? 50)));
   const logs = await prisma.decisionLog.findMany({

@@ -43,6 +43,10 @@ import {
   buildGitHubIssueBody,
   createGitHubIssue,
   createGitHubPullRequest,
+  createGitHubTaskIssue,
+  commentOnGitHubIssue,
+  closeGitHubIssue,
+  ensureGitHubLabels,
   deleteGitHubBranchRef,
   fetchGitHubPullRequest,
   mergeGitHubPullRequest,
@@ -66,6 +70,86 @@ async function resolveGitHubToken(): Promise<string | null> {
   _cachedGitHubToken = await getGitHubToken();
   _cachedGitHubTokenAt = now;
   return _cachedGitHubToken;
+}
+
+async function syncGitHubTaskIssue(options: {
+  project: { id: string; githubRepoOwner: string | null; githubRepoName: string | null; githubProjectSync: boolean; name: string };
+  task: { id: string; title: string; description: string; agentRole: string; githubIssueNumber?: number | null; githubIssueNodeId?: string | null };
+  event: "created" | "dispatched" | "completed" | "blocked" | "failed";
+  detail?: string;
+}): Promise<void> {
+  if (!options.project.githubProjectSync) return;
+  const token = await resolveGitHubToken();
+  if (!token) return;
+  const owner = options.project.githubRepoOwner;
+  const repo = options.project.githubRepoName;
+  if (!owner || !repo) return;
+
+  try {
+    const { task, event, detail } = options;
+    if (event === "created") {
+      await ensureGitHubLabels({
+        token,
+        owner,
+        repo,
+        labels: [
+          { name: "yeet2", color: "0075ca" },
+          { name: `yeet2:${task.agentRole}`, color: "0075ca" }
+        ]
+      });
+      const result = await createGitHubTaskIssue({
+        token,
+        owner,
+        repo,
+        title: `[${task.agentRole}] ${task.title}`,
+        body: task.description,
+        labels: ["yeet2", `yeet2:${task.agentRole}`]
+      });
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { githubIssueNumber: result.number, githubIssueNodeId: result.nodeId }
+      });
+    } else if (event === "dispatched") {
+      if (task.githubIssueNumber == null) return;
+      await commentOnGitHubIssue({
+        token,
+        owner,
+        repo,
+        issueNumber: task.githubIssueNumber,
+        body: `🚀 **${task.agentRole}** is starting work on this task.`
+      });
+    } else if (event === "completed") {
+      if (task.githubIssueNumber == null) return;
+      await commentOnGitHubIssue({
+        token,
+        owner,
+        repo,
+        issueNumber: task.githubIssueNumber,
+        body: `✅ Task completed.\n\n${detail || ""}`
+      });
+      await closeGitHubIssue({ token, owner, repo, issueNumber: task.githubIssueNumber });
+    } else if (event === "blocked") {
+      if (task.githubIssueNumber == null) return;
+      await commentOnGitHubIssue({
+        token,
+        owner,
+        repo,
+        issueNumber: task.githubIssueNumber,
+        body: `🔴 Task blocked.\n\n${detail || ""}`
+      });
+    } else if (event === "failed") {
+      if (task.githubIssueNumber == null) return;
+      await commentOnGitHubIssue({
+        token,
+        owner,
+        repo,
+        issueNumber: task.githubIssueNumber,
+        body: `❌ Task failed.\n\n${detail || ""}`
+      });
+    }
+  } catch {
+    // GitHub sync failures must never propagate to callers
+  }
 }
 
 export interface ProjectRegistrationInput {
@@ -206,6 +290,7 @@ export interface ProjectSummary {
   pullRequestDraftMode: ProjectPullRequestDraftMode;
   mergeApprovalMode: ProjectMergeApprovalMode;
   branchCleanupMode: ProjectBranchCleanupMode;
+  githubProjectSync: boolean;
   lastAutonomyRunAt: string | null;
   lastAutonomyStatus: string | null;
   lastAutonomyMessage: string | null;
@@ -377,7 +462,7 @@ export class ProjectJobLogError extends Error {
 
 export class ProjectJobRefreshError extends Error {
   constructor(
-    public readonly code: "project_not_found" | "job_not_found" | "executor_unavailable",
+    public readonly code: "project_not_found" | "job_not_found" | "executor_unavailable" | "job_not_active",
     message: string,
     public readonly statusCode: number
   ) {
@@ -1451,6 +1536,7 @@ function toProjectSummary(
     githubRepoOwner: project.githubRepoOwner ?? null,
     githubRepoName: project.githubRepoName ?? null,
     githubRepoUrl: project.githubRepoUrl ?? null,
+    githubProjectSync: project.githubProjectSync ?? false,
     roleDefinitions: sortedRoleDefinitions.map(toProjectRoleDefinitionSummary),
     decisionLogs,
     operatorGuidance,
@@ -2652,6 +2738,9 @@ async function persistDispatchedJob(
     artifactSummary: executorJob.artifact_summary ?? null
   });
 
+  // GitHub sync — post dispatch comment (fire-and-forget)
+  syncGitHubTaskIssue({ project, task, event: "dispatched" }).catch(() => {});
+
   return toProjectJobSummary(createdJob);
 }
 
@@ -3041,22 +3130,19 @@ async function dispatchTaskFromProject(
     throw new ProjectDispatchError("task_not_dispatchable", buildTaskNotDispatchableMessage(task.id, task.status), 409);
   }
 
-  const attempts = task.attempts + 1;
-  await prisma.task.update({
-    where: { id: task.id },
-    data: {
-      attempts: {
-        increment: 1
-      }
-    }
-  });
-
+  // Compute the new attempt count but only persist it after the executor confirms.
+  // This avoids draining the retry budget when the executor is simply unreachable.
+  const nextAttempts = task.attempts + 1;
   try {
     const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
     const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentActionableGuidance(project.id, 8)).slice(0, 4);
     const stageBrief = await buildTaskStageBrief(project, task, assignedRoleDefinition, operatorGuidance);
     const executorJob = await submitTaskToExecutor(project, task, stageBrief);
-    const job = await persistDispatchedJob(project, task, executorJob, attempts, stageBrief);
+    await prisma.task.update({
+      where: { id: task.id },
+      data: { attempts: { increment: 1 } }
+    });
+    const job = await persistDispatchedJob(project, task, executorJob, nextAttempts, stageBrief);
     const hydratedProject = await loadProjectById(project.id);
     if (!hydratedProject) {
       throw new ProjectDispatchError("project_not_found", "Project not found after dispatch", 404);
@@ -3072,7 +3158,7 @@ async function dispatchTaskFromProject(
     }
 
     const message = error instanceof Error ? error.message : "Executor dispatch failed";
-    await updateTaskAfterDispatchFailure(task, attempts, message);
+    await updateTaskAfterDispatchFailure(task, nextAttempts, message);
     throw new ProjectDispatchError("executor_unavailable", message, 503);
   }
 }
@@ -3278,6 +3364,15 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
     artifactSummary: executorJob.artifact_summary ?? null
   });
 
+  // GitHub sync — fire-and-forget based on task outcome
+  if (taskStatus === "complete") {
+    syncGitHubTaskIssue({ project, task, event: "completed", detail: executorJob.artifact_summary || "" }).catch(() => {});
+  } else if (taskStatus === "blocked") {
+    syncGitHubTaskIssue({ project, task, event: "blocked", detail: blockerReason || "" }).catch(() => {});
+  } else if (taskStatus === "failed") {
+    syncGitHubTaskIssue({ project, task, event: "failed" }).catch(() => {});
+  }
+
   const updatedProject = await loadProjectById(projectId);
   if (!updatedProject) {
     throw new ProjectJobRefreshError("project_not_found", "Project not found", 404);
@@ -3383,7 +3478,8 @@ export async function resolveProjectBlocker(projectId: string, blockerId: string
       await tx.task.update({
         where: { id: blocker.taskId },
         data: {
-          blockerReason: null
+          blockerReason: null,
+          status: "ready"
         }
       });
     }
@@ -3950,6 +4046,16 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
         }
       });
 
+      // GitHub sync — create issues for newly created tasks (fire-and-forget)
+      if (project.githubProjectSync) {
+        const createdTasks = await prisma.task.findMany({ where: { missionId: createdMission.id } });
+        await Promise.allSettled(
+          createdTasks.map((createdTask) =>
+            syncGitHubTaskIssue({ project, task: { ...createdTask, description: createdTask.description ?? "" }, event: "created" })
+          )
+        );
+      }
+
       const nextDefinition = nextPlanningHandoffDefinition(project, draft);
       const firstTaskTitle = draft.tasks[0]?.title?.trim() || createdMission.title;
       if (nextDefinition) {
@@ -4051,6 +4157,17 @@ async function persistPlannedMission(project: ProjectWithRelations, draft: Plann
       ...guidanceLogDetail(operatorGuidance)
     }
   });
+
+  // GitHub sync — create issues for newly created tasks (fire-and-forget)
+  if (project.githubProjectSync) {
+    const createdTasks = await prisma.task.findMany({ where: { missionId: createdMission.id } });
+    await Promise.allSettled(
+      createdTasks.map((createdTask) =>
+        syncGitHubTaskIssue({ project, task: { ...createdTask, description: createdTask.description ?? "" }, event: "created" })
+      )
+    );
+  }
+
   const nextDefinition = nextPlanningHandoffDefinition(project, draft);
   const firstTaskTitle = draft.tasks[0]?.title?.trim() || createdMission.title;
   if (nextDefinition) {
@@ -4249,6 +4366,7 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
       activeTaskCount: 0,
       blockerCount: 0,
       blockers: [],
+      githubProjectSync: project.githubProjectSync ?? false,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString()
     };
@@ -4258,11 +4376,15 @@ export async function registerProject(input: ProjectRegistrationInput): Promise<
 }
 
 function validateProjectRoleDefinitionSet(definitions: ProjectRoleDefinitionInput[]): void {
-  const expectedKeys = new Set(PROJECT_ROLE_DEFAULTS.map((definition) => definition.roleKey));
+  const validKeys = new Set<ProjectRoleKey>(["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer", "visual"]);
   const seenKeys = new Set<ProjectRoleKey>();
 
+  if (!definitions.length) {
+    throw new ProjectRoleDefinitionError("invalid_role_definition", "At least one role definition is required.", 400);
+  }
+
   for (const definition of definitions) {
-    if (!expectedKeys.has(definition.roleKey)) {
+    if (!validKeys.has(definition.roleKey)) {
       throw new ProjectRoleDefinitionError("invalid_role_definition", `Unknown roleKey "${definition.roleKey}" is not allowed.`, 400);
     }
 
@@ -4270,17 +4392,11 @@ function validateProjectRoleDefinitionSet(definitions: ProjectRoleDefinitionInpu
       throw new ProjectRoleDefinitionError("invalid_role_definition", `Role definition "${definition.roleKey}" must include visualName, goal, and backstory.`, 400);
     }
 
-    seenKeys.add(definition.roleKey);
-  }
-
-  for (const key of expectedKeys) {
-    if (!seenKeys.has(key)) {
-      throw new ProjectRoleDefinitionError(
-        "invalid_role_definition",
-        `Missing required roleKey "${key}" from roleDefinitions payload.`,
-        400
-      );
+    if (seenKeys.has(definition.roleKey)) {
+      throw new ProjectRoleDefinitionError("invalid_role_definition", `Duplicate roleKey "${definition.roleKey}" in roleDefinitions payload.`, 400);
     }
+
+    seenKeys.add(definition.roleKey);
   }
 }
 
@@ -4385,6 +4501,55 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   });
 }
 
+export async function steerProjectJob(projectId: string, jobId: string, content: string): Promise<ProjectDecisionLogSummary> {
+  const job = await prisma.job.findFirst({
+    where: {
+      id: jobId,
+      task: {
+        mission: { projectId }
+      }
+    },
+    select: {
+      id: true,
+      status: true,
+      task: {
+        select: { agentRole: true }
+      }
+    }
+  });
+
+  if (!job) {
+    throw new ProjectJobRefreshError("job_not_found", "Job not found", 404);
+  }
+
+  if (job.status === "complete" || job.status === "failed" || job.status === "cancelled") {
+    throw new ProjectJobRefreshError("job_not_active", "Cannot steer a job that is no longer running", 409);
+  }
+
+  const agentRole = job.task.agentRole;
+  const steerContent = content.trim();
+  if (!steerContent) {
+    throw new ProjectRoleDefinitionError("invalid_role_definition", "Steering content is required", 400);
+  }
+
+  // Prepend @mention so guidance is routed to the running agent role
+  const mentionPrefix = `@${agentRole} `;
+  const effectiveContent = steerContent.startsWith(mentionPrefix) ? steerContent : `${mentionPrefix}${steerContent}`;
+
+  return recordDecisionLog({
+    projectId,
+    actor: "operator",
+    kind: "steer",
+    summary: effectiveContent,
+    detail: {
+      source: "operator",
+      jobId,
+      agentRole,
+      mentions: [agentRole]
+    }
+  });
+}
+
 export async function listProjectChatMessages(projectId: string, query: ProjectChatQuery = {}): Promise<ProjectChatMessageSummary[]> {
   const logs = await listProjectDecisionLogs(projectId, {
     kind: "message",
@@ -4482,12 +4647,32 @@ interface BrainInterviewResponse {
   interviewStep?: number;
   totalSteps?: number;
   files?: Partial<Record<string, string>>;
+  suggestedTemplate?: string;
+}
+
+async function applyInterviewTemplate(projectId: string, projectName: string, templateKey: string): Promise<void> {
+  const definitions = await defaultProjectRoleDefinitions(projectName, templateKey);
+  await prisma.$transaction(async (tx) => {
+    await tx.projectRoleDefinition.deleteMany({ where: { projectId } });
+    await tx.projectRoleDefinition.createMany({
+      data: definitions.map((definition, index) => ({
+        projectId,
+        roleKey: definition.roleKey,
+        label: definition.visualName,
+        goal: definition.goal,
+        backstory: definition.backstory,
+        model: definition.model || null,
+        enabled: definition.enabled,
+        sortOrder: definition.sortOrder ?? index
+      })) as any
+    });
+  });
 }
 
 export async function conductConstitutionInterview(
   projectId: string,
   operatorMessage: string | null
-): Promise<{ action: string; question?: string; interviewStep?: number; totalSteps?: number; filesWritten?: string[] }> {
+): Promise<{ action: string; question?: string; interviewStep?: number; totalSteps?: number; filesWritten?: string[]; suggestedTemplate?: string }> {
   const project = await getProjectWithRelations(projectId);
   if (!project) {
     throw new ProjectConstitutionError("project_not_found", "Project not found", 404);
@@ -4519,23 +4704,25 @@ export async function conductConstitutionInterview(
     })
     .reverse(); // chronological order for chat history
 
-  const missingRequiredFiles: string[] = [];
+  // Determine which constitution files already exist by reading the path fields
+  // from the Prisma Constitution record (visionPath, specPath, roadmapPath).
+  // The old code incorrectly read `missingRequiredFiles` which is a field on
+  // ConstitutionInspection, not on the DB model — causing re-run to always skip all questions.
+  const existingFiles: string[] = [];
   if (project.constitution) {
-    const constitutionDetail = project.constitution as Record<string, unknown>;
-    if (Array.isArray(constitutionDetail.missingRequiredFiles)) {
-      for (const item of constitutionDetail.missingRequiredFiles) {
-        if (typeof item === "string") {
-          missingRequiredFiles.push(item);
-        }
-      }
-    }
+    if (project.constitution.visionPath) existingFiles.push("vision");
+    if (project.constitution.specPath) existingFiles.push("spec");
+    if (project.constitution.roadmapPath) existingFiles.push("roadmap");
   }
+  const isRerun = project.constitutionStatus === "parsed" || project.constitutionStatus === "stale";
 
   const response = await readBrainJson<BrainInterviewResponse>("/orchestration/interview", {
     project_id: projectId,
     project_name: project.name,
     constitution_status: project.constitutionStatus,
-    missing_files: missingRequiredFiles,
+    missing_files: [],
+    existing_files: existingFiles,
+    rerun: isRerun,
     chat_history: interviewLogs.map((log) => ({
       actor: log.actor,
       content: log.summary,
@@ -4569,15 +4756,21 @@ export async function conductConstitutionInterview(
       }
     }
 
+    const suggestedTemplate = typeof response.suggestedTemplate === "string" ? response.suggestedTemplate : undefined;
+
+    if (suggestedTemplate && PIPELINE_TEMPLATES[suggestedTemplate]) {
+      await applyInterviewTemplate(projectId, project.name, suggestedTemplate);
+    }
+
     await recordDecisionLog({
       projectId,
       kind: "interview",
       actor: "planner",
       summary: "Constitution documents generated from interview.",
-      detail: { source: "system" }
+      detail: { source: "system", suggestedTemplate: suggestedTemplate ?? null }
     });
 
-    return { action: "synthesize", filesWritten };
+    return { action: "synthesize", filesWritten, suggestedTemplate };
   }
 
   throw new Error(`Unexpected Brain interview response action: ${response.action}`);

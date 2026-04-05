@@ -6,12 +6,14 @@ import { putJson } from "$lib/server/mutations";
 interface ThemeOption { key: string; label: string }
 
 export const load: PageServerLoad = async () => {
-  const [tokenStatus, themeStatus] = await Promise.all([
+  const [tokenStatus, themeStatus, oauthStatus] = await Promise.all([
     apiJson<{ configured: boolean }>("/settings/github-token"),
-    apiJson<{ active: string; themes: ThemeOption[] }>("/settings/agent-theme")
+    apiJson<{ active: string; themes: ThemeOption[] }>("/settings/agent-theme"),
+    apiJson<{ configured: boolean }>("/settings/github-oauth-configured")
   ]);
   return {
     githubTokenConfigured: tokenStatus.configured,
+    githubOAuthConfigured: oauthStatus.configured,
     activeTheme: themeStatus.active,
     themes: themeStatus.themes
   };

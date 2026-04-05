@@ -129,6 +129,8 @@ model Project {
   lastAutonomyActor  String?             @map("last_autonomy_actor")
   nextAutonomyRunAt  DateTime?           @map("next_autonomy_run_at")
   constitutionStatus ConstitutionStatus  @default(pending) @map("constitution_status")
+  githubProjectSync  Boolean             @default(false) @map("github_project_sync")
+  githubProjectNodeId String?            @map("github_project_node_id")
   status             ProjectStatus       @default(active)
   createdAt          DateTime            @default(now()) @map("created_at")
   updatedAt          DateTime            @updatedAt @map("updated_at")
@@ -205,6 +207,7 @@ model Mission {
   createdBy   String?       @map("created_by")
   startedAt   DateTime?     @map("started_at")
   completedAt DateTime?     @map("completed_at")
+  githubProjectNodeId String? @map("github_project_node_id")
   project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks       Task[]
   decisionLogs DecisionLog[]
@@ -225,6 +228,8 @@ model Task {
   acceptanceCriteria Json       @map("acceptance_criteria")
   attempts           Int        @default(0)
   blockerReason      String?    @map("blocker_reason")
+  githubIssueNumber  Int?       @map("github_issue_number")
+  githubIssueNodeId  String?    @map("github_issue_node_id")
   mission            Mission    @relation(fields: [missionId], references: [id], onDelete: Cascade)
   jobs               Job[]
   blockers           Blocker[]

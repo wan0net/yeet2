@@ -19,6 +19,7 @@
     <a href="/approvals" class="pb-link" class:pb-link--active={page.url.pathname === "/approvals"}>Approvals</a>
     <a href="/blockers" class="pb-link" class:pb-link--active={page.url.pathname === "/blockers"}>Blockers</a>
     <a href="/workers" class="pb-link" class:pb-link--active={page.url.pathname === "/workers"}>Workers</a>
+    <a href="/audit" class="pb-link" class:pb-link--active={page.url.pathname === "/audit"}>Audit</a>
     <a href="/guide" class="pb-link" class:pb-link--active={page.url.pathname === "/guide"}>Guide</a>
     <a href="/settings" class="pb-link" class:pb-link--active={page.url.pathname === "/settings"}>Settings</a>
   </nav>

@@ -11,7 +11,7 @@ import type {
 import { RepositoryPathError } from "../constitution";
 import type { AutonomyLoopManager } from "../autonomy-loop";
 import { prisma } from "../db";
-import { listProjectDecisionLogs } from "../decision-logs";
+import { listProjectDecisionLogs, listGlobalDecisionLogs } from "../decision-logs";
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "../openrouter-models";
 import {
   advanceProject,
@@ -45,6 +45,7 @@ import {
   ProjectPullRequestError,
   ProjectConstitutionError,
   createProjectMessage,
+  steerProjectJob,
   conductConstitutionInterview,
   replaceProjectRoleDefinitions,
   readProjectCostAnalysis,
@@ -72,6 +73,7 @@ function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrati
   const repoUrl = readString("repoUrl", "repo_url");
   const defaultBranch = readString("defaultBranch", "default_branch");
   const localPath = readString("localPath", "local_path");
+  const pipelineTemplate = readString("pipelineTemplate", "pipeline_template");
 
   if (!name) {
     return {
@@ -99,7 +101,8 @@ function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrati
       name,
       repoUrl: repoUrl || null,
       defaultBranch,
-      localPath: localPath || null
+      localPath: localPath || null,
+      pipelineTemplate: pipelineTemplate || null
     },
     error: null
   };
@@ -129,7 +132,7 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
       }
 
       const raw = definition as Record<string, unknown>;
-      const roleKey = typeof raw.roleKey === "string" ? (raw.roleKey.trim() as ProjectRoleKey) : "";
+      const roleKeyRaw = typeof raw.roleKey === "string" ? raw.roleKey.trim() : "";
       const visualName =
         typeof raw.visualName === "string"
           ? raw.visualName.trim()
@@ -144,16 +147,11 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
       const enabled = typeof raw.enabled === "boolean" ? raw.enabled : true;
       const sortOrder = typeof raw.sortOrder === "number" && Number.isFinite(raw.sortOrder) ? Math.trunc(raw.sortOrder) : 0;
 
-      if (
-        roleKey !== "planner" &&
-        roleKey !== "architect" &&
-        roleKey !== "implementer" &&
-        roleKey !== "qa" &&
-        roleKey !== "reviewer" &&
-        roleKey !== "visual"
-      ) {
+      const validRoleKeys = new Set<ProjectRoleKey>(["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer", "visual"]);
+      if (!validRoleKeys.has(roleKeyRaw as ProjectRoleKey)) {
         return null;
       }
+      const roleKey = roleKeyRaw as ProjectRoleKey;
 
       if (!visualName || !goal || !backstory) {
         return null;
@@ -675,6 +673,35 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
     }
   });
 
+  app.get("/activity", async (request, reply) => {
+    const query = (request.query ?? {}) as {
+      take?: string;
+      projectId?: string;
+      kind?: string;
+      actor?: string;
+      search?: string;
+    };
+
+    const take = query.take ? Math.max(1, Math.min(200, parseInt(query.take, 10))) : 100;
+
+    try {
+      const activity = await listGlobalDecisionLogs({
+        take,
+        projectId: query.projectId || null,
+        kind: query.kind || null,
+        actor: query.actor || null,
+        search: query.search || null
+      });
+      return reply.code(200).send({ activity });
+    } catch (error) {
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to load activity"
+      });
+    }
+  });
+
   app.get("/projects/:projectId/activity", async (request, reply) => {
     const { projectId } = request.params as { projectId?: string };
     if (!projectId) {
@@ -789,6 +816,26 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
         error: "internal_error",
         message: "Unable to update project autonomy"
       });
+    }
+  });
+
+  app.put("/projects/:projectId/github-sync", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({ error: "validation_error", message: "projectId is required" });
+    }
+
+    const body = request.body as Record<string, unknown>;
+    if (typeof body?.enabled !== "boolean") {
+      return reply.code(400).send({ error: "validation_error", message: "enabled (boolean) is required" });
+    }
+
+    try {
+      await prisma.project.update({ where: { id: projectId }, data: { githubProjectSync: body.enabled } });
+      return reply.code(200).send({ ok: true });
+    } catch (error) {
+      app.log.error(error);
+      return reply.code(400).send({ error: "update_failed", message: "Unable to update github sync setting" });
     }
   });
 
@@ -1003,6 +1050,43 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to refresh the job"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/jobs/:jobId/steer", async (request, reply) => {
+    const { projectId, jobId } = request.params as { projectId?: string; jobId?: string };
+    if (!projectId || !jobId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and jobId are required"
+      });
+    }
+
+    const body = request.body as Record<string, unknown> | null;
+    const content = typeof body?.content === "string" ? body.content.trim() : "";
+    if (!content) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "content is required"
+      });
+    }
+
+    try {
+      const result = await steerProjectJob(projectId, jobId, content);
+      return reply.code(201).send(result);
+    } catch (error) {
+      if (error instanceof ProjectJobRefreshError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to steer job"
       });
     }
   });
