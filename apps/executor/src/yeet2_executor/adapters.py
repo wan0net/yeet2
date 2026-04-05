@@ -359,11 +359,15 @@ def _write_asrt_config(config_dir: Path, job_id: str, config: dict[str, Any]) ->
 
 
 def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
+    """Parse a JSONL execution log and return a structured artifact JSON string."""
     events = 0
     action_counts: Counter[str] = Counter()
     paths: list[str] = []
     last_error: str | None = None
     last_text: str | None = None
+    test_passed = 0
+    test_failed = 0
+    test_total = 0
 
     with log_path.open(encoding="utf-8") as handle:
         for raw_line in handle:
@@ -404,7 +408,28 @@ def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
                 message = payload.get("content") or payload.get("message")
                 if isinstance(message, str) and message.strip():
                     last_error = _truncate(message.strip())
+            # Parse test result events
+            if action in ("test", "run_tests") or payload.get("type") == "test_result":
+                result = payload.get("result") or payload.get("status")
+                if result == "pass":
+                    test_passed += 1
+                    test_total += 1
+                elif result == "fail":
+                    test_failed += 1
+                    test_total += 1
+            # Count pytest/jest style output
+            content_str = str(payload.get("content") or "")
+            if "passed" in content_str and "failed" in content_str:
+                import re as _re
+                m = _re.search(r"(\d+) passed", content_str)
+                if m:
+                    test_passed = int(m.group(1))
+                m = _re.search(r"(\d+) failed", content_str)
+                if m:
+                    test_failed = int(m.group(1))
+                test_total = test_passed + test_failed
 
+    status = "pass" if exit_code == 0 else "fail"
     parts = [f"exit_code={exit_code}"]
     if events:
         parts.append(f"events={events}")
@@ -413,16 +438,26 @@ def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
             f"{name}={count}" for name, count in action_counts.most_common(3)
         )
         parts.append(f"actions={top_actions}")
-    if paths:
-        shown_paths = ", ".join(paths[:3])
-        suffix = "..." if len(paths) > 3 else ""
-        parts.append(f"paths={shown_paths}{suffix}")
     if last_error and exit_code != 0:
         parts.append(f"error={last_error}")
     elif last_text and exit_code != 0:
         parts.append(f"detail={last_text}")
-    status = "completed successfully" if exit_code == 0 else "failed"
-    return f"OpenHands {status} ({'; '.join(parts)})."
+
+    human_summary = f"OpenHands {'completed successfully' if exit_code == 0 else 'failed'} ({'; '.join(parts)})."
+    handoff = human_summary
+    if last_error and exit_code != 0:
+        handoff = f"Execution failed: {last_error}"
+    elif paths:
+        handoff = f"Modified {len(paths)} file(s): {', '.join(paths[:3])}{'...' if len(paths) > 3 else ''}. {human_summary}"
+
+    artifact: dict[str, Any] = {
+        "summary": human_summary,
+        "handoffNote": handoff,
+        "buildStatus": status,
+        "diffSummary": paths[:10],
+        "testOutput": {"passed": test_passed, "failed": test_failed, "total": test_total} if test_total > 0 else None,
+    }
+    return json.dumps(artifact)
 
 
 @dataclass(slots=True)
@@ -822,7 +857,14 @@ class PassthroughAdapter:
             )
             content = response.choices[0].message.content or ""
             _append_log(log_path, f"LLM response received ({len(content)} chars)")
-            return self._complete_job(record, status="complete", summary=content)
+            artifact: dict[str, Any] = {
+                "summary": content[:500] if len(content) > 500 else content,
+                "handoffNote": content[:1000] if len(content) > 1000 else content,
+                "buildStatus": "pass",
+                "diffSummary": [],
+                "testOutput": None,
+            }
+            return self._complete_job(record, status="complete", summary=json.dumps(artifact))
         except Exception as exc:  # noqa: BLE001
             error_msg = f"LLM call failed: {exc}"
             _append_log(log_path, error_msg)

@@ -59,6 +59,39 @@ import { inspectConstitution, type ConstitutionInspection } from "./constitution
 import { buildFallbackModelCatalog, fetchOpenRouterModelCatalog, OpenRouterModelCatalogError } from "./openrouter-models";
 import { createInitialPlan, createTaskStageBrief, loadPlanningContext, readBrainJson, type PlanningDraft, type PlanningProject } from "./planning";
 
+interface ArtifactData {
+  summary: string | null;
+  handoffNote: string | null;
+  buildStatus: "pass" | "fail" | "unknown" | null;
+  diffSummary: string[];
+  testOutput: { passed: number; failed: number; total: number } | null;
+}
+
+function parseArtifactData(raw: string | null): ArtifactData | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{")) return null;
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return {
+      summary: typeof parsed.summary === "string" ? parsed.summary : null,
+      handoffNote: typeof parsed.handoffNote === "string" ? parsed.handoffNote : null,
+      buildStatus: ["pass", "fail", "unknown"].includes(parsed.buildStatus) ? parsed.buildStatus : null,
+      diffSummary: Array.isArray(parsed.diffSummary) ? parsed.diffSummary.filter((v: unknown): v is string => typeof v === "string") : [],
+      testOutput: parsed.testOutput && typeof parsed.testOutput === "object"
+        ? {
+            passed: Number(parsed.testOutput.passed) || 0,
+            failed: Number(parsed.testOutput.failed) || 0,
+            total: Number(parsed.testOutput.total) || 0
+          }
+        : null
+    };
+  } catch {
+    return null;
+  }
+}
+
 let _cachedGitHubToken: string | null | undefined;
 let _cachedGitHubTokenAt = 0;
 
@@ -185,6 +218,7 @@ export interface ProjectJobSummary {
   status: ProjectJobStatus;
   logPath: string | null;
   artifactSummary: string | null;
+  artifactData: ArtifactData | null;
   startedAt: string | null;
   completedAt: string | null;
 }
@@ -1311,6 +1345,7 @@ function toProjectJobSummary(job: DbJob): ProjectJobSummary {
     status: job.status,
     logPath: job.logPath ?? null,
     artifactSummary: job.artifactSummary ?? null,
+    artifactData: parseArtifactData(job.artifactSummary ?? null),
     startedAt: job.startedAt?.toISOString() ?? null,
     completedAt: job.completedAt?.toISOString() ?? null
   };

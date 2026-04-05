@@ -14,6 +14,7 @@
   } from "$lib/project-detail";
   import { formatConstitutionFiles, planningProvenanceLabel, projectModelCostSummary } from "$lib/projects";
   import Markdown from "$lib/ui/Markdown.svelte";
+  import OfficeView from "$lib/ui/OfficeView.svelte";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
   let submitting = $state("");
@@ -55,7 +56,7 @@
   });
   const currentTab = $derived((() => {
     const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
-    return tab === "agents" || tab === "chat" ? tab : "overview";
+    return tab === "agents" || tab === "chat" || tab === "office" ? tab : "overview";
   })());
   const operatorGuidanceIds = $derived(new Set(project.operatorGuidance.map((entry) => entry.id)));
   const chatEntries = $derived(
@@ -104,7 +105,7 @@
     return "Standing by";
   }
 
-  function tabHref(tab: "overview" | "agents" | "chat"): string {
+  function tabHref(tab: "overview" | "agents" | "chat" | "office"): string {
     return tab === "overview" ? `/projects/${project.id}` : `/projects/${project.id}?tab=${tab}`;
   }
 
@@ -227,6 +228,9 @@
   </a>
   <a aria-current={currentTab === "chat" ? "page" : undefined} class:project-tab--active={currentTab === "chat"} class="project-tab" href={tabHref("chat")}>
     Chat
+  </a>
+  <a aria-current={currentTab === "office" ? "page" : undefined} class:project-tab--active={currentTab === "office"} class="project-tab" href={tabHref("office")}>
+    Office
   </a>
 </section>
 
@@ -481,6 +485,13 @@
       </div>
     </form>
   </div>
+</section>
+{/if}
+
+{#if currentTab === "office"}
+<section class="card">
+  <div class="card-header">Office</div>
+  <OfficeView {staff} />
 </section>
 {/if}
 

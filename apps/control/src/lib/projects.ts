@@ -50,6 +50,13 @@ export interface ProjectJobRecord {
   status: string;
   logPath: string | null;
   artifactSummary: string | null;
+  artifactData?: {
+    summary: string | null;
+    handoffNote: string | null;
+    buildStatus: "pass" | "fail" | "unknown" | null;
+    diffSummary: string[];
+    testOutput: { passed: number; failed: number; total: number } | null;
+  } | null;
   startedAt: string | null;
   completedAt: string | null;
   githubCompareUrl?: string;
@@ -1067,6 +1074,7 @@ function normalizeJobRecord(value: unknown): ProjectJobRecord | null {
     status: status || "unknown",
     logPath: stringValue(raw.logPath, raw.log_path) || null,
     artifactSummary: stringValue(raw.artifactSummary, raw.artifact_summary) || null,
+    artifactData: (raw.artifactData as ProjectJobRecord["artifactData"]) ?? null,
     startedAt: stringValue(raw.startedAt, raw.started_at) || null,
     completedAt: stringValue(raw.completedAt, raw.completed_at) || null,
     githubCompareUrl: stringValue(raw.githubCompareUrl, raw.github_compare_url, raw.compareUrl, raw.compare_url) || undefined,

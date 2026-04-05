@@ -125,15 +125,26 @@ def test_deterministic_plan_task_priority_ordering():
 # _effective_role_definitions
 # ---------------------------------------------------------------------------
 
-def test_effective_role_definitions_raises_on_missing():
-    """Raises ValueError when a required role is not present in the definitions."""
-    # Provide only visual (disabled) and planner — all other required roles are absent
+def test_effective_role_definitions_returns_enabled_subset():
+    """Returns only enabled roles when a partial set is provided."""
     incomplete = [
         PlanningRoleDefinition(key="planner", label="Planner", goal="Plan.", backstory="You plan.", enabled=True, sort_order=1),
     ]
     inp = _make_planning_input(role_definitions=incomplete)
-    with pytest.raises(ValueError, match="Missing required"):
-        _effective_role_definitions(inp)
+    result = _effective_role_definitions(inp)
+    assert len(result) == 1
+    assert result[0].key == "planner"
+
+
+def test_effective_role_definitions_raises_when_all_disabled():
+    """Raises ValueError when all provided roles are disabled (falls back to defaults)."""
+    all_disabled = [
+        PlanningRoleDefinition(key="planner", label="Planner", goal="Plan.", backstory="You plan.", enabled=False, sort_order=1),
+    ]
+    inp = _make_planning_input(role_definitions=all_disabled)
+    # Falls back to defaults, so should not raise
+    result = _effective_role_definitions(inp)
+    assert len(result) > 0
 
 
 # ---------------------------------------------------------------------------

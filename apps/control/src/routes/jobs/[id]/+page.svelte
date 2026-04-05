@@ -93,7 +93,61 @@
   </div>
 </section>
 
-{#if data.job.artifactSummary}
+{#if data.job.artifactData}
+<section class="card">
+  <div class="card-header">Artifacts</div>
+  <div class="card-body stack">
+    {#if data.job.artifactData.buildStatus != null}
+      <div class="artifact-row">
+        <span class="artifact-label">Build</span>
+        {#if data.job.artifactData.buildStatus === "pass"}
+          <span class="pill success">&#10003; pass</span>
+        {:else if data.job.artifactData.buildStatus === "fail"}
+          <span class="pill danger">&#10007; fail</span>
+        {:else}
+          <span class="pill">unknown</span>
+        {/if}
+      </div>
+    {/if}
+    {#if data.job.artifactData.testOutput != null}
+      <div class="artifact-row">
+        <span class="artifact-label">Tests</span>
+        <div class="artifact-metrics">
+          <span class="artifact-metric success">{data.job.artifactData.testOutput.passed} passed</span>
+          {#if data.job.artifactData.testOutput.failed > 0}
+            <span class="artifact-metric danger">{data.job.artifactData.testOutput.failed} failed</span>
+          {:else}
+            <span class="artifact-metric">{data.job.artifactData.testOutput.failed} failed</span>
+          {/if}
+          <span class="artifact-metric muted">{data.job.artifactData.testOutput.total} total</span>
+        </div>
+      </div>
+    {/if}
+    {#if data.job.artifactData.diffSummary.length > 0}
+      <div class="artifact-section">
+        <div class="artifact-label">Changed files</div>
+        <ul class="diff-list">
+          {#each data.job.artifactData.diffSummary as file}
+            <li class="diff-file">{file}</li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+    {#if data.job.artifactData.handoffNote}
+      <div class="artifact-section">
+        <div class="artifact-label">Handoff note</div>
+        <div class="artifact-text">{data.job.artifactData.handoffNote}</div>
+      </div>
+    {/if}
+    {#if data.job.artifactData.summary}
+      <div class="artifact-section">
+        <div class="artifact-label">Summary</div>
+        <Markdown content={data.job.artifactData.summary} />
+      </div>
+    {/if}
+  </div>
+</section>
+{:else if data.job.artifactSummary}
 <section class="card">
   <div class="card-header">Artifact summary</div>
   <div class="card-body">
@@ -148,6 +202,68 @@
 {/if}
 
 <style>
+  .artifact-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+  }
+  .artifact-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 0.5rem);
+  }
+  .artifact-label {
+    font-size: var(--font-size-sm, 0.8125rem);
+    color: var(--color-text-secondary, #888);
+    font-weight: 500;
+    min-width: 6rem;
+  }
+  .artifact-metrics {
+    display: flex;
+    gap: var(--space-3, 0.75rem);
+  }
+  .artifact-metric {
+    font-size: var(--font-size-sm, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-text-secondary, #888);
+  }
+  .artifact-metric.success {
+    color: var(--color-status-success, #22c55e);
+  }
+  .artifact-metric.danger {
+    color: var(--color-status-error, #ef4444);
+  }
+  .artifact-metric.muted {
+    color: var(--color-text-secondary, #888);
+  }
+  .diff-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, 0.25rem);
+  }
+  .diff-file {
+    font-family: var(--font-mono, monospace);
+    font-size: var(--font-size-sm, 0.8125rem);
+    color: var(--color-text-secondary, #aaa);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    background: var(--color-surface-raised, #1a1a1a);
+    border-radius: var(--radius-sm, 0.375rem);
+    border: 1px solid var(--color-border, #333);
+  }
+  .artifact-text {
+    font-size: var(--font-size-sm, 0.8125rem);
+    color: var(--color-text-primary, #eee);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: var(--space-3, 0.75rem);
+    background: var(--color-surface-raised, #1a1a1a);
+    border-radius: var(--radius-md, 0.5rem);
+    border: 1px solid var(--color-border, #333);
+  }
   .log-output {
     font-family: var(--font-mono, monospace);
     font-size: var(--font-size-sm, 0.8125rem);

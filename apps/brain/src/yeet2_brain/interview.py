@@ -317,6 +317,10 @@ def _template_synthesis(project_name: str, qa_pairs: list[tuple[str, str]]) -> d
 
     vision = f"""# {project_name} Vision
 
+## Project Type
+
+{answers.get(0, "Not specified.")}
+
 ## Purpose
 
 {answers.get(1, "Not specified.")}

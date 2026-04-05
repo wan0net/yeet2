@@ -11,6 +11,9 @@ dependencies = [
   "langfuse>=2.0.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
 [project.scripts]
 yeet2-executor = "yeet2_executor.main:main"
 
