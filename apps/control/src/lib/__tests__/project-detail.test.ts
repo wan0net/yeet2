@@ -9,6 +9,16 @@ import {
   recentJobs,
   groupTasksByState,
   latestJob,
+  stageLabel,
+  taskCanDispatch,
+  taskDispatchBlockedReason,
+  projectNextDispatchableTask,
+  blockerStatusLabel,
+  blockerStatusTone,
+  blockerLinkedTask,
+  agentPresenceOverview,
+  missionRecentJobs,
+  missionResultSummaries,
 } from "$lib/project-detail";
 import type {
   ProjectRecord,
@@ -440,5 +450,328 @@ describe("latestJob", () => {
     const j = makeJob({ id: "solo" });
     const task = makeTask({ jobs: [j] });
     expect(latestJob(task)?.id).toBe("solo");
+  });
+});
+
+// ─── stageLabel ──────────────────────────────────────────────────────────────
+
+describe("stageLabel", () => {
+  it("returns 'implementation' for implementer", () => {
+    expect(stageLabel("implementer")).toBe("implementation");
+  });
+
+  it("returns 'QA' for qa", () => {
+    expect(stageLabel("qa")).toBe("QA");
+  });
+
+  it("returns 'review' for reviewer", () => {
+    expect(stageLabel("reviewer")).toBe("review");
+  });
+
+  it("is case-insensitive", () => {
+    expect(stageLabel("Implementer")).toBe("implementation");
+    expect(stageLabel("QA")).toBe("QA");
+  });
+
+  it("returns the key unchanged for unknown roles", () => {
+    expect(stageLabel("planner")).toBe("planner");
+  });
+});
+
+// ─── taskCanDispatch ─────────────────────────────────────────────────────────
+
+describe("taskCanDispatch", () => {
+  it("uses task.dispatchable when it is a boolean true", () => {
+    const project = makeProject();
+    const task = makeTask({ dispatchable: true, status: "completed" });
+    expect(taskCanDispatch(project, task)).toBe(true);
+  });
+
+  it("uses task.dispatchable when it is a boolean false", () => {
+    const project = makeProject();
+    const task = makeTask({ dispatchable: false, status: "pending", agentRole: "implementer" });
+    expect(taskCanDispatch(project, task)).toBe(false);
+  });
+
+  it("returns true via fallback for pending implementer task with no constraints", () => {
+    const project = makeProject();
+    const task = makeTask({ agentRole: "implementer", status: "pending" });
+    expect(taskCanDispatch(project, task)).toBe(true);
+  });
+
+  it("returns false when role is not dispatchable", () => {
+    const project = makeProject();
+    const task = makeTask({ agentRole: "planner", status: "pending" });
+    expect(taskCanDispatch(project, task)).toBe(false);
+  });
+
+  it("returns false when status is not pending/ready/failed", () => {
+    const project = makeProject();
+    const task = makeTask({ agentRole: "implementer", status: "completed" });
+    expect(taskCanDispatch(project, task)).toBe(false);
+  });
+
+  it("respects nextDispatchableTaskId constraint", () => {
+    const task1 = makeTask({ id: "t1", agentRole: "implementer", status: "pending" });
+    const task2 = makeTask({ id: "t2", agentRole: "implementer", status: "pending" });
+    const project = makeProject({ nextDispatchableTaskId: "t1" });
+    expect(taskCanDispatch(project, task1)).toBe(true);
+    expect(taskCanDispatch(project, task2)).toBe(false);
+  });
+
+  it("respects dispatchableRoles constraint", () => {
+    const project = makeProject({ dispatchableRoles: ["reviewer"] });
+    const implementerTask = makeTask({ agentRole: "implementer", status: "pending" });
+    const reviewerTask = makeTask({ agentRole: "reviewer", status: "pending" });
+    expect(taskCanDispatch(project, implementerTask)).toBe(false);
+    expect(taskCanDispatch(project, reviewerTask)).toBe(true);
+  });
+});
+
+// ─── taskDispatchBlockedReason ────────────────────────────────────────────────
+
+describe("taskDispatchBlockedReason", () => {
+  it("returns null when the task can dispatch", () => {
+    const project = makeProject();
+    const task = makeTask({ agentRole: "implementer", status: "pending" });
+    expect(taskDispatchBlockedReason(project, task)).toBeNull();
+  });
+
+  it("returns task.dispatchBlockedReason when task cannot dispatch", () => {
+    const project = makeProject();
+    const task = makeTask({
+      agentRole: "planner",
+      status: "pending",
+      dispatchBlockedReason: "Role not supported",
+    });
+    expect(taskDispatchBlockedReason(project, task)).toBe("Role not supported");
+  });
+
+  it("returns null when blocked but no reason provided", () => {
+    const project = makeProject();
+    const task = makeTask({ agentRole: "planner", status: "pending" });
+    expect(taskDispatchBlockedReason(project, task)).toBeNull();
+  });
+});
+
+// ─── projectNextDispatchableTask ──────────────────────────────────────────────
+
+describe("projectNextDispatchableTask", () => {
+  it("returns null when nextDispatchableTaskId is not set", () => {
+    const project = makeProject({ missions: [] });
+    expect(projectNextDispatchableTask(project)).toBeNull();
+  });
+
+  it("finds the task matching nextDispatchableTaskId", () => {
+    const task = makeTask({ id: "t-next" });
+    const mission = makeMission({ tasks: [task] });
+    const project = makeProject({ missions: [mission], nextDispatchableTaskId: "t-next" });
+    expect(projectNextDispatchableTask(project)?.id).toBe("t-next");
+  });
+
+  it("returns null when the id does not match any task", () => {
+    const task = makeTask({ id: "t1" });
+    const mission = makeMission({ tasks: [task] });
+    const project = makeProject({ missions: [mission], nextDispatchableTaskId: "t-nonexistent" });
+    expect(projectNextDispatchableTask(project)).toBeNull();
+  });
+});
+
+// ─── blockerStatusLabel ───────────────────────────────────────────────────────
+
+describe("blockerStatusLabel", () => {
+  it("returns 'resolved' for resolved", () => {
+    expect(blockerStatusLabel("resolved")).toBe("resolved");
+  });
+
+  it("returns 'dismissed' for dismissed", () => {
+    expect(blockerStatusLabel("dismissed")).toBe("dismissed");
+  });
+
+  it("returns 'open' for open", () => {
+    expect(blockerStatusLabel("open")).toBe("open");
+  });
+
+  it("is case-insensitive", () => {
+    expect(blockerStatusLabel("OPEN")).toBe("open");
+  });
+
+  it("returns 'unknown' for empty string", () => {
+    expect(blockerStatusLabel("")).toBe("unknown");
+  });
+
+  it("returns the original value for unrecognized non-empty status", () => {
+    expect(blockerStatusLabel("custom")).toBe("custom");
+  });
+});
+
+// ─── blockerStatusTone ────────────────────────────────────────────────────────
+
+describe("blockerStatusTone", () => {
+  it("returns emerald for resolved", () => {
+    expect(blockerStatusTone("resolved")).toContain("emerald");
+  });
+
+  it("returns slate for dismissed", () => {
+    expect(blockerStatusTone("dismissed")).toContain("slate");
+  });
+
+  it("returns amber for open", () => {
+    expect(blockerStatusTone("open")).toContain("amber");
+  });
+
+  it("returns slate for unknown status", () => {
+    expect(blockerStatusTone("whatever")).toContain("slate");
+  });
+});
+
+// ─── blockerLinkedTask ────────────────────────────────────────────────────────
+
+describe("blockerLinkedTask", () => {
+  it("returns null when blocker has no taskId", () => {
+    const project = makeProject();
+    const blocker = makeBlocker({ taskId: null });
+    expect(blockerLinkedTask(project, blocker)).toBeNull();
+  });
+
+  it("returns the matching task", () => {
+    const task = makeTask({ id: "t-linked" });
+    const mission = makeMission({ tasks: [task] });
+    const project = makeProject({ missions: [mission] });
+    const blocker = makeBlocker({ taskId: "t-linked" });
+    expect(blockerLinkedTask(project, blocker)?.id).toBe("t-linked");
+  });
+
+  it("returns null when the taskId does not match any task", () => {
+    const task = makeTask({ id: "t1" });
+    const mission = makeMission({ tasks: [task] });
+    const project = makeProject({ missions: [mission] });
+    const blocker = makeBlocker({ taskId: "nonexistent" });
+    expect(blockerLinkedTask(project, blocker)).toBeNull();
+  });
+});
+
+// ─── agentPresenceOverview ────────────────────────────────────────────────────
+
+describe("agentPresenceOverview", () => {
+  it("returns an overview with a roles array", () => {
+    const project = makeProject();
+    const result = agentPresenceOverview(project);
+    expect(Array.isArray(result.roles)).toBe(true);
+  });
+
+  it("includes missionProgress with correct shape", () => {
+    const project = makeProject();
+    const result = agentPresenceOverview(project);
+    expect(result.missionProgress).toMatchObject({ completed: 0, total: 0, percent: 0 });
+  });
+
+  it("counts open blockers correctly", () => {
+    const b1 = makeBlocker({ id: "b1", status: "open" });
+    const b2 = makeBlocker({ id: "b2", status: "resolved" });
+    const project = makeProject({ blockers: [b1, b2] });
+    const result = agentPresenceOverview(project);
+    expect(result.openBlockerCount).toBe(1);
+  });
+
+  it("builds one role snapshot per roleDefinition", () => {
+    const role1: import("$lib/projects").ProjectRoleDefinition = {
+      id: "r1",
+      roleKey: "implementer",
+      sortOrder: 1,
+      visualName: "Implementer",
+      label: "Implementer",
+      enabled: true,
+      model: null,
+      recommendedModel: null,
+      effectiveModel: null,
+      goal: "",
+      backstory: "",
+    };
+    const role2: import("$lib/projects").ProjectRoleDefinition = {
+      id: "r2",
+      roleKey: "reviewer",
+      sortOrder: 2,
+      visualName: "Reviewer",
+      label: "Reviewer",
+      enabled: true,
+      model: null,
+      recommendedModel: null,
+      effectiveModel: null,
+      goal: "",
+      backstory: "",
+    };
+    const project = makeProject({ roleDefinitions: [role1, role2] });
+    const result = agentPresenceOverview(project);
+    expect(result.roles).toHaveLength(2);
+  });
+
+  it("computes percent progress correctly", () => {
+    const t1 = makeTask({ id: "t1", status: "completed" });
+    const t2 = makeTask({ id: "t2", status: "pending" });
+    const mission = makeMission({ tasks: [t1, t2] });
+    const project = makeProject({ missions: [mission] });
+    const result = agentPresenceOverview(project);
+    expect(result.missionProgress.completed).toBe(1);
+    expect(result.missionProgress.total).toBe(2);
+    expect(result.missionProgress.percent).toBe(50);
+  });
+});
+
+// ─── missionRecentJobs ────────────────────────────────────────────────────────
+
+describe("missionRecentJobs", () => {
+  it("returns empty array for a mission with no tasks", () => {
+    const mission = makeMission({ tasks: [] });
+    expect(missionRecentJobs(mission)).toEqual([]);
+  });
+
+  it("returns a flat list of { job, task } entries", () => {
+    const job = makeJob({ id: "j1" });
+    const task = makeTask({ jobs: [job] });
+    const mission = makeMission({ tasks: [task] });
+    const result = missionRecentJobs(mission);
+    expect(result).toHaveLength(1);
+    expect(result[0].job.id).toBe("j1");
+    expect(result[0].task.id).toBe("task-1");
+  });
+
+  it("sorts by startedAt descending", () => {
+    const j1 = makeJob({ id: "j1", startedAt: "2024-01-01T00:00:00Z" });
+    const j2 = makeJob({ id: "j2", startedAt: "2024-06-01T00:00:00Z" });
+    const task = makeTask({ jobs: [j1, j2] });
+    const mission = makeMission({ tasks: [task] });
+    const result = missionRecentJobs(mission);
+    expect(result[0].job.id).toBe("j2");
+  });
+});
+
+// ─── missionResultSummaries ───────────────────────────────────────────────────
+
+describe("missionResultSummaries", () => {
+  it("returns empty array when no jobs have artifactSummary", () => {
+    const job = makeJob({ artifactSummary: null });
+    const task = makeTask({ jobs: [job] });
+    const mission = makeMission({ tasks: [task] });
+    expect(missionResultSummaries(mission)).toEqual([]);
+  });
+
+  it("includes only jobs with an artifactSummary", () => {
+    const j1 = makeJob({ id: "j1", artifactSummary: "All tests passed" });
+    const j2 = makeJob({ id: "j2", artifactSummary: null });
+    const task = makeTask({ jobs: [j1, j2] });
+    const mission = makeMission({ tasks: [task] });
+    const result = missionResultSummaries(mission);
+    expect(result).toHaveLength(1);
+    expect(result[0].summary).toBe("All tests passed");
+    expect(result[0].job.id).toBe("j1");
+  });
+
+  it("includes task reference alongside job and summary", () => {
+    const job = makeJob({ id: "j1", artifactSummary: "Done" });
+    const task = makeTask({ id: "t-special", jobs: [job] });
+    const mission = makeMission({ tasks: [task] });
+    const result = missionResultSummaries(mission);
+    expect(result[0].task.id).toBe("t-special");
   });
 });
