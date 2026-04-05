@@ -42,12 +42,21 @@ jobs:
       - name: Build workspace
         run: pnpm build
 
+      - name: Run API unit tests
+        run: pnpm --filter @yeet2/api exec vitest run
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Compile Brain and Executor
-        run: |
-          python -m compileall apps/brain/src/yeet2_brain
-          python -m compileall apps/executor/src/yeet2_executor
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run Brain tests
+        working-directory: apps/brain
+        run: uv run --extra dev pytest tests/ -q
+
+      - name: Run Executor tests
+        working-directory: apps/executor
+        run: uv run --extra dev pytest tests/ -q

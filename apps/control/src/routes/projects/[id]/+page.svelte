@@ -376,6 +376,7 @@
     <div class="pipeline">
       {#each mission.tasks.sort((a, b) => a.priority - b.priority) as task, i}
         {@const statusClass = task.status === "complete" ? "success" : task.status === "running" ? "info" : task.status === "blocked" || task.status === "failed" ? "danger" : ""}
+        {@const latestJob = task.status === "complete" ? [...task.jobs].sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")).find((j) => j.status === "complete" && j.artifactData != null) ?? null : null}
         <div class="pipeline-stage">
           <div class="pipeline-node {statusClass}">
             <div class="pipeline-role">{task.agentRole}</div>
@@ -391,6 +392,18 @@
                 <span class="pipeline-badge">{task.status}</span>
               {/if}
             </div>
+            {#if latestJob}
+              <div class="pipeline-verify-row">
+                {#if latestJob.artifactData?.buildStatus === "pass"}
+                  <span class="pipeline-verify success">✓ build</span>
+                {:else if latestJob.artifactData?.buildStatus === "fail"}
+                  <span class="pipeline-verify danger">✗ build</span>
+                {/if}
+                {#if latestJob.artifactData?.testOutput != null}
+                  <span class="pipeline-verify {latestJob.artifactData.testOutput.failed > 0 ? 'danger' : 'success'}">{latestJob.artifactData.testOutput.passed}/{latestJob.artifactData.testOutput.total} tests</span>
+                {/if}
+              </div>
+            {/if}
           </div>
           {#if i < mission.tasks.length - 1}
             <div class="pipeline-arrow">→</div>
@@ -710,6 +723,23 @@
   .pipeline-badge.success { background: color-mix(in srgb, var(--color-status-success, #22c55e) 15%, transparent); color: var(--color-status-success, #22c55e); }
   .pipeline-badge.info { background: color-mix(in srgb, var(--color-accent, #60a5fa) 15%, transparent); color: var(--color-accent, #60a5fa); }
   .pipeline-badge.danger { background: color-mix(in srgb, var(--color-status-error, #ef4444) 15%, transparent); color: var(--color-status-error, #ef4444); }
+  .pipeline-verify-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1, 0.25rem);
+    margin-top: var(--space-1, 0.25rem);
+  }
+  .pipeline-verify {
+    display: inline-block;
+    font-size: 0.625rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 999px;
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-secondary, #aaa);
+    white-space: nowrap;
+  }
+  .pipeline-verify.success { background: color-mix(in srgb, var(--color-status-success, #22c55e) 15%, transparent); color: var(--color-status-success, #22c55e); }
+  .pipeline-verify.danger { background: color-mix(in srgb, var(--color-status-error, #ef4444) 15%, transparent); color: var(--color-status-error, #ef4444); }
   .chatroom {
     display: flex;
     flex-direction: column;

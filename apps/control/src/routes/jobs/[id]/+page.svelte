@@ -42,6 +42,9 @@
 
   const traceEvents = $derived(parseTraceEvents(data.log?.content));
   const hasTrace = $derived(traceEvents.length > 0);
+  const screenshotSrc = $derived(
+    data.job.artifactSummary?.startsWith("data:image/") ? data.job.artifactSummary : null
+  );
 </script>
 
 <section class="page-header">
@@ -151,7 +154,11 @@
 <section class="card">
   <div class="card-header">Artifact summary</div>
   <div class="card-body">
-    <Markdown content={data.job.artifactSummary} />
+    {#if screenshotSrc}
+      <img src={screenshotSrc} alt="Visual artifact" style="max-width:100%;border-radius:var(--radius-md,0.5rem);">
+    {:else}
+      <Markdown content={data.job.artifactSummary} />
+    {/if}
   </div>
 </section>
 {/if}

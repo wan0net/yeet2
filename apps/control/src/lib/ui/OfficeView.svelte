@@ -4,6 +4,7 @@
   let { staff }: { staff: AgentPresenceRoleSnapshot[] } = $props();
 </script>
 
+<p class="office-mobile-msg">Switch to pipeline view on mobile.</p>
 <div class="office-grid">
   {#each staff as role}
     <div class="desk-card desk-card--{role.status}">
@@ -28,11 +29,28 @@
 </div>
 
 <style>
+  .office-mobile-msg {
+    display: none;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary, #888);
+    padding: var(--space-4, 1rem);
+    text-align: center;
+  }
+
   .office-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: var(--space-4, 1rem);
     padding: var(--space-4, 1rem);
+  }
+
+  @media (max-width: 640px) {
+    .office-grid {
+      display: none;
+    }
+    .office-mobile-msg {
+      display: block;
+    }
   }
 
   .desk-card {
