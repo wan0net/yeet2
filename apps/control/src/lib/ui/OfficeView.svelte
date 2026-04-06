@@ -81,12 +81,13 @@
   }
 
   .desk-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
     color: var(--color-text-primary, #cdd6f4);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    word-break: break-word;
+    line-height: 1.2;
   }
 
   .status-dot {

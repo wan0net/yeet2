@@ -52,7 +52,7 @@
   </div>
   <div class="card-body stack">
     <p>
-      Each project uses seven specialist roles: Planner, Architect, Implementer, Tester, Coder, QA, and Reviewer.
+      Each project uses up to eight specialist roles: Planner, Architect, Implementer, Tester, Coder, QA, Reviewer, and Visual.
       Each role can be assigned a different LLM model to balance cost and capability. All core
       roles must be enabled before planning will run.
     </p>

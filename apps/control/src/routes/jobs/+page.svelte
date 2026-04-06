@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from "./$types";
-  import { formatTimestamp, jobStatusTone } from "$lib/project-detail";
+  import { formatTimestamp, jobStatusPillClass } from "$lib/project-detail";
   import Markdown from "$lib/ui/Markdown.svelte";
   let { data }: { data: PageData } = $props();
 
@@ -52,7 +52,7 @@
             <div class="page-header">
               <div class="stack">
                 <div class="token-row">
-                  <span class={`pill ${jobStatusTone(entry.job.status).includes("rose") ? "danger" : jobStatusTone(entry.job.status).includes("sky") ? "info" : jobStatusTone(entry.job.status).includes("amber") ? "warn" : "success"}`}>
+                  <span class="pill {jobStatusPillClass(entry.job.status)}">
                     {entry.job.status}
                   </span>
                   <span class="pill">{entry.job.executorType}</span>

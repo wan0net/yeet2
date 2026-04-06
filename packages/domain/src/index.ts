@@ -32,13 +32,13 @@ export type DecisionLogKind = "planning" | "dispatch" | "pull_request" | "merge"
 
 export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
   planner: "openrouter/anthropic/claude-opus-4.6",
-  architect: "openrouter/openai/gpt-5.4",
-  implementer: "openrouter/openai/gpt-5.4",
-  tester: "openrouter/openai/gpt-5.1-codex-mini",
-  coder: "openrouter/openai/gpt-5.3-codex",
-  qa: "openrouter/openai/gpt-5.4",
+  architect: "openrouter/openai/gpt-4.1",
+  implementer: "openrouter/openai/gpt-4.1",
+  tester: "openrouter/openai/gpt-4.1-mini",
+  coder: "openrouter/openai/gpt-4.1",
+  qa: "openrouter/openai/gpt-4.1-mini",
   reviewer: "openrouter/anthropic/claude-opus-4.6",
-  visual: "openrouter/google/gemini-3.1-pro"
+  visual: "openrouter/google/gemini-2.5-pro"
 };
 
 export { AGENT_THEMES, AGENT_THEME_NAMES, pickCharacters, type AgentCharacter } from "./agent-themes";

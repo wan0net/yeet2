@@ -132,6 +132,25 @@ export function jobStatusTone(status: string): string {
   }
 }
 
+export function jobStatusPillClass(status: string): string {
+  switch (status) {
+    case "complete":
+    case "completed":
+      return "success";
+    case "running":
+    case "in_progress":
+      return "info";
+    case "queued":
+    case "pending":
+      return "warn";
+    case "failed":
+    case "error":
+      return "danger";
+    default:
+      return "";
+  }
+}
+
 export function blockerStatusLabel(status: string): string {
   switch (status.toLowerCase()) {
     case "resolved":

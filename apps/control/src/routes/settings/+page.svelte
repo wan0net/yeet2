@@ -61,7 +61,7 @@
         A GitHub token is stored in the database. Remove it to fall back to the <code>GITHUB_TOKEN</code> environment variable.
       </p>
       <form method="POST" action="?/removeToken">
-        <button type="submit" class="btn btn--danger">Remove token</button>
+        <button type="submit" class="btn danger">Remove token</button>
       </form>
     {/if}
   </div>

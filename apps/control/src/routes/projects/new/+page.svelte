@@ -80,7 +80,7 @@
           <strong>{template.name}</strong>
           <span>{template.description}</span>
           {#if template.key === "custom"}
-            <span class="pill secondary" style="margin-top: 0.25rem;">Edit roles after creation</span>
+            <span class="pill" style="margin-top: 0.25rem;">Edit roles after creation</span>
           {/if}
         </button>
       {/each}

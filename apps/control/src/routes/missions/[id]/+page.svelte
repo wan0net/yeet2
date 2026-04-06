@@ -15,7 +15,7 @@
       <p>{data.project.name}</p>
     </div>
   </div>
-  <div class="action-row">
+  <div class="token-row">
     <form method="POST">
       <button formaction="?/replan" type="submit" class="btn secondary">Re-plan</button>
     </form>

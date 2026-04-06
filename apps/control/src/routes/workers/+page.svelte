@@ -16,7 +16,7 @@
 
   function statusPillClass(status: string): string {
     switch (status) {
-      case "stale": return "pill warning";
+      case "stale": return "pill warn";
       case "offline": return "pill muted";
       case "error": return "pill danger";
       case "busy":

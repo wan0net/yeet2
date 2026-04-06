@@ -112,6 +112,7 @@
     border: 1px solid var(--color-border, #333);
     border-radius: var(--radius-sm, 0.375rem);
     padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    width: auto;
   }
   .audit-search {
     font-family: inherit;
@@ -121,6 +122,7 @@
     border: 1px solid var(--color-border, #333);
     border-radius: var(--radius-sm, 0.375rem);
     padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    width: auto;
     min-width: 200px;
   }
   .audit-search:focus {

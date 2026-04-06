@@ -391,7 +391,12 @@
 
 {#if currentTab === "overview"}
 <section class="card">
-  <div class="card-header">Current mission</div>
+  <div class="card-header" style="display: flex; align-items: center;">
+    Current mission
+    {#if mission}
+      <a class="btn secondary" href={`/missions/${mission.id}`} style="margin-left: auto; font-size: 0.75rem; padding: 0.25rem 0.625rem; height: auto;">View mission</a>
+    {/if}
+  </div>
   <div class="card-body">
     {#if mission}
       <div class="stack">
@@ -498,7 +503,7 @@
   <div class="card">
     <form method="POST" action="?/saveRoles">
       <input type="hidden" name="roles" value={rolesJson()} />
-      <div class="card-header">
+      <div class="card-header" style="display: flex; align-items: center;">
         Team
         <div class="team-header-actions">
           {#if currentTab === "agents"}
@@ -653,10 +658,15 @@
 <section class="chatroom">
   <div class="chatroom-header">
     <strong>Team chat</strong>
-    {#if project.constitutionStatus === "missing" || project.constitutionStatus === "pending"}
+    {#if project.constitutionStatus === "missing"}
       <form method="POST" style="margin-left: auto;">
         <input name="returnTab" type="hidden" value="chat" />
         <button class="btn primary" formaction="?/interview" type="submit">Start project interview</button>
+      </form>
+    {:else if project.constitutionStatus === "pending"}
+      <form method="POST" style="margin-left: auto;">
+        <input name="returnTab" type="hidden" value="chat" />
+        <button class="btn primary" formaction="?/interview" type="submit">Continue interview</button>
       </form>
     {:else if project.constitutionStatus === "parsed" || project.constitutionStatus === "stale"}
       <form method="POST" style="margin-left: auto;">
@@ -669,8 +679,10 @@
   <div class="chatroom-messages">
     {#if chatEntries.length === 0}
       <div class="chatroom-empty">
-        {#if project.constitutionStatus === "missing" || project.constitutionStatus === "pending"}
+        {#if project.constitutionStatus === "missing"}
           <p>No constitution files detected. Start the project interview to set up this project — the planner will ask you a few questions and generate the constitution documents.</p>
+        {:else if project.constitutionStatus === "pending"}
+          <p>Interview in progress. Use the <strong>Continue interview</strong> button above to answer the next question and build out your constitution files.</p>
         {:else}
           <p>No messages yet. Agents will post updates here as they work.</p>
         {/if}
@@ -976,6 +988,7 @@
     border: 1px solid var(--color-border, #333);
     border-radius: var(--radius-sm, 0.375rem);
     padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    width: auto;
   }
   /* Modal */
   .modal-overlay {
