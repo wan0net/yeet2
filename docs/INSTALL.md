@@ -2,182 +2,194 @@
 
 ## Prerequisites
 
-- Docker Engine and Docker Compose v2 (`docker compose` not `docker-compose`)
+- Docker Engine and Docker Compose v2 (`docker compose`, not `docker-compose`)
 - Git
-- A host IP or domain that the Control UI will be served from (needed for CSRF origin)
-- **Optional:** GitHub personal access token for PR automation (`GITHUB_TOKEN`)
-- **Optional:** OpenRouter or OpenAI API key if you want CrewAI planning (`OPENROUTER_API_KEY` / `OPENAI_API_KEY`). A deterministic fallback planner is available with no key required.
-- **Required for execution:** An LLM API key for OpenHands (`LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`)
+- An LLM API key (OpenRouter recommended — covers both the Brain planner and Executor)
 
 ---
 
-## Quick Start — Release Path (GHCR images)
-
-Use this path when you want to pull pre-built images rather than building from source.
-
-**1. Clone the repo**
+## Quick Install
 
 ```bash
-git clone https://github.com/wan0net/yeet2.git
-cd yeet2
+curl -fsSL https://raw.githubusercontent.com/wan0net/yeet2/main/install.sh | bash
 ```
 
-**2. Create your `.env`**
+The script clones the repo to `~/yeet2`, walks you through the required config, builds images from source, and starts the stack. All you need upfront is your LLM API key and the host URL.
+
+To install to a custom directory:
+
+```bash
+YEET2_DIR=/opt/yeet2 bash <(curl -fsSL https://raw.githubusercontent.com/wan0net/yeet2/main/install.sh)
+```
+
+---
+
+## Manual Install
+
+If you prefer to see every step:
+
+**1. Clone**
+
+```bash
+git clone https://github.com/wan0net/yeet2.git ~/yeet2
+cd ~/yeet2
+```
+
+**2. Configure**
 
 ```bash
 cp .env.example .env
 ```
 
-**3. Configure required variables**
-
 Open `.env` and set at minimum:
 
 ```dotenv
-# Set to the IP/hostname and port where you will access the UI
-YEET2_CONTROL_ORIGIN=http://10.42.10.101:3000
+# The URL you'll use to access the Control UI (must match exactly — used for CSRF)
+YEET2_CONTROL_ORIGIN=http://YOUR_HOST_IP:3000
 
-# LLM credentials for the executor (OpenHands uses these)
-LLM_API_KEY=sk-...
-LLM_MODEL=anthropic/claude-sonnet-4-5
+# LLM credentials for the executor agent (OpenHands uses these)
+LLM_API_KEY=sk-or-v1-...
+LLM_MODEL=openrouter/openai/gpt-4.1-mini
 LLM_BASE_URL=https://openrouter.ai/api/v1
+
+# Same key for the Brain planner (CrewAI)
+OPENROUTER_API_KEY=sk-or-v1-...
+
+# Optional: protect the API with a bearer token
+YEET2_API_BEARER_TOKEN=   # leave blank to disable auth
 ```
 
-Everything else has workable defaults. See [Configuration Reference](#configuration-reference) below.
-
-**4. Pull and start**
-
-```bash
-docker compose --env-file .env -f docker-compose.release.yml pull
-docker compose --env-file .env -f docker-compose.release.yml up -d
-```
-
-**5. Verify**
-
-```bash
-curl http://localhost:3001/health
-# → {"status":"ok"}
-```
-
-**6. Open the Control UI**
-
-Navigate to `http://localhost:3000` (or your configured host).
-
----
-
-## Build-on-Host Path
-
-Use this path to build images directly from source — the current dogfood path on `10.42.10.101`.
-
-Steps 1–3 are identical to the release path. Then:
+**3. Build and start**
 
 ```bash
 docker compose --env-file .env -f docker-compose.deploy.yml up -d --build
 ```
 
-To rebuild after a `git pull`:
+**4. Verify**
+
+```bash
+curl http://localhost:3001/health   # → {"status":"ok"}
+```
+
+**5. Open the UI**
+
+Navigate to the URL you set as `YEET2_CONTROL_ORIGIN`.
+
+---
+
+## Updating
+
+From the install directory:
 
 ```bash
 git pull
 docker compose --env-file .env -f docker-compose.deploy.yml up -d --build
 ```
 
+Or re-run the install script — it detects an existing repo and pulls:
+
+```bash
+bash ~/yeet2/install.sh
+```
+
+---
+
+## Using Pre-built Images (GHCR)
+
+If you don't want to build from source, use the release compose file instead:
+
+```bash
+docker compose --env-file .env -f docker-compose.release.yml pull
+docker compose --env-file .env -f docker-compose.release.yml up -d
+```
+
+Set image overrides in `.env` if you want a specific version:
+
+```dotenv
+YEET2_NODE_IMAGE=ghcr.io/wan0net/yeet2-node:latest
+YEET2_BRAIN_IMAGE=ghcr.io/wan0net/yeet2-brain:latest
+YEET2_EXECUTOR_IMAGE=ghcr.io/wan0net/yeet2-executor:latest
+```
+
 ---
 
 ## Configuration Reference
 
-All variables live in `.env`. The full list with defaults is in `.env.example`. Key variables:
+All variables live in `.env`. Full defaults are in `.env.example`.
 
 ### Core
 
 | Variable | Default | Description |
 |---|---|---|
-| `CONTROL_PORT` | `3000` | Host port for the SvelteKit UI |
-| `API_PORT` | `3001` | Host port for the Fastify API |
-| `BRAIN_PORT` | `3002` | Host port for the Brain service |
-| `EXECUTOR_PORT` | `3003` | Host port mapping to executor's internal 8021 |
-| `YEET2_CONTROL_ORIGIN` | `http://localhost:3000` | **Must match the URL you use to access the UI.** SvelteKit uses this for CSRF checks — form submissions will be rejected if it's wrong. |
-| `YEET2_PROJECTS_DIR` | `/tmp/yeet2-projects` | Where cloned project repos live inside the container. Use a persistent path in production. |
+| `YEET2_CONTROL_ORIGIN` | `http://localhost:3000` | **Must match the URL in your browser.** SvelteKit uses this for CSRF — forms fail if wrong. |
+| `CONTROL_PORT` | `3000` | Host port for the Control UI |
+| `API_PORT` | `3001` | Host port for the API |
+| `BRAIN_PORT` | `3002` | Host port for the Brain |
+| `EXECUTOR_PORT` | `3003` | Host port for the Executor |
+| `YEET2_API_BEARER_TOKEN` | _(blank)_ | Bearer token for API write access. Generate: `openssl rand -hex 32`. Leave blank to disable. |
+
+### LLM / Keys
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_API_KEY` | _(required)_ | API key for the Executor's OpenHands agent |
+| `LLM_MODEL` | _(required)_ | Model identifier (e.g. `openrouter/openai/gpt-4.1-mini`) |
+| `LLM_BASE_URL` | _(required)_ | Base URL (e.g. `https://openrouter.ai/api/v1`) |
+| `OPENROUTER_API_KEY` | _(blank)_ | OpenRouter key for the Brain planner |
+| `OPENAI_API_KEY` | _(blank)_ | OpenAI key alternative for the Brain planner |
+| `GITHUB_TOKEN` | _(blank)_ | PAT with `repo` scope — required for PR creation and branch push |
+
+### Brain / Planning
+
+| Variable | Default | Description |
+|---|---|---|
+| `YEET2_BRAIN_PLANNER_BACKEND` | `auto` | `auto` uses CrewAI when enabled, else deterministic. `crewai` forces it. |
+| `YEET2_BRAIN_CREWAI_ENABLED` | `false` | Enable CrewAI-backed planning |
+| `YEET2_BRAIN_CREWAI_MODEL` | _(blank)_ | Model for CrewAI (e.g. `openrouter/openai/gpt-4.1-mini`) |
+| `YEET2_BRAIN_PLAN_TIMEOUT_MS` | `120000` | Planning call timeout (ms) |
+
+### Execution
+
+| Variable | Default | Description |
+|---|---|---|
+| `YEET2_EXECUTOR_MODE` | `openhands` | Execution adapter (`openhands` or `passthrough`) |
+| `YEET2_OPENHANDS_TIMEOUT_SECONDS` | `1800` | Per-job timeout. Blank = no timeout (risky in production). |
+| `YEET2_EXECUTOR_WORKTREE_CLEANUP` | `on_success` | When to clean up git worktrees: `on_success`, `always`, `never` |
 
 ### Autonomy
 
 | Variable | Default | Description |
 |---|---|---|
-| `YEET2_AUTONOMY_LOOP_ENABLED` | `true` | Enables the background autonomy loop |
-| `YEET2_AUTONOMY_LOOP_INTERVAL_MS` | `60000` | How often the autonomy loop ticks (ms) |
-
-### Planning (Brain)
-
-| Variable | Default | Description |
-|---|---|---|
-| `YEET2_BRAIN_PLANNER_BACKEND` | `auto` | `auto` uses CrewAI if enabled, otherwise deterministic. `deterministic` forces the rule-based planner. |
-| `YEET2_BRAIN_CREWAI_ENABLED` | `false` | Set `true` to enable CrewAI-backed planning |
-| `YEET2_BRAIN_CREWAI_MODEL` | _(blank)_ | Model string passed to CrewAI (e.g. `openrouter/anthropic/claude-sonnet-4-5`) |
-| `OPENROUTER_API_KEY` | _(blank)_ | OpenRouter key for Brain's CrewAI planner |
-| `OPENAI_API_KEY` | _(blank)_ | OpenAI key alternative for Brain's CrewAI planner |
-| `YEET2_BRAIN_PLAN_TIMEOUT_MS` | `45000` | Timeout for a single planning call |
-
-### Execution (Executor / OpenHands)
-
-| Variable | Default | Description |
-|---|---|---|
-| `YEET2_EXECUTOR_MODE` | `openhands` | Execution adapter. `openhands` is the only production-ready option. |
-| `LLM_API_KEY` | _(blank)_ | API key passed to OpenHands for task execution |
-| `LLM_MODEL` | _(blank)_ | Model identifier passed to OpenHands |
-| `LLM_BASE_URL` | _(blank)_ | Base URL for the LLM API (e.g. OpenRouter) |
-| `YEET2_OPENHANDS_TIMEOUT_SECONDS` | `1800` | Per-job timeout. Blank = no timeout (dangerous in production). |
-| `YEET2_EXECUTOR_WORKTREE_CLEANUP` | `on_success` | When to clean up git worktrees: `on_success`, `always`, or `never` |
-
-### GitHub
-
-| Variable | Default | Description |
-|---|---|---|
-| `GITHUB_TOKEN` | _(blank)_ | Personal access token with `repo` scope. Required for PR creation and branch push. |
+| `YEET2_AUTONOMY_LOOP_ENABLED` | `true` | Enable the background autonomy loop |
+| `YEET2_AUTONOMY_LOOP_INTERVAL_MS` | `60000` | Loop tick interval (ms) |
+| `YEET2_STUCK_JOB_TIMEOUT_MS` | `3600000` | Jobs running longer than this (ms) are force-failed |
 
 ---
 
 ## Register Your First Project
 
-1. Open the Control UI and navigate to **Projects → Add project**
-2. Enter a project name, the repo URL (e.g. `https://github.com/org/repo`) or a local path, and the default branch
-3. Submit — the API will clone the repo and scan for constitution files
-4. Open the project detail page. The "Constitution" section shows pills for detected files (`VISION.md`, `SPEC.md`, `ROADMAP.md`, etc.)
+1. Open the Control UI → **Projects → Add project**
+2. Enter a name, repo URL or local path, and default branch
+3. Submit — the API clones the repo and scans for constitution files
+4. Open the project detail. The **Constitution** section shows pills for detected files (`VISION.md`, `SPEC.md`, etc.)
 5. Once constitution files are detected the project is ready for planning
 
-Constitution files are read from the `docs/` directory of the registered repo. A project without any constitution files can still be planned against, but quality will be lower.
+Constitution files are read from the `docs/` directory of the registered repo.
 
 ---
 
-## Forgeyard Self-Dogfood Setup
+## Forgeyard (yeet2 dogfooding itself)
 
-To register yeet2 itself as the `forgeyard` project on `10.42.10.101`:
+To register yeet2 as its own project on a fresh install:
 
-**1. Set a persistent projects directory in `.env`**
-
-```dotenv
-YEET2_PROJECTS_DIR=/var/lib/yeet2/projects
-```
-
-This path is mounted as a named volume in the compose files, so it survives restarts.
-
-**2. Register via the UI**
-
-- Name: `forgeyard`
-- Repo URL: `https://github.com/wan0net/yeet2`
-- Default branch: `main`
-
-**3. Confirm constitution detection**
-
-The project detail page should show pills for `VISION.md`, `SPEC.md`, `ROADMAP.md`, `ARCHITECTURE.md`, and others from `docs/`.
-
-**4. Set autonomy mode to `supervised`**
-
-On the project detail page, set autonomy to **Supervised** before the first planning run. This lets you review proposed task dispatches before they execute.
+1. Set `YEET2_PROJECTS_DIR=/var/lib/yeet2/projects` in `.env` (already the default in compose files)
+2. Register via the UI: name `forgeyard`, repo `https://github.com/wan0net/yeet2`, branch `main`
+3. Set autonomy to **Supervised** before the first plan run
+4. Constitution detection should show pills for all docs in `docs/`
 
 ---
 
-## Verify the System
-
-Check individual service health:
+## Verifying Health
 
 ```bash
 curl http://localhost:3001/health   # API
@@ -185,57 +197,49 @@ curl http://localhost:3002/health   # Brain
 curl http://localhost:3003/health   # Executor
 ```
 
-In the Control UI:
+In the UI:
+- **Workers page** — executor should appear as online
+- **Project → Constitution** — pills for detected files
+- **Chat tab** — agents post progress messages here as they work
 
-- **Overview / Dashboard** — shows active projects, pending approvals, and blockers
-- **Workers** — confirms the executor has registered and is sending heartbeats
-- **Project detail → Constitution** — confirms constitution files were detected
+---
+
+## Operational Commands
+
+```bash
+# Logs for a specific service
+docker compose -f docker-compose.deploy.yml logs -f api
+
+# Restart a service
+docker compose -f docker-compose.deploy.yml restart api
+
+# Database backup
+docker compose -f docker-compose.deploy.yml exec postgres \
+  pg_dump -U yeet2 yeet2 > backup-$(date +%Y%m%d).sql
+
+# Pull updated images (release path only)
+docker compose --env-file .env -f docker-compose.release.yml pull
+docker compose --env-file .env -f docker-compose.release.yml up -d
+```
 
 ---
 
 ## Local Development
 
-For working on yeet2 itself — services run as local processes, only infra runs in Docker.
-
-**1. Start infrastructure**
+Only infra runs in Docker. Services run as local processes.
 
 ```bash
+# Start postgres + redis
 docker compose up -d
-# starts postgres (5432) and redis (6379) only
-```
 
-**2. Configure environment**
-
-```bash
-cp .env.example .env
-# Leave DATABASE_URL and REDIS_URL pointing at localhost — the defaults work
-```
-
-**3. Install Node dependencies**
-
-```bash
+# Install Node deps
 pnpm install
-```
 
-**4. Run database migrations**
-
-```bash
+# Generate Prisma client and push schema
 pnpm --filter @yeet2/db exec prisma generate
 pnpm --filter @yeet2/db exec prisma db push
-```
 
-**5. Set up Brain (Python)**
-
-```bash
-cd apps/brain
-uv venv
-uv pip install -e '.[crewai]'
-cd ../..
-```
-
-**6. Start services** (each in its own terminal)
-
-```bash
+# Start each service in its own terminal
 pnpm dev:api
 pnpm dev:brain
 pnpm dev:control
@@ -244,74 +248,19 @@ pnpm dev:executor
 
 ---
 
-## Operational Commands
-
-**View logs for a service**
-
-```bash
-docker compose -f docker-compose.deploy.yml logs -f api
-docker compose -f docker-compose.deploy.yml logs -f brain
-docker compose -f docker-compose.deploy.yml logs -f executor
-```
-
-**Restart a single service**
-
-```bash
-docker compose -f docker-compose.deploy.yml restart api
-```
-
-**Database backup**
-
-```bash
-docker compose -f docker-compose.deploy.yml exec postgres \
-  pg_dump -U yeet2 yeet2 > backup-$(date +%Y%m%d).sql
-```
-
-**Check autonomy loop status**
-
-Open the project detail page in the Control UI. The autonomy status badge and decision log show the last loop result and next scheduled run.
-
-**Pull updated images (release path)**
-
-```bash
-docker compose --env-file .env -f docker-compose.release.yml pull
-docker compose --env-file .env -f docker-compose.release.yml up -d
-```
-
----
-
 ## Troubleshooting
 
+**Forms rejected (CSRF error)**
+`YEET2_CONTROL_ORIGIN` must exactly match the URL in your browser including protocol and port.
+
 **Brain unreachable / planning fails**
-
-Check that `YEET2_BRAIN_BASE_URL` in `.env` matches the actual brain address. Inside the compose network the default is `http://brain:3002`. For local dev it should be `http://localhost:3002`.
-
-```bash
-docker compose -f docker-compose.deploy.yml logs brain
-```
-
-Also verify that role definitions are all enabled on the project — planning requires at least one active role.
+Inside compose the default is `http://brain:3002`. For local dev use `http://localhost:3002`. Check `docker compose logs brain`.
 
 **Executor job stuck**
+Check `YEET2_OPENHANDS_TIMEOUT_SECONDS`. View logs in the UI under **Jobs** → select the job, or `docker compose logs executor`.
 
-Check `YEET2_OPENHANDS_TIMEOUT_SECONDS` — a blank value means no timeout. View job logs in the Control UI under **Jobs** → select the job.
+**Worker stays stale**
+Executor sends heartbeats every `YEET2_EXECUTOR_HEARTBEAT_INTERVAL_SECONDS` seconds (default 30). Wait two intervals; if still stale, check executor logs.
 
-```bash
-docker compose -f docker-compose.deploy.yml logs executor
-```
-
-**Worker shows stale in the Workers page**
-
-The executor sends heartbeats every `YEET2_EXECUTOR_HEARTBEAT_INTERVAL_SECONDS` seconds (default 30). If the executor process restarted recently it may take up to two intervals to re-register. If it stays stale, check executor logs.
-
-**Control UI form submissions rejected (CSRF error)**
-
-`YEET2_CONTROL_ORIGIN` must exactly match the URL in your browser, including protocol and port. Example: if you access the UI at `http://10.42.10.101:3000`, set `YEET2_CONTROL_ORIGIN=http://10.42.10.101:3000`.
-
-**Database migration fails on startup**
-
-The `migrate` service runs once and must complete before API or Brain start. Check its logs:
-
-```bash
-docker compose -f docker-compose.deploy.yml logs migrate
-```
+**Migration fails on startup**
+`migrate` must complete before API/Brain start. Check: `docker compose -f docker-compose.deploy.yml logs migrate`.
