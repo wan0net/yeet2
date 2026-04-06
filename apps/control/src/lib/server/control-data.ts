@@ -37,24 +37,40 @@ export interface GlobalBlockerEntry {
 }
 
 export async function loadOverview() {
-  return apiJson<{ overview: unknown }>("/overview");
+  try {
+    return apiJson<{ overview: unknown }>("/overview");
+  } catch {
+    return { overview: null };
+  }
 }
 
 export async function loadProjects(): Promise<ProjectRecord[]> {
-  const payload = await apiJson<{ projects?: unknown[] }>("/projects");
-  return Array.isArray(payload.projects)
-    ? payload.projects.map(normalizeProject).filter((entry): entry is ProjectRecord => entry !== null)
-    : [];
+  try {
+    const payload = await apiJson<{ projects?: unknown[] }>("/projects");
+    return Array.isArray(payload.projects)
+      ? payload.projects.map(normalizeProject).filter((entry): entry is ProjectRecord => entry !== null)
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function loadProject(projectId: string): Promise<ProjectRecord | null> {
-  const response = await apiJson<{ project?: unknown }>(`/projects/${encodeURIComponent(projectId)}`);
-  return response.project ? normalizeProject(response.project) : null;
+  try {
+    const response = await apiJson<{ project?: unknown }>(`/projects/${encodeURIComponent(projectId)}`);
+    return response.project ? normalizeProject(response.project) : null;
+  } catch {
+    return null;
+  }
 }
 
-export async function loadProjectRoleModels(projectId: string): Promise<ProjectModelCatalogOption[]> {
-  const payload = await apiJson<unknown>(`/projects/models`);
-  return normalizeProjectModelCatalog(payload);
+export async function loadProjectRoleModels(_projectId: string): Promise<ProjectModelCatalogOption[]> {
+  try {
+    const payload = await apiJson<unknown>(`/projects/models`);
+    return normalizeProjectModelCatalog(payload);
+  } catch {
+    return [];
+  }
 }
 
 export async function loadMissionDetail(missionId: string): Promise<{ project: ProjectRecord; mission: ProjectMissionRecord } | null> {
@@ -138,16 +154,30 @@ export async function loadGlobalBlockers() {
 }
 
 export async function loadApprovals() {
-  return apiJson<{ approvals?: unknown[] }>("/approvals");
+  try {
+    return apiJson<{ approvals?: unknown[] }>("/approvals");
+  } catch {
+    return { approvals: [] };
+  }
 }
 
 export async function loadWorkers(): Promise<WorkerRegistryResult> {
-  const payload = await apiJson<{ workers?: unknown[] }>("/workers");
-  return {
-    workers: normalizeWorkerList(payload.workers ?? []),
-    registryAvailable: true,
-    status: 200,
-    error: null,
-    detail: null
-  };
+  try {
+    const payload = await apiJson<{ workers?: unknown[] }>("/workers");
+    return {
+      workers: normalizeWorkerList(payload.workers ?? []),
+      registryAvailable: true,
+      status: 200,
+      error: null,
+      detail: null
+    };
+  } catch {
+    return {
+      workers: [],
+      registryAvailable: false,
+      status: 503,
+      error: "api_unavailable",
+      detail: null
+    };
+  }
 }

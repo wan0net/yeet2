@@ -126,7 +126,7 @@
 <style>
   .template-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 0.75rem;
     margin-top: 0.75rem;
   }
@@ -136,32 +136,39 @@
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.875rem 1rem;
-    border: 1px solid var(--border, #e5e7eb);
-    border-radius: 0.5rem;
-    background: var(--surface, #fff);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--color-surface-raised, #1a1a1a);
+    color: var(--color-text-primary, #eee);
     cursor: pointer;
     text-align: left;
     transition: border-color 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+    word-break: break-word;
   }
 
   .template-card:hover {
-    border-color: var(--accent, #6366f1);
+    border-color: var(--color-accent, #3b82f6);
   }
 
   .template-card.selected {
-    border-color: var(--accent, #6366f1);
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #6366f1) 20%, transparent);
+    border-color: var(--color-accent, #3b82f6);
+    box-shadow: 0 0 0 2px var(--color-accent-dim, #2563eb33);
+    background: var(--color-accent-subtle, #1e3a5f);
   }
 
   .template-card strong {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 600;
-    color: var(--text, #111827);
+    color: var(--color-text-primary, #eee);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .template-card span:not(.pill) {
     font-size: 0.75rem;
-    color: var(--text-muted, #6b7280);
+    color: var(--color-text-secondary, #888);
     line-height: 1.4;
   }
 </style>
