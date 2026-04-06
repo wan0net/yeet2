@@ -425,6 +425,12 @@ export interface ProjectAutonomyRunUpdateInput {
 interface ProjectMessageInput {
   content: string;
   replyToId?: string | null;
+  actor?: string | null;
+  missionId?: string | null;
+  taskId?: string | null;
+  jobId?: string | null;
+  messageMode?: string | null;
+  choices?: string[] | null;
 }
 
 export class ProjectDispatchError extends Error {
@@ -2507,6 +2513,9 @@ function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectCha
   const mentions = Array.isArray(detail.mentions)
     ? detail.mentions.filter((value): value is string => typeof value === "string").map((value) => value.trim()).filter(Boolean)
     : [];
+  const choices = Array.isArray(detail.choices)
+    ? (detail.choices as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+    : null;
 
   return {
     id: log.id,
@@ -2519,6 +2528,7 @@ function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectCha
     source,
     messageMode,
     mentions,
+    choices: choices && choices.length > 0 ? choices : null,
     replyToId: typeof detail.replyToId === "string" ? detail.replyToId.trim() || null : null,
     actionable: mentions.length > 0,
     createdAt: log.createdAt
@@ -4519,19 +4529,31 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   const mentions = extractMessageMentions(content);
   const effectiveMentions = mentions.length > 0 ? mentions : inheritedMentions;
 
+  const actor = typeof input.actor === "string" && input.actor.trim() ? input.actor.trim() : "operator";
+  const source: "operator" | "agent" | "system" =
+    actor === "operator" ? "operator" : actor === "system" ? "system" : "agent";
+  const messageMode =
+    typeof input.messageMode === "string" &&
+    (input.messageMode === "working" || input.messageMode === "handoff" || input.messageMode === "directive" || input.messageMode === "comment")
+      ? input.messageMode
+      : source === "operator" ? "comment" : "working";
+  const choices = Array.isArray(input.choices) ? input.choices.filter((c): c is string => typeof c === "string" && c.trim().length > 0) : [];
+
   return recordDecisionLog({
     projectId,
-    missionId: replyTarget?.missionId ?? undefined,
-    taskId: replyTarget?.taskId ?? undefined,
-    jobId: replyTarget?.jobId ?? undefined,
+    missionId: input.missionId ?? replyTarget?.missionId ?? undefined,
+    taskId: input.taskId ?? replyTarget?.taskId ?? undefined,
+    jobId: input.jobId ?? replyTarget?.jobId ?? undefined,
     kind: "message",
-    actor: "operator",
+    actor,
     summary: content,
     detail: {
-      source: "operator",
+      source,
+      messageMode,
       replyToId: input.replyToId ?? null,
       mentions: effectiveMentions,
-      inheritedMentions: mentions.length === 0 && inheritedMentions.length > 0
+      inheritedMentions: mentions.length === 0 && inheritedMentions.length > 0,
+      ...(choices.length > 0 ? { choices } : {})
     }
   });
 }

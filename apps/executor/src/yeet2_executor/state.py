@@ -95,6 +95,13 @@ class WorkerRegistryClient:
             endpoint=endpoint or None,
         )
 
+    def _api_token(self) -> str | None:
+        return (
+            os.getenv("YEET2_API_BEARER_TOKEN")
+            or os.getenv("YEET2_API_TOKEN")
+            or None
+        )
+
     def _request(self, path: str, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode("utf-8")
         parsed = urlparse(f"{self.api_base_url}{path}")
@@ -102,20 +109,43 @@ class WorkerRegistryClient:
         request_path = parsed.path or "/"
         if parsed.query:
             request_path = f"{request_path}?{parsed.query}"
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        token = self._api_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         try:
             connection = connection_class(parsed.netloc, timeout=2)
-            connection.request(
-                "POST",
-                request_path,
-                body=body,
-                headers={"Content-Type": "application/json"},
-            )
+            connection.request("POST", request_path, body=body, headers=headers)
             response = connection.getresponse()
             response.read()
             connection.close()
             return
         except (TimeoutError, OSError, ValueError):
             return
+
+    def post_message(
+        self,
+        project_id: str,
+        content: str,
+        *,
+        actor: str = "agent",
+        mission_id: str | None = None,
+        task_id: str | None = None,
+        job_id: str | None = None,
+        message_mode: str = "working",
+    ) -> None:
+        payload: dict[str, Any] = {
+            "content": content,
+            "actor": actor,
+            "message_mode": message_mode,
+        }
+        if mission_id:
+            payload["mission_id"] = mission_id
+        if task_id:
+            payload["task_id"] = task_id
+        if job_id:
+            payload["job_id"] = job_id
+        self._request(f"/projects/{project_id}/messages", payload)
 
     def ensure_registered(self) -> None:
         self._request(
@@ -187,6 +217,11 @@ class JobStore:
         else:
             adapter = self._adapter
 
+        project_id = str(job_payload.get("project_id", "")).strip() or None
+        mission_id = str(job_payload.get("mission_id", "")).strip() or None
+        agent_role = str(job_payload.get("agent_role", "agent")).strip() or "agent"
+        task_title = str(job_payload.get("task_title", "task")).strip() or "task"
+
         job = adapter.create_job(task_id=task_id, payload=job_payload)
         with self._lock:
             self._jobs[job.id] = job
@@ -194,8 +229,44 @@ class JobStore:
         self._worker_registry.ensure_registered()
         self._current_job_id = job.id
         self._worker_registry.heartbeat(job.id, status="busy")
+
+        if project_id:
+            self._worker_registry.post_message(
+                project_id,
+                f"Starting {task_title}...",
+                actor=agent_role,
+                mission_id=mission_id,
+                task_id=task_id,
+                job_id=job.id,
+                message_mode="working",
+            )
+
         try:
-            return adapter.run_job(job)
+            result = adapter.run_job(job)
+            if project_id:
+                summary = result.artifact_summary or f"Completed {task_title}."
+                self._worker_registry.post_message(
+                    project_id,
+                    summary,
+                    actor=agent_role,
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    job_id=result.id,
+                    message_mode="handoff",
+                )
+            return result
+        except Exception:
+            if project_id:
+                self._worker_registry.post_message(
+                    project_id,
+                    f"Job failed for {task_title}.",
+                    actor=agent_role,
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    job_id=job.id,
+                    message_mode="working",
+                )
+            raise
         finally:
             self._current_job_id = None
             self._worker_registry.heartbeat(None, status="online")

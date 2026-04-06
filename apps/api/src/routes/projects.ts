@@ -183,12 +183,21 @@ function parseProjectRoleDefinitionsBody(body: unknown): { input: Array<{ roleKe
   };
 }
 
-function parseProjectMessageBody(body: unknown): { input: { content: string; replyToId: string | null } | null; error: string | null } {
+function parseProjectMessageBody(body: unknown): {
+  input: {
+    content: string;
+    replyToId: string | null;
+    actor: string | null;
+    missionId: string | null;
+    taskId: string | null;
+    jobId: string | null;
+    messageMode: string | null;
+    choices: string[] | null;
+  } | null;
+  error: string | null;
+} {
   if (typeof body !== "object" || body === null) {
-    return {
-      input: null,
-      error: "Request body must be an object"
-    };
+    return { input: null, error: "Request body must be an object" };
   }
 
   const candidate = body as Record<string, unknown>;
@@ -204,18 +213,42 @@ function parseProjectMessageBody(body: unknown): { input: { content: string; rep
       : typeof candidate.reply_to_id === "string"
         ? candidate.reply_to_id.trim()
         : "";
+  const actor =
+    typeof candidate.actor === "string" ? candidate.actor.trim() : null;
+  const missionId =
+    typeof candidate.missionId === "string" ? candidate.missionId.trim() || null
+    : typeof candidate.mission_id === "string" ? candidate.mission_id.trim() || null
+    : null;
+  const taskId =
+    typeof candidate.taskId === "string" ? candidate.taskId.trim() || null
+    : typeof candidate.task_id === "string" ? candidate.task_id.trim() || null
+    : null;
+  const jobId =
+    typeof candidate.jobId === "string" ? candidate.jobId.trim() || null
+    : typeof candidate.job_id === "string" ? candidate.job_id.trim() || null
+    : null;
+  const messageMode =
+    typeof candidate.messageMode === "string" ? candidate.messageMode.trim() || null
+    : typeof candidate.message_mode === "string" ? candidate.message_mode.trim() || null
+    : null;
+  const choices = Array.isArray(candidate.choices)
+    ? (candidate.choices as unknown[]).filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+    : null;
 
   if (!content) {
-    return {
-      input: null,
-      error: "content is required"
-    };
+    return { input: null, error: "content is required" };
   }
 
   return {
     input: {
       content,
-      replyToId: replyToId || null
+      replyToId: replyToId || null,
+      actor: actor || null,
+      missionId,
+      taskId,
+      jobId,
+      messageMode,
+      choices: choices && choices.length > 0 ? choices : null
     },
     error: null
   };

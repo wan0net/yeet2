@@ -527,6 +527,7 @@ export interface ProjectChatMessageSummary {
   messageMode: "working" | "handoff" | "directive" | "comment";
   mentions: string[];
   replyToId?: string | null;
+  choices?: string[] | null;
   actionable: boolean;
   createdAt: string;
 }

@@ -39,7 +39,8 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
-    if (hasRunningTasks) {
+    const shouldPoll = hasRunningTasks || currentTab === "chat";
+    if (shouldPoll) {
       if (!pollInterval) {
         pollInterval = setInterval(() => { invalidateAll(); }, 5000);
       }
@@ -63,21 +64,34 @@
     [
       ...project.decisionLogs
         .filter((entry) => !operatorGuidanceIds.has(entry.id))
-        .map((entry) => ({
-          id: `decision-${entry.id}`,
-          actor: entry.actor || "system",
-          kind: entry.eventType || "workflow",
-          summary: entry.summary || entry.title,
-          createdAt: entry.createdAt,
-          tone: "info"
-        })),
+        .map((entry) => {
+          const detail = entry.detail ?? {};
+          const choices = Array.isArray(detail.choices)
+            ? (detail.choices as unknown[]).filter((c): c is string => typeof c === "string")
+            : null;
+          const messageMode = typeof detail.messageMode === "string" ? detail.messageMode : null;
+          return {
+            id: `decision-${entry.id}`,
+            rawId: entry.id,
+            actor: entry.actor || "system",
+            kind: entry.eventType || "workflow",
+            summary: entry.summary || entry.title,
+            createdAt: entry.createdAt,
+            tone: entry.actor === "operator" ? "success" : "info",
+            choices: choices && choices.length > 0 ? choices : null,
+            messageMode
+          };
+        }),
       ...project.operatorGuidance.map((entry) => ({
         id: `guidance-${entry.id}`,
+        rawId: entry.id,
         actor: entry.actor || "operator",
         kind: entry.mentions.length > 0 ? `@${entry.mentions.join(" @")}` : "message",
         summary: entry.content,
         createdAt: entry.createdAt,
-        tone: "success"
+        tone: "success",
+        choices: null,
+        messageMode: "comment"
       }))
     ].sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
   );
@@ -613,7 +627,8 @@
     {:else}
       {#each [...chatEntries].reverse() as entry}
         {@const isOperator = entry.actor === "operator" || entry.tone === "success"}
-        <div class="chat-bubble {isOperator ? 'chat-bubble--operator' : 'chat-bubble--agent'}">
+        {@const isHandoff = entry.messageMode === "handoff"}
+        <div class="chat-bubble {isOperator ? 'chat-bubble--operator' : isHandoff ? 'chat-bubble--handoff' : 'chat-bubble--agent'}">
           <div class="chat-bubble-meta">
             <strong>{entry.actor}</strong>
             <span class={`pill ${entry.tone}`} style="font-size: 0.625rem; padding: 0.1rem 0.3rem;">{entry.kind}</span>
@@ -624,6 +639,18 @@
           <div class="chat-bubble-content">
             <Markdown content={entry.summary} />
           </div>
+          {#if entry.choices && entry.choices.length > 0}
+            <div class="decision-card">
+              {#each entry.choices as choice}
+                <form method="POST" style="display:inline">
+                  <input name="returnTab" type="hidden" value="chat" />
+                  <input name="content" type="hidden" value={choice} />
+                  <input name="replyToId" type="hidden" value={entry.rawId} />
+                  <button class="btn secondary decision-choice" formaction="?/message" type="submit">{choice}</button>
+                </form>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -788,6 +815,21 @@
     align-self: flex-end;
     background: var(--color-accent-subtle, #1e3a5f);
     border: 1px solid var(--color-accent-dim, #2563eb33);
+  }
+  .chat-bubble--handoff {
+    align-self: flex-start;
+    background: color-mix(in srgb, var(--color-status-success, #22c55e) 8%, var(--color-surface-raised, #1a1a1a));
+    border: 1px solid color-mix(in srgb, var(--color-status-success, #22c55e) 40%, transparent);
+  }
+  .decision-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1, 0.25rem);
+    margin-top: var(--space-2, 0.5rem);
+  }
+  .decision-choice {
+    font-size: 0.75rem;
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
   }
   .chat-bubble-meta {
     display: flex;
