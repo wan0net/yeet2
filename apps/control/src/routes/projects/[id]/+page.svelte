@@ -155,6 +155,30 @@
   const usedRoleKeys = $derived(new Set(editableRoles.map((r) => r.roleKey)));
   const availableRoleKeys = $derived(ALL_ROLE_KEYS.filter((k) => !usedRoleKeys.has(k)));
 
+  // Modal state — draft is a working copy so cancel discards changes
+  let editingRoleIndex = $state<number | null>(null);
+  let modalDraft = $state<EditableRole | null>(null);
+
+  function openRoleModal(i: number) {
+    editingRoleIndex = i;
+    modalDraft = { ...editableRoles[i] };
+  }
+
+  function saveRoleModal() {
+    if (editingRoleIndex !== null && modalDraft) {
+      const copy = [...editableRoles];
+      copy[editingRoleIndex] = { ...modalDraft };
+      editableRoles = copy;
+    }
+    editingRoleIndex = null;
+    modalDraft = null;
+  }
+
+  function closeRoleModal() {
+    editingRoleIndex = null;
+    modalDraft = null;
+  }
+
   function rolesJson(): string {
     return JSON.stringify(
       editableRoles.map((r, i) => ({ ...r, sortOrder: i }))
@@ -458,63 +482,6 @@
 </section>
 {/if}
 
-{#if currentTab === "agents"}
-<section class="card">
-  <div class="card-header">Role editor</div>
-  <div class="card-body">
-    <form method="POST" action="?/saveRoles">
-      <input type="hidden" name="roles" value={rolesJson()} />
-      <div class="role-editor-list">
-        {#each editableRoles as role, i}
-          <div class="role-editor-row">
-            <span class="pill muted role-key-tag">{role.roleKey}</span>
-            <input
-              class="role-input"
-              type="text"
-              placeholder="Display name"
-              bind:value={role.visualName}
-            />
-            <input
-              class="role-input role-input--wide"
-              type="text"
-              placeholder="Goal"
-              bind:value={role.goal}
-            />
-            <input
-              class="role-input"
-              type="text"
-              placeholder={project.roleDefinitions.find((r) => r.roleKey === role.roleKey)?.recommendedModel || "Default model"}
-              bind:value={role.model}
-            />
-            <label class="role-toggle" title="Enabled">
-              <input type="checkbox" bind:checked={role.enabled} />
-              <span class="muted" style="font-size: 0.75rem;">{role.enabled ? "On" : "Off"}</span>
-            </label>
-            <div class="role-actions">
-              <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, -1)} disabled={i === 0} title="Move up">▲</button>
-              <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, 1)} disabled={i === editableRoles.length - 1} title="Move down">▼</button>
-              <button type="button" class="btn secondary role-btn role-btn--remove" onclick={() => removeRole(i)} title="Remove">×</button>
-            </div>
-          </div>
-        {/each}
-      </div>
-      <div class="role-editor-footer">
-        <div class="token-row">
-          <select class="role-select" bind:value={addRoleKey} disabled={availableRoleKeys.length === 0}>
-            <option value="">Add role...</option>
-            {#each availableRoleKeys as key}
-              <option value={key}>{key}</option>
-            {/each}
-          </select>
-          <button type="button" class="btn secondary" onclick={addRole} disabled={!addRoleKey}>Add</button>
-        </div>
-        <button type="submit" class="btn">Save roles</button>
-      </div>
-    </form>
-  </div>
-</section>
-{/if}
-
 {#if currentTab === "office"}
 <section class="card">
   <div class="card-header">Office</div>
@@ -525,21 +492,59 @@
 {#if currentTab === "overview" || currentTab === "agents"}
 <section class="split-grid">
   <div class="card">
-    <div class="card-header">Team</div>
-    <div class="card-body stack">
-      {#each staff as role}
-        <div class="hero-card">
-          <div class="page-header">
-            <div>
-              <strong>{role.label}</strong>
-              <div class="muted">{role.status}</div>
-            </div>
-            <span class="pill">{roleConfiguredModel(role.id)}</span>
-          </div>
-          <div class="muted">{roleStatusCopy(role.status)}</div>
+    <form method="POST" action="?/saveRoles">
+      <input type="hidden" name="roles" value={rolesJson()} />
+      <div class="card-header">
+        Team
+        <div class="team-header-actions">
+          {#if currentTab === "agents"}
+            <select class="role-select" bind:value={addRoleKey} disabled={availableRoleKeys.length === 0}>
+              <option value="">Add role...</option>
+              {#each availableRoleKeys as key}
+                <option value={key}>{key}</option>
+              {/each}
+            </select>
+            <button type="button" class="btn secondary role-btn" onclick={addRole} disabled={!addRoleKey}>+</button>
+            <button type="submit" class="btn role-btn">Save</button>
+          {/if}
         </div>
-      {/each}
-    </div>
+      </div>
+      <div class="card-body stack">
+        {#each editableRoles as role, i}
+          {@const staffRole = staff.find((s) => s.id === project.roleDefinitions.find((d) => d.roleKey === role.roleKey)?.id)}
+          <div class="team-role-row" class:team-role-row--disabled={!role.enabled}>
+            <div class="team-role-info">
+              <strong>{role.visualName}</strong>
+              <span class="pill muted" style="font-size: 0.6875rem;">{role.roleKey}</span>
+              {#if !role.enabled}
+                <span class="pill muted" style="font-size: 0.6875rem;">off</span>
+              {/if}
+            </div>
+            <div class="team-role-meta">
+              <span class="muted" style="font-size: 0.75rem;">
+                {roleConfiguredModel(project.roleDefinitions.find((d) => d.roleKey === role.roleKey)?.id ?? null)}
+              </span>
+              {#if staffRole}
+                <span class="muted" style="font-size: 0.75rem;">{roleStatusCopy(staffRole.status)}</span>
+              {/if}
+            </div>
+            {#if currentTab === "agents"}
+              <div class="team-role-actions">
+                <button
+                  type="button"
+                  class="btn secondary role-btn"
+                  onclick={() => openRoleModal(i)}
+                  title="Edit role"
+                >✏</button>
+                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, -1)} disabled={i === 0} title="Move up">▲</button>
+                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, 1)} disabled={i === editableRoles.length - 1} title="Move down">▼</button>
+                <button type="button" class="btn secondary role-btn role-btn--remove" onclick={() => removeRole(i)} title="Remove">×</button>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    </form>
   </div>
 
   <div class="card">
@@ -557,6 +562,48 @@
     </div>
   </div>
 </section>
+{/if}
+
+{#if modalDraft !== null}
+<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Edit role">
+  <div class="modal">
+    <div class="modal-header">
+      <strong>Edit role</strong>
+      <span class="pill muted" style="font-size: 0.75rem;">{modalDraft.roleKey}</span>
+    </div>
+    <div class="modal-body">
+      <label class="modal-field">
+        <span class="modal-label">Display name</span>
+        <input class="role-input" type="text" placeholder="Display name" bind:value={modalDraft.visualName} />
+      </label>
+      <label class="modal-field">
+        <span class="modal-label">Goal</span>
+        <textarea class="role-input role-textarea" placeholder="What this role is trying to achieve..." bind:value={modalDraft.goal}></textarea>
+      </label>
+      <label class="modal-field">
+        <span class="modal-label">Backstory</span>
+        <textarea class="role-input role-textarea" placeholder="Background and perspective for this agent..." bind:value={modalDraft.backstory}></textarea>
+      </label>
+      <label class="modal-field">
+        <span class="modal-label">Model</span>
+        <input
+          class="role-input"
+          type="text"
+          placeholder={project.roleDefinitions.find((r) => r.roleKey === modalDraft!.roleKey)?.recommendedModel || "Default model"}
+          bind:value={modalDraft.model}
+        />
+      </label>
+      <label class="modal-field modal-field--row">
+        <input type="checkbox" bind:checked={modalDraft.enabled} />
+        <span>Enabled</span>
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn secondary" onclick={closeRoleModal}>Cancel</button>
+      <button type="button" class="btn" onclick={saveRoleModal}>Apply</button>
+    </div>
+  </div>
+</div>
 {/if}
 
 {#if currentTab === "overview"}
@@ -867,59 +914,46 @@
     outline-offset: -1px;
     border-color: transparent;
   }
-  .role-editor-list {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2, 0.5rem);
-  }
-  .role-editor-row {
+  /* Team list integrated role editor */
+  .team-header-actions {
     display: flex;
     align-items: center;
-    gap: var(--space-2, 0.5rem);
-    flex-wrap: wrap;
-    padding: var(--space-2, 0.5rem);
-    background: var(--color-surface-raised, #1a1a1a);
-    border-radius: var(--radius-md, 0.5rem);
-    border: 1px solid var(--color-border, #333);
-  }
-  .role-key-tag {
-    font-size: 0.6875rem;
-    white-space: nowrap;
-    flex-shrink: 0;
-    min-width: 80px;
-    text-align: center;
-  }
-  .role-input {
-    font-family: inherit;
-    font-size: var(--font-size-sm, 0.8125rem);
-    background: var(--color-surface-sunken, #111);
-    color: var(--color-text-primary, #eee);
-    border: 1px solid var(--color-border, #333);
-    border-radius: var(--radius-sm, 0.375rem);
-    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
-    min-width: 0;
-    width: 140px;
-    flex-shrink: 0;
-  }
-  .role-input--wide {
-    width: 240px;
-  }
-  .role-input:focus {
-    outline: 2px solid var(--color-accent, #60a5fa);
-    outline-offset: -1px;
-    border-color: transparent;
-  }
-  .role-toggle {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1, 0.25rem);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .role-actions {
-    display: flex;
     gap: var(--space-1, 0.25rem);
     margin-left: auto;
+  }
+  .team-role-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 0.75rem);
+    padding: var(--space-2, 0.5rem) var(--space-3, 0.75rem);
+    border-radius: var(--radius-md, 0.5rem);
+    background: var(--color-surface-raised, #1a1a1a);
+    border: 1px solid var(--color-border, #333);
+    transition: border-color 0.15s;
+  }
+  .team-role-row--disabled {
+    opacity: 0.45;
+  }
+  .team-role-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    flex: 1;
+    min-width: 0;
+  }
+  .team-role-info strong {
+    font-size: var(--font-size-sm, 0.8125rem);
+  }
+  .team-role-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.125rem;
+    flex-shrink: 0;
+  }
+  .team-role-actions {
+    display: flex;
+    gap: var(--space-1, 0.25rem);
     flex-shrink: 0;
   }
   .role-btn {
@@ -930,14 +964,6 @@
   .role-btn--remove {
     color: var(--color-status-error, #ef4444);
   }
-  .role-editor-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: var(--space-3, 0.75rem);
-    flex-wrap: wrap;
-    gap: var(--space-2, 0.5rem);
-  }
   .role-select {
     font-family: inherit;
     font-size: var(--font-size-sm, 0.8125rem);
@@ -946,6 +972,82 @@
     border: 1px solid var(--color-border, #333);
     border-radius: var(--radius-sm, 0.375rem);
     padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+  }
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    backdrop-filter: blur(2px);
+  }
+  .modal {
+    background: var(--color-surface, #141414);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-lg, 0.75rem);
+    width: min(480px, calc(100vw - 2rem));
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+  }
+  .modal-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+    padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
+    border-bottom: 1px solid var(--color-border, #333);
+    font-size: var(--font-size-sm, 0.875rem);
+  }
+  .modal-body {
+    padding: var(--space-4, 1rem) var(--space-5, 1.25rem);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 0.75rem);
+  }
+  .modal-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, 0.25rem);
+  }
+  .modal-field--row {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+  }
+  .modal-label {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary, #888);
+  }
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2, 0.5rem);
+    padding: var(--space-3, 0.75rem) var(--space-5, 1.25rem);
+    border-top: 1px solid var(--color-border, #333);
+  }
+  .role-input {
+    font-family: inherit;
+    font-size: var(--font-size-sm, 0.8125rem);
+    background: var(--color-surface-sunken, #111);
+    color: var(--color-text-primary, #eee);
+    border: 1px solid var(--color-border, #333);
+    border-radius: var(--radius-sm, 0.375rem);
+    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .role-input:focus {
+    outline: 2px solid var(--color-accent, #60a5fa);
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+  .role-textarea {
+    resize: vertical;
+    min-height: 4rem;
+    line-height: 1.5;
   }
   .steer-bar {
     display: flex;
