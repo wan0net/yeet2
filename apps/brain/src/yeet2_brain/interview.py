@@ -1,4 +1,9 @@
-"""Constitution interview module for the Brain service."""
+"""Constitution interview module for the Brain service.
+
+The interview is fully LLM-driven. The planner decides what to ask next and
+when it has enough information to synthesize the constitution. If no LLM is
+configured, InterviewConfigError is raised immediately.
+"""
 
 from __future__ import annotations
 
@@ -7,58 +12,59 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-INTERVIEW_QUESTIONS = [
-    {
-        "step": 0,
-        "target": "template",
-        "question": "What type of project is this? (software development, content/writing, solution architecture, research, marketing, legal/compliance, or something else)",
-    },
-    {
-        "step": 1,
-        "target": "vision",
-        "question": "What is this project? Describe its purpose, who it serves, and what problem it solves.",
-    },
-    {
-        "step": 2,
-        "target": "vision+spec",
-        "question": "What are the 3-5 most important features or capabilities this project should have?",
-    },
-    {
-        "step": 3,
-        "target": "spec",
-        "question": "Are there any technical constraints, required integrations, or platforms this must support?",
-    },
-    {
-        "step": 4,
-        "target": "roadmap",
-        "question": "What should be built first? Describe the first milestone or MVP scope.",
-    },
-    {
-        "step": 5,
-        "target": "roadmap+architecture",
-        "question": "What does success look like in 2-4 weeks? Any architectural preferences (monolith, microservices, specific frameworks)?",
-    },
-]
-
-TEMPLATE_KEYWORDS: dict[str, list[str]] = {
-    "software": ["software", "code", "coding", "development", "app", "application", "api", "backend", "frontend", "web", "mobile"],
-    "content": ["content", "writing", "blog", "article", "copy", "editorial", "media", "publication"],
-    "architecture": ["architecture", "solution", "design", "system design", "technical design", "infrastructure"],
-    "research": ["research", "study", "investigation", "analysis", "academic", "survey", "report"],
-    "marketing": ["marketing", "campaign", "brand", "advertising", "seo", "social media", "growth"],
-    "legal": ["legal", "compliance", "contract", "regulation", "policy", "law", "gdpr", "audit"],
-    "data": ["data", "analytics", "dataset", "dashboard", "visualization", "chart", "metrics", "statistics"],
-    "product": ["product", "feature", "ux", "user story", "wireframe", "prototype", "roadmap", "sprint"],
+VALID_TEMPLATES = {
+    "software", "content", "architecture", "research",
+    "marketing", "legal", "data", "product", "custom",
 }
 
-VALID_TEMPLATES = set(TEMPLATE_KEYWORDS.keys()) | {"custom"}
+PLANNER_SYSTEM_PROMPT = """You are conducting a structured interview to build a project constitution for an AI-driven software factory.
+
+Your job is to gather enough information to produce three documents:
+- VISION.md: purpose, audience, and key capabilities
+- SPEC.md: features and technical constraints
+- ROADMAP.md: milestones and near-term success criteria
+
+Rules:
+- Ask ONE focused question at a time, naturally and conversationally.
+- Cover these topics in roughly this order: project type/purpose, key features, technical constraints, first milestone, success criteria.
+- After 4-6 exchanges with sufficient detail, synthesize the constitution. Do not ask redundant questions.
+- If rerunning (some files already exist), focus only on information needed for missing files.
+
+Respond ONLY with a JSON object — no prose, no markdown fences. Two possible shapes:
+
+To ask a question:
+{"action": "ask", "question": "...", "interview_step": <0-based int>, "total_steps": <estimated int>}
+
+To synthesize the constitution (once you have enough information):
+{
+  "action": "synthesize",
+  "suggested_template": "<one of: software, content, architecture, research, marketing, legal, data, product, custom>",
+  "files": {
+    "vision": "# <Project Name> Vision\\n\\n...",
+    "spec": "# <Project Name> Spec\\n\\n...",
+    "roadmap": "# <Project Name> Roadmap\\n\\n..."
+  }
+}"""
+
+
+class InterviewConfigError(Exception):
+    """Raised when the LLM is not configured."""
+
+
+@dataclass
+class InterviewResult:
+    action: str  # "ask" or "synthesize"
+    question: str | None = None
+    interview_step: int | None = None
+    total_steps: int = 6
+    files: dict[str, str] | None = None
+    suggested_template: str | None = None
 
 
 def _make_openai_client(api_key: str, base_url: str) -> Any:
     """Return an OpenAI-compatible client. Uses Langfuse wrapper when configured."""
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
     secret_key = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
     if public_key and secret_key:
         try:
             from langfuse.openai import OpenAI as LangfuseOpenAI  # noqa: PLC0415
@@ -67,16 +73,6 @@ def _make_openai_client(api_key: str, base_url: str) -> Any:
             pass
     import openai  # noqa: PLC0415
     return openai.OpenAI(api_key=api_key, base_url=base_url)
-
-
-@dataclass
-class InterviewResult:
-    action: str  # "ask" or "synthesize"
-    question: str | None = None
-    interview_step: int | None = None
-    total_steps: int = len(INTERVIEW_QUESTIONS)
-    files: dict[str, str] | None = None  # {"vision": "# Vision\n...", "spec": "...", "roadmap": "..."}
-    suggested_template: str | None = None  # pipeline template key suggested from interview
 
 
 def _is_system_message(message: dict[str, Any]) -> bool:
@@ -90,269 +86,108 @@ def _message_content(message: dict[str, Any]) -> str:
     return str(message.get("content", message.get("summary", ""))).strip()
 
 
-def _count_answered(chat_history: list[dict[str, Any]]) -> int:
-    """Count how many interview questions have been answered.
-
-    A question is a system/planner message with detail.interviewStep set.
-    An answer is the next operator message after a question.
-    """
-    answered = 0
-    waiting_for_answer = False
-
-    for message in chat_history:
-        detail = message.get("detail") or {}
-        has_step = isinstance(detail, dict) and "interviewStep" in detail
-
-        if _is_system_message(message) and has_step:
-            waiting_for_answer = True
-        elif not _is_system_message(message) and waiting_for_answer:
-            answered += 1
-            waiting_for_answer = False
-
-    return answered
-
-
-def _get_active_questions(existing_files: list[str], rerun: bool) -> list[dict[str, Any]]:
-    """Return the subset of INTERVIEW_QUESTIONS to ask for this run.
-
-    When rerun=True, skip questions whose every target file already exists.
-    The template question (target: "template") is never skipped.
-    """
-    if not rerun:
-        return list(INTERVIEW_QUESTIONS)
-
-    active = []
-    for q in INTERVIEW_QUESTIONS:
-        target = q["target"]
-        if target == "template":
-            active.append(q)
+def _history_to_llm_messages(chat_history: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Convert the stored chat log into OpenAI-style messages for the planner."""
+    messages = []
+    for msg in chat_history:
+        content = _message_content(msg)
+        if not content:
             continue
-        # Multi-target like "vision+spec" — skip only if ALL targets exist
-        targets = [t.strip() for t in target.split("+")]
-        if all(t in existing_files for t in targets):
-            continue
-        active.append(q)
-    return active
+        # Prior planner questions become assistant turns; operator answers become user turns
+        role = "user" if not _is_system_message(msg) else "assistant"
+        messages.append({"role": role, "content": content})
+    return messages
 
 
 def interview_step(payload: dict[str, Any]) -> InterviewResult:
     """Advance the constitution interview by one step.
 
-    Examines chat_history to determine how many questions have been answered,
-    returns the next question if any remain, or synthesizes constitution
-    documents once all questions have been answered.
+    Raises InterviewConfigError if the LLM is not configured.
+    Raises RuntimeError if the LLM call fails or returns an unexpected response.
     """
+    model = os.getenv("YEET2_BRAIN_CREWAI_MODEL") or os.getenv("LLM_MODEL") or ""
+    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+    base_url = os.getenv("LLM_BASE_URL") or "https://openrouter.ai/api/v1"
+
+    if not model or not api_key:
+        missing = []
+        if not api_key:
+            missing.append("OPENROUTER_API_KEY or OPENAI_API_KEY")
+        if not model:
+            missing.append("LLM_MODEL or YEET2_BRAIN_CREWAI_MODEL")
+        raise InterviewConfigError(
+            f"LLM not configured. Set: {', '.join(missing)}."
+        )
+
     project_name = str(payload.get("project_name", "")).strip() or "Project"
     chat_history: list[dict[str, Any]] = payload.get("chat_history") or []
     existing_files: list[str] = payload.get("existing_files") or []
     rerun: bool = bool(payload.get("rerun", False))
 
-    active_questions = _get_active_questions(existing_files, rerun)
-    total = len(active_questions)
+    system = PLANNER_SYSTEM_PROMPT
+    if rerun and existing_files:
+        system += (
+            f"\n\nThis is a rerun. Constitution files already present: {', '.join(existing_files)}. "
+            "Only gather information needed for missing files."
+        )
 
-    answered = _count_answered(chat_history)
+    llm_messages = _history_to_llm_messages(chat_history)
 
-    if answered < total:
-        q = active_questions[answered]
+    # Inject project name into the first user message (or create one)
+    context = f"Project name: {project_name}."
+    if not llm_messages:
+        llm_messages = [{"role": "user", "content": context}]
+    else:
+        first_user = next((i for i, m in enumerate(llm_messages) if m["role"] == "user"), None)
+        if first_user is not None:
+            llm_messages[first_user] = {
+                "role": "user",
+                "content": f"{context}\n\n{llm_messages[first_user]['content']}",
+            }
+
+    client = _make_openai_client(api_key, base_url)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[{"role": "system", "content": system}] + llm_messages,
+        temperature=0.4,
+    )
+    raw = (response.choices[0].message.content or "").strip()
+
+    from .planner import _json_fragment  # noqa: PLC0415
+    try:
+        data = json.loads(_json_fragment(raw))
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(f"Interview LLM returned non-JSON response: {raw[:200]}") from exc
+
+    action = str(data.get("action", "")).strip()
+
+    if action == "ask":
+        question = str(data.get("question", "")).strip()
+        if not question:
+            raise RuntimeError("Interview LLM returned 'ask' action with no question.")
         return InterviewResult(
             action="ask",
-            question=q["question"],
-            interview_step=q["step"],
-            total_steps=total,
+            question=question,
+            interview_step=int(data.get("interview_step", 0)),
+            total_steps=int(data.get("total_steps", 6)),
         )
 
-    # All questions answered — collect Q&A pairs
-    qa_pairs: list[tuple[str, str]] = []
-    current_question: str | None = None
-    current_step: int | None = None
-    project_type_answer: str | None = None
-
-    for message in chat_history:
-        detail = message.get("detail") or {}
-        has_step = isinstance(detail, dict) and "interviewStep" in detail
-
-        if _is_system_message(message) and has_step:
-            current_question = _message_content(message)
-            current_step = int(detail["interviewStep"]) if isinstance(detail, dict) else None
-        elif not _is_system_message(message) and current_question is not None:
-            answer = _message_content(message)
-            if current_step == 0:
-                project_type_answer = answer
-            qa_pairs.append((current_question, answer))
-            current_question = None
-            current_step = None
-
-    suggested_template = _suggest_template(project_type_answer)
-    all_files = _synthesize_constitution(project_name, qa_pairs, suggested_template)
-
-    # When rerunning, only return files that were actually asked about
-    if rerun and existing_files:
-        asked_targets: set[str] = set()
-        for q in active_questions:
-            if q["target"] == "template":
-                continue
-            for t in q["target"].split("+"):
-                asked_targets.add(t.strip())
-        files = {k: v for k, v in all_files.items() if k in asked_targets}
-    else:
-        files = all_files
-
-    return InterviewResult(action="synthesize", total_steps=total, files=files, suggested_template=suggested_template)
-
-
-def _suggest_template(project_type_answer: str | None) -> str:
-    """Infer the closest pipeline template key from the user's project-type answer.
-
-    Tries LLM classification first; falls back to keyword matching.
-    """
-    if not project_type_answer:
-        return "software"
-    llm_result = _llm_suggest_template(project_type_answer)
-    if llm_result:
-        return llm_result
-    lower = project_type_answer.lower()
-    for template_key, keywords in TEMPLATE_KEYWORDS.items():
-        if any(kw in lower for kw in keywords):
-            return template_key
-    return "custom"
-
-
-def _llm_suggest_template(project_type_answer: str) -> str | None:
-    """Use the LLM to classify the project type into a pipeline template key."""
-    model = os.getenv("YEET2_BRAIN_CREWAI_MODEL") or os.getenv("LLM_MODEL") or None
-    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY") or None
-    base_url = os.getenv("LLM_BASE_URL") or "https://openrouter.ai/api/v1"
-
-    if not model or not api_key:
-        return None
-
-    try:
-        templates = ", ".join(sorted(VALID_TEMPLATES))
-        client = _make_openai_client(api_key, base_url)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Choose the best pipeline template for this project.\n\n"
-                    f"Available templates: {templates}\n\n"
-                    f"Project description: {project_type_answer}\n\n"
-                    "Reply with ONLY the template key (one word, lowercase). No explanation."
-                )
-            }],
-            temperature=0,
-            max_tokens=10,
-        )
-        result = (response.choices[0].message.content or "").strip().lower()
-        return result if result in VALID_TEMPLATES else None
-    except Exception:
-        return None
-
-
-def _synthesize_constitution(project_name: str, qa_pairs: list[tuple[str, str]], suggested_template: str | None = None) -> dict[str, str]:
-    """Synthesize constitution documents from Q&A pairs.
-
-    Tries LLM synthesis first; falls back to template synthesis.
-    """
-    result = _try_llm_synthesis(project_name, qa_pairs, suggested_template)
-    if result is not None:
-        return result
-    return _template_synthesis(project_name, qa_pairs)
-
-
-def _try_llm_synthesis(project_name: str, qa_pairs: list[tuple[str, str]], suggested_template: str | None = None) -> dict[str, str] | None:
-    model = os.getenv("YEET2_BRAIN_CREWAI_MODEL") or os.getenv("LLM_MODEL") or None
-    api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY") or None
-    base_url = os.getenv("LLM_BASE_URL") or "https://openrouter.ai/api/v1"
-
-    if not model or not api_key:
-        return None
-
-    try:
-        qa_text = "\n\n".join(
-            f"Q: {question}\nA: {answer}" for question, answer in qa_pairs
+    if action == "synthesize":
+        files_raw = data.get("files") or {}
+        vision = str(files_raw.get("vision", "")).strip()
+        spec = str(files_raw.get("spec", "")).strip()
+        roadmap = str(files_raw.get("roadmap", "")).strip()
+        if not (vision and spec and roadmap):
+            raise RuntimeError("Interview LLM returned 'synthesize' but files are incomplete.")
+        suggested = str(data.get("suggested_template", "")).strip().lower()
+        return InterviewResult(
+            action="synthesize",
+            total_steps=6,
+            files={"vision": vision, "spec": spec, "roadmap": roadmap},
+            suggested_template=suggested if suggested in VALID_TEMPLATES else None,
         )
 
-        template_line = f"Pipeline type: {suggested_template}\n" if suggested_template else ""
-        prompt = f"""You are synthesizing a project constitution from a structured interview.
-Project name: {project_name}
-{template_line}
-Interview Q&A:
-{qa_text}
-
-Return ONLY a JSON object with three keys:
-- "vision": a markdown document (# {project_name} Vision) covering purpose, audience, problem, and key capabilities — framed for a {suggested_template or "general"} project
-- "spec": a markdown document (# {project_name} Spec) covering features and technical constraints appropriate for this type of project
-- "roadmap": a markdown document (# {project_name} Roadmap) covering first milestone/MVP and near-term success criteria
-
-Each value should be a complete markdown document, not a summary. Do not include any text outside the JSON object."""
-
-        client = _make_openai_client(api_key, base_url)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-        )
-        raw = response.choices[0].message.content or ""
-
-        # Extract JSON from the response (may be wrapped in markdown fences)
-        from .planner import _json_fragment
-        fragment = _json_fragment(raw)
-        data = json.loads(fragment)
-
-        vision = str(data.get("vision", "")).strip()
-        spec = str(data.get("spec", "")).strip()
-        roadmap = str(data.get("roadmap", "")).strip()
-
-        if vision and spec and roadmap:
-            return {"vision": vision, "spec": spec, "roadmap": roadmap}
-        return None
-    except Exception:
-        return None
-
-
-def _template_synthesis(project_name: str, qa_pairs: list[tuple[str, str]]) -> dict[str, str]:
-    # qa_pairs indices: 0=project type, 1=purpose, 2=features, 3=constraints, 4=milestone, 5=goals
-    answers = {i: answer for i, (_, answer) in enumerate(qa_pairs)}
-
-    vision = f"""# {project_name} Vision
-
-## Project Type
-
-{answers.get(0, "Not specified.")}
-
-## Purpose
-
-{answers.get(1, "Not specified.")}
-
-## Key Capabilities
-
-{answers.get(2, "Not specified.")}
-"""
-
-    spec = f"""# {project_name} Spec
-
-## Features
-
-{answers.get(2, "Not specified.")}
-
-## Technical Constraints
-
-{answers.get(3, "Not specified.")}
-"""
-
-    roadmap = f"""# {project_name} Roadmap
-
-## Milestone 1: First Delivery
-
-{answers.get(4, "Not specified.")}
-
-## Near-Term Goals
-
-{answers.get(5, "Not specified.")}
-"""
-
-    return {"vision": vision, "spec": spec, "roadmap": roadmap}
+    raise RuntimeError(f"Interview LLM returned unknown action: {action!r}")
 
 
 def serialize_interview_result(result: InterviewResult) -> dict[str, Any]:

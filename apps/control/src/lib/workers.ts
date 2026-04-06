@@ -104,6 +104,7 @@ function normalizeWorkerStatus(value: unknown): WorkerStatus {
   switch (normalized) {
     case "idle":
     case "available":
+    case "online":
       return "idle";
     case "busy":
     case "working":

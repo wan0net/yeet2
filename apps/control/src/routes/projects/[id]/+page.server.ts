@@ -74,10 +74,11 @@ export const actions: Actions = {
   },
   interview: async ({ params, request }) => {
     const form = await request.formData();
+    const content = String(form.get("content") || "").trim();
     const returnTab = String(form.get("returnTab") || "").trim();
 
     try {
-      await postJson(`/projects/${params.id}/interview`, {});
+      await postJson(`/projects/${params.id}/interview`, { content: content || null });
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to start interview" });
     }

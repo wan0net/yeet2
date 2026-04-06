@@ -180,8 +180,15 @@ class BrainApp:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_json"})
                     return
                 if path == "/orchestration/interview":
-                    from .interview import interview_step, serialize_interview_result
-                    result = interview_step(payload)
+                    from .interview import InterviewConfigError, interview_step, serialize_interview_result
+                    try:
+                        result = interview_step(payload)
+                    except InterviewConfigError as exc:
+                        self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "llm_not_configured", "detail": str(exc)})
+                        return
+                    except RuntimeError as exc:
+                        self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": "interview_failed", "detail": str(exc)})
+                        return
                     self._send_json(HTTPStatus.OK, serialize_interview_result(result))
                     return
                 project_id = str(payload.get("project_id", "")).strip()

@@ -30,6 +30,7 @@
   const hasRunningTasks = $derived(
     project.missions.flatMap((m) => m.tasks).some((t) => t.status === "running")
   );
+  const inInterview = $derived(project.constitutionStatus === "missing" || project.constitutionStatus === "pending");
   const runningJobs = $derived(
     recentJobs(project)
       .filter((entry) => entry.job.status === "running" || entry.job.status === "queued")
@@ -341,16 +342,19 @@
     <div class="card-header">Project facts</div>
     <div class="card-body stack">
       <div><strong>Repo:</strong> {project.repoUrl || "—"}</div>
-      <div><strong>Local path:</strong> {project.localPath || "—"}</div>
+      <div style="word-break: break-all;"><strong>Local path:</strong> {project.localPath || "—"}</div>
       <div><strong>Default branch:</strong> {project.defaultBranch || "—"}</div>
       <div>
         <strong>Constitution:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}
         {#if project.constitution.files}
-          <div class="token-row" style="margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1);">
-            {#each Object.entries(project.constitution.files) as [name, present]}
-              <span class="pill {present ? 'success' : 'muted'}">{name}</span>
-            {/each}
-          </div>
+          {@const presentFiles = Object.entries(project.constitution.files).filter(([, present]) => present)}
+          {#if presentFiles.length > 0}
+            <div class="token-row" style="margin-top: var(--space-2); flex-wrap: wrap; gap: var(--space-1);">
+              {#each presentFiles as [name]}
+                <span class="pill success">{name}</span>
+              {/each}
+            </div>
+          {/if}
         {/if}
         {#if project.constitution.missingRequiredFiles && project.constitution.missingRequiredFiles.length > 0}
           <div class="muted" style="margin-top: var(--space-1);">Missing required: {project.constitution.missingRequiredFiles.join(", ")}</div>
@@ -453,7 +457,7 @@
 </section>
 {/if}
 
-{#if currentTab === "overview"}
+{#if currentTab === "overview" && taskGroups.some((g) => g.tasks.length > 0)}
 <section class="card">
   <div class="card-header">Task lanes</div>
   <div class="card-body">
@@ -721,8 +725,8 @@
     {/if}
     <form method="POST" class="chatroom-form">
       <input name="returnTab" type="hidden" value="chat" />
-      <textarea name="content" class="chatroom-textarea" placeholder="Type a message... Use @role to address a specific agent." rows="2"></textarea>
-      <button class="btn primary" formaction="?/message" type="submit">Send</button>
+      <textarea name="content" class="chatroom-textarea" placeholder={inInterview ? "Type your answer..." : "Type a message... Use @role to address a specific agent."} rows="2"></textarea>
+      <button class="btn primary" formaction={inInterview ? "?/interview" : "?/message"} type="submit">{inInterview ? "Answer" : "Send"}</button>
     </form>
   </div>
 </section>
