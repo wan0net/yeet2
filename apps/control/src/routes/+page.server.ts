@@ -1,4 +1,5 @@
 import { loadApprovals, loadGlobalBlockers, loadProjects } from "$lib/server/control-data";
+import { serverLogger } from "$lib/server/logger";
 import { buildControlPlaneOverview } from "$lib/server/overview-local";
 import type { ProjectRecord, ProjectRoleDefinition, ProjectTaskRecord } from "$lib/projects";
 
@@ -79,7 +80,8 @@ export async function load() {
       agents: buildAgentCards(projects),
       error: null
     };
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("home/load", error);
     return {
       overview: {
         totals: { projects: 0, activeMissions: 0, runningJobs: 0, openBlockers: 0, queuedJobs: 0, failedJobs: 0 },

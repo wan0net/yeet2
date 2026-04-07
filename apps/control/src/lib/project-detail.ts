@@ -8,6 +8,23 @@ import type {
   ProjectTaskRecord
 } from "./projects";
 
+/**
+ * Numeric comparator for ISO-or-otherwise date strings. Falls back to 0
+ * (equal) for unparseable values so a malformed timestamp doesn't push a
+ * row to the front or back of the list. Returns descending order (newest
+ * first) when used as compareDescending(left, right).
+ */
+export function compareDateDescending(left: string | null | undefined, right: string | null | undefined): number {
+  const l = left ? Date.parse(left) : NaN;
+  const r = right ? Date.parse(right) : NaN;
+  const lValid = Number.isFinite(l);
+  const rValid = Number.isFinite(r);
+  if (lValid && rValid) return r - l;
+  if (lValid) return -1; // valid dates win over invalid
+  if (rValid) return 1;
+  return 0;
+}
+
 export function statusLabel(status: ConstitutionStatus): string {
   switch (status) {
     case "parsed":
@@ -223,7 +240,7 @@ export function sortBlockers(blockers: ProjectBlockerRecord[]): ProjectBlockerRe
       return leftOpen ? -1 : 1;
     }
 
-    return (right.createdAt ?? "").localeCompare(left.createdAt ?? "");
+    return compareDateDescending(left.createdAt, right.createdAt);
   });
 }
 

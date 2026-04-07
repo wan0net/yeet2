@@ -1,6 +1,7 @@
 import type { PageServerLoad } from "./$types";
 import { apiJson } from "$lib/server/api";
 import { loadProjects } from "$lib/server/control-data";
+import { serverLogger } from "$lib/server/logger";
 
 interface ActivityResponse {
   activity: Array<{
@@ -27,8 +28,14 @@ export const load: PageServerLoad = async ({ url }) => {
   if (search) params.set("search", search);
 
   const [activityRes, projects] = await Promise.all([
-    apiJson<ActivityResponse>(`/activity?${params}`).catch(() => ({ activity: [] })),
-    loadProjects().catch(() => [])
+    apiJson<ActivityResponse>(`/activity?${params}`).catch((error) => {
+      serverLogger.loadFailure("audit/activity", error, { projectId, kind, search });
+      return { activity: [] };
+    }),
+    loadProjects().catch((error) => {
+      serverLogger.loadFailure("audit/projects", error);
+      return [];
+    })
   ]);
 
   return {

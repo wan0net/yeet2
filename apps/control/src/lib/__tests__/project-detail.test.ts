@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  compareDateDescending,
   formatTimestamp,
   statusLabel,
   statusTone,
@@ -773,5 +774,44 @@ describe("missionResultSummaries", () => {
     const mission = makeMission({ tasks: [task] });
     const result = missionResultSummaries(mission);
     expect(result[0].task.id).toBe("t-special");
+  });
+});
+
+// ─── compareDateDescending ────────────────────────────────────────────────────
+
+describe("compareDateDescending", () => {
+  it("orders ISO timestamps newest first", () => {
+    const dates = ["2026-01-02T00:00:00Z", "2026-01-04T00:00:00Z", "2026-01-03T00:00:00Z"];
+    const sorted = [...dates].sort(compareDateDescending);
+    expect(sorted).toEqual([
+      "2026-01-04T00:00:00Z",
+      "2026-01-03T00:00:00Z",
+      "2026-01-02T00:00:00Z",
+    ]);
+  });
+
+  it("treats null/undefined as invalid and pushes them to the end", () => {
+    const items: Array<string | null> = ["2026-01-01T00:00:00Z", null, "2026-02-01T00:00:00Z"];
+    const sorted = [...items].sort(compareDateDescending);
+    expect(sorted[0]).toBe("2026-02-01T00:00:00Z");
+    expect(sorted[1]).toBe("2026-01-01T00:00:00Z");
+    expect(sorted[2]).toBeNull();
+  });
+
+  it("treats unparseable strings as equal to null", () => {
+    const items = ["not-a-date", "2026-01-01T00:00:00Z", ""];
+    const sorted = [...items].sort(compareDateDescending);
+    expect(sorted[0]).toBe("2026-01-01T00:00:00Z");
+  });
+
+  it("handles non-ISO but parseable formats correctly", () => {
+    const dates = ["Jan 1 2026", "Feb 1 2026"];
+    const sorted = [...dates].sort(compareDateDescending);
+    expect(sorted[0]).toBe("Feb 1 2026");
+  });
+
+  it("returns 0 when both inputs are invalid (stable order)", () => {
+    expect(compareDateDescending(null, null)).toBe(0);
+    expect(compareDateDescending("garbage", undefined)).toBe(0);
   });
 });

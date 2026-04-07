@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 import { loadProjects } from "$lib/server/control-data";
 import { apiJson } from "$lib/server/api";
+import { serverLogger } from "$lib/server/logger";
 
 interface JobLogResponse {
   jobId: string;
@@ -21,8 +22,13 @@ export const load: PageServerLoad = async ({ params }) => {
           let log: JobLogResponse | null = null;
           try {
             log = await apiJson<JobLogResponse>(`/projects/${project.id}/jobs/${job.id}/log`);
-          } catch {
-            // Log may not be available.
+          } catch (logError) {
+            // Log may not be available — surface as a warning so operators
+            // can see when the executor is dropping log entries.
+            serverLogger.loadFailure("jobs/[id]/log", logError, {
+              projectId: project.id,
+              jobId: job.id
+            });
           }
 
           return {

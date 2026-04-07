@@ -219,6 +219,10 @@ export async function toWorkerSummary(worker: DbWorker): Promise<WorkerSummary> 
   };
 }
 
+/** Hard cap on the worker registry response so a runaway fleet can't blow
+ * up the API memory or the JSON serializer. */
+const MAX_WORKER_REGISTRY = 500;
+
 export async function listWorkers(): Promise<WorkerSummary[]> {
   const workers = await prisma.worker.findMany({
     orderBy: [
@@ -228,7 +232,8 @@ export async function listWorkers(): Promise<WorkerSummary[]> {
       {
         updatedAt: "desc"
       }
-    ]
+    ],
+    take: MAX_WORKER_REGISTRY
   });
 
   return Promise.all(workers.map((worker) => toWorkerSummary(worker)));

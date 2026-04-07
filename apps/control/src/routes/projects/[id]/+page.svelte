@@ -7,6 +7,7 @@
   import {
     activeMission,
     agentPresenceOverview,
+    compareDateDescending,
     recentJobs,
     sortBlockers,
     groupTasksByState,
@@ -95,7 +96,7 @@
         choices: null,
         messageMode: "comment"
       }))
-    ].sort((left, right) => (right.createdAt || "").localeCompare(left.createdAt || ""))
+    ].sort((left, right) => compareDateDescending(left.createdAt, right.createdAt))
   );
 
   function roleConfiguredModel(definitionId: string | null): string {

@@ -117,6 +117,7 @@ export interface ProjectRoleDefinition {
 }
 
 import { RECOMMENDED_ROLE_MODELS as _ROLE_MODELS } from "@yeet2/domain";
+import { compareDateDescending } from "./project-detail";
 const RECOMMENDED_ROLE_MODELS: Record<string, string> = _ROLE_MODELS;
 
 export function recommendedRoleModel(roleKey: string): string | null {
@@ -1263,7 +1264,7 @@ function normalizeDecisionLogs(raw: RawRecord): ProjectDecisionLogRecord[] {
   return candidates
     .map(normalizeDecisionLogRecord)
     .filter((entry): entry is ProjectDecisionLogRecord => entry !== null)
-    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+    .sort((left, right) => compareDateDescending(left.createdAt, right.createdAt));
 }
 
 function normalizeOperatorGuidanceRecord(value: unknown): OperatorGuidanceRecord | null {
@@ -1295,7 +1296,7 @@ function normalizeOperatorGuidance(raw: RawRecord): OperatorGuidanceRecord[] {
   return candidates
     .map(normalizeOperatorGuidanceRecord)
     .filter((entry): entry is OperatorGuidanceRecord => entry !== null)
-    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+    .sort((left, right) => compareDateDescending(left.createdAt, right.createdAt));
 }
 
 function normalizeBlockers(raw: RawRecord): ProjectBlockerRecord[] {

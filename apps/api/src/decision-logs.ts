@@ -50,11 +50,19 @@ export async function recordDecisionLog(input: DecisionLogInput): Promise<Projec
   return toDecisionLogSummary(log);
 }
 
+/** Hard ceiling for any decision log query to prevent runaway result sets. */
+const MAX_DECISION_LOG_TAKE = 500;
+
+function clampTake(value: number, defaultValue: number): number {
+  if (!Number.isFinite(value)) return defaultValue;
+  return Math.max(1, Math.min(MAX_DECISION_LOG_TAKE, Math.trunc(value)));
+}
+
 export async function loadRecentDecisionLogs(projectId: string, take = 5): Promise<ProjectDecisionLogSummary[]> {
   const logs = await prisma.decisionLog.findMany({
     where: { projectId },
     orderBy: { createdAt: "desc" },
-    take
+    take: clampTake(take, 5)
   });
 
   return logs.map(toDecisionLogSummary);
@@ -202,7 +210,7 @@ export async function loadRecentOperatorGuidance(projectId: string, take = 6): P
       actor: "operator"
     },
     orderBy: { createdAt: "desc" },
-    take
+    take: clampTake(take, 6)
   });
 
   return logs.map(toOperatorGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null);
@@ -245,14 +253,15 @@ function toActionableGuidanceSummary(log: DbDecisionLog): OperatorGuidanceSummar
 }
 
 export async function loadRecentActionableGuidance(projectId: string, take = 8): Promise<OperatorGuidanceSummary[]> {
+  const clampedTake = clampTake(take, 8);
   const logs = await prisma.decisionLog.findMany({
     where: {
       projectId,
       kind: "message"
     },
     orderBy: { createdAt: "desc" },
-    take: Math.max(take * 3, take)
+    take: clampTake(clampedTake * 3, clampedTake * 3)
   });
 
-  return logs.map(toActionableGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null).slice(0, take);
+  return logs.map(toActionableGuidanceSummary).filter((entry): entry is OperatorGuidanceSummary => entry !== null).slice(0, clampedTake);
 }

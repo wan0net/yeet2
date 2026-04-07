@@ -503,7 +503,12 @@ export class ProjectJobLogError extends Error {
 
 export class ProjectJobRefreshError extends Error {
   constructor(
-    public readonly code: "project_not_found" | "job_not_found" | "executor_unavailable" | "job_not_active",
+    public readonly code:
+      | "project_not_found"
+      | "job_not_found"
+      | "executor_unavailable"
+      | "executor_invalid_response"
+      | "job_not_active",
     message: string,
     public readonly statusCode: number
   ) {
@@ -1710,11 +1715,16 @@ async function loadProjectById(projectId: string): Promise<ProjectSummary | null
   return hydrateProject(project);
 }
 
+/** Hard cap on the project listing — protects the API from runaway memory
+ * use if a tenant accumulates thousands of projects. */
+const MAX_PROJECT_LIST = 500;
+
 async function loadProjects(): Promise<ProjectSummary[]> {
   const projects = await prisma.project.findMany({
     orderBy: {
       createdAt: "desc"
     },
+    take: MAX_PROJECT_LIST,
     include: {
       constitution: true,
       roleDefinitions: true,
@@ -2162,7 +2172,7 @@ function normalizeAcceptanceCriteria(value: unknown): string[] {
     : [];
 }
 
-interface ExecutorJobRecord {
+export interface ExecutorJobRecord {
   id: string;
   task_id: string;
   executor_type: string;
@@ -2175,6 +2185,69 @@ interface ExecutorJobRecord {
   started_at?: string | null;
   completed_at?: string | null;
   payload?: Record<string, unknown> | null;
+}
+
+export function validateExecutorJobRecord(value: unknown, jobId: string): ExecutorJobRecord {
+  // Explicit shape validation so a malformed executor response fails fast
+  // with a clear error instead of silently propagating undefined fields into
+  // downstream dispatch/refresh code.
+  if (typeof value !== "object" || value === null) {
+    throw new ProjectJobRefreshError(
+      "executor_invalid_response",
+      `Executor response for job ${jobId} is not an object`,
+      502
+    );
+  }
+  const raw = value as Record<string, unknown>;
+  const requireString = (field: string): string => {
+    const candidate = raw[field];
+    if (typeof candidate !== "string" || !candidate.trim()) {
+      throw new ProjectJobRefreshError(
+        "executor_invalid_response",
+        `Executor response for job ${jobId} is missing required field '${field}'`,
+        502
+      );
+    }
+    return candidate;
+  };
+  const optionalString = (field: string): string | null => {
+    const candidate = raw[field];
+    if (candidate === undefined || candidate === null) return null;
+    if (typeof candidate !== "string") {
+      throw new ProjectJobRefreshError(
+        "executor_invalid_response",
+        `Executor response for job ${jobId} has wrong type for '${field}'`,
+        502
+      );
+    }
+    return candidate;
+  };
+  const optionalObject = (field: string): Record<string, unknown> | null => {
+    const candidate = raw[field];
+    if (candidate === undefined || candidate === null) return null;
+    if (typeof candidate !== "object") {
+      throw new ProjectJobRefreshError(
+        "executor_invalid_response",
+        `Executor response for job ${jobId} has wrong type for '${field}'`,
+        502
+      );
+    }
+    return candidate as Record<string, unknown>;
+  };
+  return {
+    id: requireString("id"),
+    task_id: requireString("task_id"),
+    executor_type: requireString("executor_type"),
+    worker_id: optionalString("worker_id"),
+    status: requireString("status"),
+    workspace_path: requireString("workspace_path"),
+    branch_name: requireString("branch_name"),
+    log_path: optionalString("log_path"),
+    artifact_summary: optionalString("artifact_summary"),
+    started_at: optionalString("started_at"),
+    completed_at: optionalString("completed_at"),
+    payload: optionalObject("payload")
+  };
 }
 
 async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
@@ -2199,7 +2272,7 @@ async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
     throw new ProjectJobRefreshError("job_not_found", "Executor does not know about this job", 404);
   }
 
-  if (!response.ok || typeof parsed !== "object" || parsed === null) {
+  if (!response.ok) {
     throw new ProjectJobRefreshError(
       "executor_unavailable",
       `Unable to load job ${jobId} from the executor`,
@@ -2207,7 +2280,7 @@ async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
     );
   }
 
-  return parsed as ExecutorJobRecord;
+  return validateExecutorJobRecord(parsed, jobId);
 }
 
 interface ExecutorDispatchPayload {
@@ -3946,7 +4019,8 @@ export async function listProjectApprovals(input: { projectId?: string | null; s
       {
         createdAt: "desc"
       }
-    ]
+    ],
+    take: 500
   });
 
   const approvals = blockers
