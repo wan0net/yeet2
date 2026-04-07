@@ -594,23 +594,49 @@ export class AutonomyLoopManager {
     }
 
     const sweep = (async () => {
+      let projects: Awaited<ReturnType<typeof listRegisteredProjects>>;
       try {
-        const projects = await listRegisteredProjects();
-        for (const project of projects.projects) {
-          if (this.stopping || !this.running) {
-            break;
-          }
-
-          await this.processProject(project);
-        }
+        projects = await listRegisteredProjects();
       } catch (error) {
-        this.logger.error({ error }, "Autonomy loop sweep failed");
+        this.logger.error({ error }, "Autonomy loop failed to list projects");
+        return;
+      }
+
+      for (const project of projects.projects) {
+        if (this.stopping || !this.running) {
+          break;
+        }
+
+        // Each project is processed in its own try/catch so a single failure
+        // never aborts the sweep — otherwise one broken project would
+        // silently halt autonomy across the whole fleet.
+        try {
+          await this.processProject(project);
+        } catch (error) {
+          this.logger.error(
+            { error, projectId: project.id, projectName: project.name },
+            "Autonomy loop project iteration threw"
+          );
+          // Best-effort: record telemetry so the operator can see what broke.
+          try {
+            const message = error instanceof Error ? error.message : "Unknown autonomy loop error";
+            await this.persistTelemetry(project, "skip", "error", message);
+          } catch (telemetryError) {
+            this.logger.error(
+              { error: telemetryError, projectId: project.id },
+              "Failed to persist autonomy error telemetry"
+            );
+          }
+        }
       }
     })();
 
     this.currentSweep = sweep;
     try {
       await sweep;
+    } catch (error) {
+      // sweep() never rejects internally, but defence in depth.
+      this.logger.error({ error }, "Autonomy loop sweep rejected unexpectedly");
     } finally {
       this.currentSweep = null;
       if (!this.stopping && this.running) {

@@ -11,6 +11,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@fastify/rate-limit": "^10.3.0",
     "@yeet2/constitution": "workspace:*",
     "@yeet2/db": "workspace:*",
     "@yeet2/domain": "workspace:*",

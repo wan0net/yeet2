@@ -12,13 +12,21 @@
     isError: boolean;
   };
 
+  // Hard limits so an unbounded log file can't freeze the browser. The cap
+  // matches what the UI can realistically render in a single view; callers
+  // who need more should page through the raw log.
+  const MAX_TRACE_EVENTS = 500;
+  const MAX_TRACE_LINE_LENGTH = 10_000;
+
   function parseTraceEvents(logContent: string | null | undefined): TraceEvent[] {
     if (!logContent) return [];
     const events: TraceEvent[] = [];
     let id = 0;
     for (const rawLine of logContent.split("\n")) {
+      if (events.length >= MAX_TRACE_EVENTS) break;
       const line = rawLine.trim();
       if (!line.startsWith("{")) continue;
+      if (line.length > MAX_TRACE_LINE_LENGTH) continue;
       try {
         const payload = JSON.parse(line);
         if (typeof payload !== "object" || payload === null) continue;

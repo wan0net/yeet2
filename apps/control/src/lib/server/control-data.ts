@@ -3,6 +3,7 @@ import type { WorkerRegistryResult } from "$lib/workers";
 import { normalizeProject, normalizeProjectModelCatalog, type ProjectModelCatalogOption } from "$lib/projects";
 import { normalizeWorkerList } from "$lib/workers";
 import { apiJson } from "./api";
+import { serverLogger } from "./logger";
 
 export interface GlobalJobEntry {
   projectId: string;
@@ -39,7 +40,8 @@ export interface GlobalBlockerEntry {
 export async function loadOverview() {
   try {
     return apiJson<{ overview: unknown }>("/overview");
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadOverview", error);
     return { overview: null };
   }
 }
@@ -50,7 +52,8 @@ export async function loadProjects(): Promise<ProjectRecord[]> {
     return Array.isArray(payload.projects)
       ? payload.projects.map(normalizeProject).filter((entry): entry is ProjectRecord => entry !== null)
       : [];
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadProjects", error);
     return [];
   }
 }
@@ -59,7 +62,8 @@ export async function loadProject(projectId: string): Promise<ProjectRecord | nu
   try {
     const response = await apiJson<{ project?: unknown }>(`/projects/${encodeURIComponent(projectId)}`);
     return response.project ? normalizeProject(response.project) : null;
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadProject", error, { projectId });
     return null;
   }
 }
@@ -68,7 +72,8 @@ export async function loadProjectRoleModels(_projectId: string): Promise<Project
   try {
     const payload = await apiJson<unknown>(`/projects/models`);
     return normalizeProjectModelCatalog(payload);
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadProjectRoleModels", error);
     return [];
   }
 }
@@ -156,7 +161,8 @@ export async function loadGlobalBlockers() {
 export async function loadApprovals() {
   try {
     return apiJson<{ approvals?: unknown[] }>("/approvals");
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadApprovals", error);
     return { approvals: [] };
   }
 }
@@ -171,7 +177,8 @@ export async function loadWorkers(): Promise<WorkerRegistryResult> {
       error: null,
       detail: null
     };
-  } catch {
+  } catch (error) {
+    serverLogger.loadFailure("loadWorkers", error);
     return {
       workers: [],
       registryAvailable: false,
