@@ -355,6 +355,34 @@ def _truncate(value: str, limit: int = 140) -> str:
     return f"{value[: limit - 3].rstrip()}..."
 
 
+# Git ref names are constrained — see git-check-ref-format(1). We accept the
+# common subset: ASCII letters/digits, dot, dash, underscore, slash, plus a
+# few extras refs use in practice. Crucially we forbid leading "-" so the
+# value cannot be confused with a git CLI option.
+_GIT_REF_RE = re.compile(r"^[A-Za-z0-9_./][A-Za-z0-9_./\-+]*$")
+
+
+def _validate_git_ref(value: str, field_name: str) -> str:
+    """Validate a string is safe to pass as a git ref / branch name.
+
+    Raises ValueError if the value is empty, too long, or contains characters
+    that git would interpret as flags or path components."""
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{field_name} is required")
+    if len(stripped) > 250:
+        raise ValueError(f"{field_name} is too long")
+    if stripped.startswith("-"):
+        raise ValueError(f"{field_name} must not start with '-'")
+    if "\x00" in stripped:
+        raise ValueError(f"{field_name} must not contain null bytes")
+    if ".." in stripped:
+        raise ValueError(f"{field_name} must not contain '..'")
+    if not _GIT_REF_RE.match(stripped):
+        raise ValueError(f"{field_name} contains invalid characters for a git ref")
+    return stripped
+
+
 def _is_asrt_enabled() -> bool:
     sandbox_mode = cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_MODE")).lower()
     if sandbox_mode == "asrt":
@@ -650,11 +678,12 @@ class OpenHandsAdapter:
 
         try:
             repo_path = Path(str(record.payload["repo_path"])).expanduser().resolve()
-            base_branch = str(record.payload["base_branch"]).strip()
+            # Validate base_branch as a git ref before passing to git CLI.
+            # Without this, an attacker controlling the payload could pass
+            # `--upload-pack=evil` and confuse git's option parser.
+            base_branch = _validate_git_ref(str(record.payload["base_branch"]), "base_branch")
             if not repo_path.exists():
                 raise FileNotFoundError(f"repo_path does not exist: {repo_path}")
-            if not base_branch:
-                raise ValueError("base_branch is required")
 
             workspace_path.mkdir(parents=True, exist_ok=True)
             _append_log(log_path, "verifying git repository and creating isolated worktree")

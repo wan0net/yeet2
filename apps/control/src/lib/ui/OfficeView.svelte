@@ -70,7 +70,7 @@
   }
 
   .desk-card--blocked {
-    border-color: #f9e2af;
+    border-color: var(--amber, #f9e2af);
   }
 
   .desk-header {
@@ -103,12 +103,18 @@
     animation: pulse 1.5s ease-in-out infinite;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .status-dot--active {
+      animation: none;
+    }
+  }
+
   .status-dot--blocked {
-    background: #f9e2af;
+    background: var(--amber, #f9e2af);
   }
 
   .status-dot--queued {
-    background: #a6e3a1;
+    background: var(--green, #a6e3a1);
   }
 
   .status-dot--idle {
@@ -162,8 +168,9 @@
     display: inline-block;
     font-size: 0.7rem;
     font-weight: 600;
-    color: #1e1e2e;
-    background: #f9e2af;
+    color: var(--amber-bg, #1e1e2e);
+    background: var(--amber, #f9e2af);
+    border: 1px solid var(--amber-border, transparent);
     border-radius: 4px;
     padding: 2px 6px;
     align-self: flex-start;

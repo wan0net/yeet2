@@ -54,14 +54,34 @@ describe("parseGitHubRepositoryUrl", () => {
     expect(result).toMatchObject({ host: "github.com", owner: "acme", repo: "rocket" });
   });
 
-  it("parses a GitHub Enterprise https URL", () => {
-    const result = parseGitHubRepositoryUrl("https://ghe.example.com/acme/rocket");
-    expect(result).toMatchObject({ host: "ghe.example.com", owner: "acme", repo: "rocket" });
+  it("parses a GitHub Enterprise https URL when the host is allowlisted", () => {
+    process.env.YEET2_GITHUB_ALLOWED_HOSTS = "ghe.example.com";
+    try {
+      const result = parseGitHubRepositoryUrl("https://ghe.example.com/acme/rocket");
+      expect(result).toMatchObject({ host: "ghe.example.com", owner: "acme", repo: "rocket" });
+    } finally {
+      delete process.env.YEET2_GITHUB_ALLOWED_HOSTS;
+    }
   });
 
-  it("uses /api/v3 base URL for non-github.com hosts", () => {
-    const result = parseGitHubRepositoryUrl("https://ghe.example.com/acme/rocket");
-    expect(result?.apiBaseUrl).toBe("https://ghe.example.com/api/v3");
+  it("uses /api/v3 base URL for allowlisted non-github.com hosts", () => {
+    process.env.YEET2_GITHUB_ALLOWED_HOSTS = "ghe.example.com";
+    try {
+      const result = parseGitHubRepositoryUrl("https://ghe.example.com/acme/rocket");
+      expect(result?.apiBaseUrl).toBe("https://ghe.example.com/api/v3");
+    } finally {
+      delete process.env.YEET2_GITHUB_ALLOWED_HOSTS;
+    }
+  });
+
+  it("rejects a non-allowlisted GitHub Enterprise host (token-leak guard)", () => {
+    delete process.env.YEET2_GITHUB_ALLOWED_HOSTS;
+    expect(parseGitHubRepositoryUrl("https://attacker.example.com/acme/rocket")).toBeNull();
+  });
+
+  it("rejects a non-allowlisted SSH host (token-leak guard)", () => {
+    delete process.env.YEET2_GITHUB_ALLOWED_HOSTS;
+    expect(parseGitHubRepositoryUrl("git@attacker.example.com:acme/rocket.git")).toBeNull();
   });
 
   it("normalises www.github.com htmlBaseUrl to https://github.com", () => {

@@ -24,24 +24,57 @@ export const registerWebhookRoutes: FastifyPluginAsync = async (app: FastifyInst
     }
   });
 
+  // In-memory dedup of recent X-GitHub-Delivery IDs. GitHub re-delivers
+  // failed webhooks; we ack 200 once we record them, so we shouldn't process
+  // the same delivery twice. Map: deliveryId -> insertion timestamp (ms).
+  const recentDeliveries = new Map<string, number>();
+  const DELIVERY_DEDUP_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+
+  function pruneDeliveries(now: number): void {
+    for (const [id, timestamp] of recentDeliveries) {
+      if (now - timestamp > DELIVERY_DEDUP_WINDOW_MS) {
+        recentDeliveries.delete(id);
+      }
+    }
+  }
+
   app.post("/webhooks/github", async (request, reply) => {
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
 
-    if (secret) {
-      const signatureHeader = (request.headers["x-hub-signature-256"] as string) ?? "";
-      const rawBody = request.rawBody ?? Buffer.from(JSON.stringify(request.body));
-      const expected = `sha256=${crypto.createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+    // Refuse webhooks entirely if no secret is configured. The previous
+    // behaviour fell through to no-auth, allowing anyone on the network to
+    // forge audit log entries.
+    if (!secret) {
+      return reply.code(503).send({
+        error: "webhook_not_configured",
+        message: "GITHUB_WEBHOOK_SECRET must be set to receive webhooks"
+      });
+    }
 
-      let valid = false;
-      try {
-        valid = crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
-      } catch {
-        valid = false;
-      }
+    const signatureHeader = (request.headers["x-hub-signature-256"] as string) ?? "";
+    const rawBody = request.rawBody ?? Buffer.from(JSON.stringify(request.body));
+    const expected = `sha256=${crypto.createHmac("sha256", secret).update(rawBody).digest("hex")}`;
 
-      if (!valid) {
-        return reply.code(401).send({ error: "invalid_signature" });
+    let valid = false;
+    try {
+      valid = crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+    } catch {
+      valid = false;
+    }
+
+    if (!valid) {
+      return reply.code(401).send({ error: "invalid_signature" });
+    }
+
+    // Replay protection: dedup by X-GitHub-Delivery within a 10-minute window.
+    const deliveryId = (request.headers["x-github-delivery"] as string) ?? "";
+    if (deliveryId) {
+      const now = Date.now();
+      pruneDeliveries(now);
+      if (recentDeliveries.has(deliveryId)) {
+        return reply.code(200).send({ ok: true, deduped: true });
       }
+      recentDeliveries.set(deliveryId, now);
     }
 
     const event = (request.headers["x-github-event"] as string) ?? "unknown";

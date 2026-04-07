@@ -16,6 +16,7 @@ from yeet2_executor.adapters import (
     _build_openhands_env,
     _redact_command,
     _redact_secrets,
+    _validate_git_ref,
 )
 from yeet2_executor.http import (
     MAX_ACCEPTANCE_CRITERIA_COUNT,
@@ -68,6 +69,58 @@ def test_redact_command_preserves_non_secret_env():
     out = _redact_command(command)
     # NODE_ENV is not matched by the secret-key pattern, so the value stays.
     assert "production" in out
+
+
+# ---------------------------------------------------------------------------
+# Git ref validation (base_branch flag-injection guard)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_git_ref_accepts_main():
+    assert _validate_git_ref("main", "base_branch") == "main"
+
+
+def test_validate_git_ref_accepts_feature_slash():
+    assert _validate_git_ref("feature/foo-bar", "base_branch") == "feature/foo-bar"
+
+
+def test_validate_git_ref_accepts_release_tag():
+    assert _validate_git_ref("v1.2.3", "base_branch") == "v1.2.3"
+
+
+def test_validate_git_ref_strips_surrounding_whitespace():
+    assert _validate_git_ref("  develop  ", "base_branch") == "develop"
+
+
+def test_validate_git_ref_rejects_empty():
+    with pytest.raises(ValueError):
+        _validate_git_ref("", "base_branch")
+
+
+def test_validate_git_ref_rejects_dash_prefix():
+    # The actual flag-injection attack: --upload-pack=evil
+    with pytest.raises(ValueError):
+        _validate_git_ref("--upload-pack=evil", "base_branch")
+
+
+def test_validate_git_ref_rejects_dot_dot():
+    with pytest.raises(ValueError):
+        _validate_git_ref("foo..bar", "base_branch")
+
+
+def test_validate_git_ref_rejects_null_bytes():
+    with pytest.raises(ValueError):
+        _validate_git_ref("main\x00evil", "base_branch")
+
+
+def test_validate_git_ref_rejects_shell_metas():
+    with pytest.raises(ValueError):
+        _validate_git_ref("main; rm -rf /", "base_branch")
+
+
+def test_validate_git_ref_rejects_overlong_input():
+    with pytest.raises(ValueError):
+        _validate_git_ref("a" * 251, "base_branch")
 
 
 # ---------------------------------------------------------------------------

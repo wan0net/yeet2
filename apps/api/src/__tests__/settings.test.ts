@@ -12,7 +12,14 @@ vi.mock("../db.js", () => ({
 }));
 
 import { prisma } from "../db.js";
-import { deleteSetting, getGitHubToken, getSetting, setSetting } from "../settings.js";
+import {
+  __internal_decryptValue,
+  __internal_encryptValue,
+  deleteSetting,
+  getGitHubToken,
+  getSetting,
+  setSetting
+} from "../settings.js";
 
 const mockFindUnique = vi.mocked(prisma.setting.findUnique);
 const mockUpsert = vi.mocked(prisma.setting.upsert);
@@ -123,5 +130,78 @@ describe("deleteSetting", () => {
   it("does not throw when key does not exist", async () => {
     mockDeleteMany.mockResolvedValue({ count: 0 } as never);
     await expect(deleteSetting("missing_key")).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// At-rest encryption (sensitive settings)
+// ---------------------------------------------------------------------------
+
+describe("sensitive setting encryption", () => {
+  beforeEach(() => {
+    vi.stubEnv("YEET2_SETTING_ENCRYPTION_KEY", "test-encryption-key-please-rotate");
+  });
+
+  it("round-trips a value through encrypt/decrypt", () => {
+    const ciphertext = __internal_encryptValue("ghp_secret123");
+    expect(ciphertext).toMatch(/^enc:v1:/);
+    expect(ciphertext).not.toContain("ghp_secret123");
+    expect(__internal_decryptValue(ciphertext)).toBe("ghp_secret123");
+  });
+
+  it("produces a different ciphertext on each call (random IV)", () => {
+    const a = __internal_encryptValue("same plaintext");
+    const b = __internal_encryptValue("same plaintext");
+    expect(a).not.toBe(b);
+  });
+
+  it("returns plaintext unchanged for legacy values without the prefix", () => {
+    expect(__internal_decryptValue("plaintext-legacy")).toBe("plaintext-legacy");
+  });
+
+  it("setSetting encrypts github_token before writing", async () => {
+    mockUpsert.mockResolvedValue({ key: "github_token", value: "x" } as never);
+    await setSetting("github_token", "ghp_supersecret");
+    const writtenValue = mockUpsert.mock.calls[0][0].update.value as string;
+    expect(writtenValue).toMatch(/^enc:v1:/);
+    expect(writtenValue).not.toContain("ghp_supersecret");
+  });
+
+  it("setSetting does NOT encrypt non-sensitive keys", async () => {
+    mockUpsert.mockResolvedValue({ key: "agent_theme", value: "x" } as never);
+    await setSetting("agent_theme", "mythology");
+    expect(mockUpsert.mock.calls[0][0].update.value).toBe("mythology");
+  });
+
+  it("getSetting decrypts github_token on read", async () => {
+    const ct = __internal_encryptValue("ghp_decrypted");
+    mockFindUnique.mockResolvedValue({ key: "github_token", value: ct } as never);
+    expect(await getSetting("github_token")).toBe("ghp_decrypted");
+  });
+
+  it("getSetting tolerates legacy plaintext github_token rows (graceful migration)", async () => {
+    mockFindUnique.mockResolvedValue({ key: "github_token", value: "ghp_legacy_plaintext" } as never);
+    expect(await getSetting("github_token")).toBe("ghp_legacy_plaintext");
+  });
+
+  it("getSetting returns null and logs when decrypt fails (corrupt ciphertext)", async () => {
+    mockFindUnique.mockResolvedValue({ key: "github_token", value: "enc:v1:bad:data:tag" } as never);
+    expect(await getSetting("github_token")).toBeNull();
+  });
+});
+
+describe("sensitive setting encryption with no key configured", () => {
+  beforeEach(() => {
+    vi.stubEnv("YEET2_SETTING_ENCRYPTION_KEY", "");
+  });
+
+  it("encryptValue returns plaintext when key is unset (opt-in)", () => {
+    expect(__internal_encryptValue("foo")).toBe("foo");
+  });
+
+  it("setSetting writes plaintext when key is unset", async () => {
+    mockUpsert.mockResolvedValue({ key: "github_token", value: "x" } as never);
+    await setSetting("github_token", "ghp_x");
+    expect(mockUpsert.mock.calls[0][0].update.value).toBe("ghp_x");
   });
 });

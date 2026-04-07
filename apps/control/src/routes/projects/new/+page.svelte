@@ -51,11 +51,24 @@
 
   let { form }: { form: ActionData } = $props();
 
-  const initialPipelineTemplate =
-    form && typeof form === "object" && "values" in form && form.values && typeof form.values === "object" && "pipelineTemplate" in form.values && typeof form.values.pipelineTemplate === "string"
-      ? form.values.pipelineTemplate
-      : "software";
-  let selectedTemplate = $state(initialPipelineTemplate);
+  // Pull `pipelineTemplate` out of the action's `values` payload (set by
+  // fail() in +page.server.ts when registration errors). Wrapped in a function
+  // so we only inspect `form` lazily, avoiding the reactive-snapshot warning.
+  function readPipelineTemplate(action: ActionData): string {
+    if (
+      action &&
+      typeof action === "object" &&
+      "values" in action &&
+      action.values &&
+      typeof action.values === "object" &&
+      "pipelineTemplate" in action.values &&
+      typeof action.values.pipelineTemplate === "string"
+    ) {
+      return action.values.pipelineTemplate;
+    }
+    return "software";
+  }
+  let selectedTemplate = $state(readPipelineTemplate(form));
 </script>
 
 <section class="page-header">

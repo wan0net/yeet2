@@ -3,15 +3,22 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  # Create a non-root user. Brain runs LLM-adjacent code; do not give it root.
+  && groupadd --system --gid 1000 yeet2 \
+  && useradd --system --uid 1000 --gid 1000 --home-dir /var/lib/yeet2/brain-home --create-home yeet2 \
+  && mkdir -p /app /var/lib/yeet2/brain-crewai \
+  && chown -R yeet2:yeet2 /app /var/lib/yeet2
 
-COPY apps/brain /app/apps/brain
+USER yeet2
+WORKDIR /app
 
-RUN pip install --no-cache-dir -e '/app/apps/brain[crewai]'
+COPY --chown=yeet2:yeet2 apps/brain /app/apps/brain
+
+RUN pip install --no-cache-dir --user -e '/app/apps/brain[crewai]'
+ENV PATH="/var/lib/yeet2/brain-home/.local/bin:$PATH"
 
 ENV HOME=/var/lib/yeet2/brain-home
 ENV CREWAI_STORAGE_DIR=/var/lib/yeet2/brain-crewai

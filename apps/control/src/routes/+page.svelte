@@ -246,6 +246,12 @@
     animation: pulse 2s ease-in-out infinite;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .agent-card.working {
+      animation: none;
+    }
+  }
+
   .agent-card.blocked {
     border-left: 3px solid var(--color-status-error);
   }

@@ -7,8 +7,17 @@ process.env.DATABASE_URL = TEST_DB_URL;
 const TEST_API_KEY = process.env.YEET2_API_BEARER_TOKEN ?? "test-api-key";
 process.env.YEET2_API_BEARER_TOKEN = TEST_API_KEY;
 
+// Webhook secret used to compute signatures for the webhook tests below.
+const TEST_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET ?? "test-webhook-secret";
+process.env.GITHUB_WEBHOOK_SECRET = TEST_WEBHOOK_SECRET;
+
+import { createHmac } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+function signWebhookBody(body: string): string {
+  return `sha256=${createHmac("sha256", TEST_WEBHOOK_SECRET).update(body).digest("hex")}`;
+}
 
 import { createApp } from "../../server";
 import { setupTestDatabase, truncateAllTables } from "./setup";
@@ -182,7 +191,53 @@ describe("GET /projects/:id", () => {
 // Webhooks
 // ---------------------------------------------------------------------------
 describe("POST /webhooks/github", () => {
-  it("returns 200 { ok: true } for a push event", async () => {
+  it("returns 200 { ok: true } for a push event with valid signature", async () => {
+    const body = JSON.stringify({
+      ref: "refs/heads/main",
+      repository: { full_name: "org/repo" }
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+        authorization: AUTH_HEADER,
+        "x-github-event": "push",
+        "x-hub-signature-256": signWebhookBody(body),
+        "x-github-delivery": "test-delivery-1"
+      },
+      payload: body
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true });
+  });
+
+  it("returns 200 { ok: true } for a pull_request event with valid signature", async () => {
+    const body = JSON.stringify({
+      action: "opened",
+      pull_request: { number: 1, html_url: "https://github.com/org/repo/pull/1" },
+      repository: { full_name: "org/repo" }
+    });
+    const res = await app.inject({
+      method: "POST",
+      url: "/webhooks/github",
+      headers: {
+        "content-type": "application/json",
+        authorization: AUTH_HEADER,
+        "x-github-event": "pull_request",
+        "x-hub-signature-256": signWebhookBody(body),
+        "x-github-delivery": "test-delivery-2"
+      },
+      payload: body
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true });
+  });
+
+  it("returns 401 when the signature is missing", async () => {
+    const body = JSON.stringify({ ref: "refs/heads/main" });
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/github",
@@ -191,34 +246,45 @@ describe("POST /webhooks/github", () => {
         authorization: AUTH_HEADER,
         "x-github-event": "push"
       },
-      payload: JSON.stringify({
-        ref: "refs/heads/main",
-        repository: { full_name: "org/repo" }
-      })
+      payload: body
     });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true });
+    expect(res.statusCode).toBe(401);
   });
 
-  it("returns 200 { ok: true } for a pull_request event", async () => {
+  it("returns 401 when the signature is wrong", async () => {
+    const body = JSON.stringify({ ref: "refs/heads/main" });
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/github",
       headers: {
         "content-type": "application/json",
         authorization: AUTH_HEADER,
-        "x-github-event": "pull_request"
+        "x-github-event": "push",
+        "x-hub-signature-256": "sha256=" + "a".repeat(64)
       },
-      payload: JSON.stringify({
-        action: "opened",
-        pull_request: { number: 1, html_url: "https://github.com/org/repo/pull/1" },
-        repository: { full_name: "org/repo" }
-      })
+      payload: body
     });
+    expect(res.statusCode).toBe(401);
+  });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true });
+  it("dedupes a repeated X-GitHub-Delivery within the dedup window", async () => {
+    const body = JSON.stringify({
+      ref: "refs/heads/main",
+      repository: { full_name: "org/repo" }
+    });
+    const headers = {
+      "content-type": "application/json",
+      authorization: AUTH_HEADER,
+      "x-github-event": "push",
+      "x-hub-signature-256": signWebhookBody(body),
+      "x-github-delivery": "test-delivery-dedup"
+    };
+    const first = await app.inject({ method: "POST", url: "/webhooks/github", headers, payload: body });
+    const second = await app.inject({ method: "POST", url: "/webhooks/github", headers, payload: body });
+    expect(first.statusCode).toBe(200);
+    expect(first.json()).toMatchObject({ ok: true });
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ ok: true, deduped: true });
   });
 });
 

@@ -9,12 +9,18 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
+# Run as the unprivileged `node` user shipped with the official image to
+# limit blast radius of any RCE inside the container.
+RUN mkdir -p /app /pnpm \
+  && chown -R node:node /app /pnpm
+
+USER node
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY apps ./apps
-COPY infra ./infra
-COPY packages ./packages
+COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY --chown=node:node apps ./apps
+COPY --chown=node:node infra ./infra
+COPY --chown=node:node packages ./packages
 
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @yeet2/db exec prisma generate

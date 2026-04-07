@@ -3,17 +3,26 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git curl \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  # Create a non-root user. Executor shells out to git and OpenHands; the
+  # whole adapter chain assumes the host is hostile, so don't run as root.
+  && groupadd --system --gid 1000 yeet2 \
+  && useradd --system --uid 1000 --gid 1000 --home-dir /var/lib/yeet2/executor-home --create-home yeet2 \
+  && mkdir -p /app /var/lib/yeet2/executor /var/lib/yeet2/projects \
+  && chown -R yeet2:yeet2 /app /var/lib/yeet2
 
-COPY apps/executor /app/apps/executor
-COPY infra/docker/start-executor.sh /app/infra/docker/start-executor.sh
+USER yeet2
+WORKDIR /app
 
-RUN pip install --no-cache-dir uv \
-  && pip install --no-cache-dir -e /app/apps/executor \
+COPY --chown=yeet2:yeet2 apps/executor /app/apps/executor
+COPY --chown=yeet2:yeet2 infra/docker/start-executor.sh /app/infra/docker/start-executor.sh
+
+RUN pip install --no-cache-dir --user uv \
+  && pip install --no-cache-dir --user -e /app/apps/executor \
   && chmod +x /app/infra/docker/start-executor.sh
+ENV PATH="/var/lib/yeet2/executor-home/.local/bin:$PATH"
+ENV HOME=/var/lib/yeet2/executor-home
 
 CMD ["/app/infra/docker/start-executor.sh"]

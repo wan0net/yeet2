@@ -162,6 +162,49 @@
   let editingRoleIndex = $state<number | null>(null);
   let modalDraft = $state<EditableRole | null>(null);
 
+  // Chat input state — bound so we can clear after submit and trigger send
+  // via keyboard shortcut.
+  let chatInputValue = $state("");
+  let chatTextarea: HTMLTextAreaElement | null = $state(null);
+  let chatScrollContainer: HTMLDivElement | null = $state(null);
+
+  function handleChatKeydown(event: KeyboardEvent): void {
+    // Cmd+Enter (Mac) / Ctrl+Enter (Linux/Windows) submits the message
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      const form = (event.currentTarget as HTMLTextAreaElement).form;
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+  }
+
+  function isScrolledToBottom(el: HTMLElement, slack = 64): boolean {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < slack;
+  }
+
+  // Auto-scroll the chat to the newest message when it grows, but only if
+  // the user was already near the bottom — don't yank them away if they
+  // scrolled up to read history.
+  let lastChatLength = $state(0);
+  $effect(() => {
+    const currentLength = chatEntries.length;
+    const container = chatScrollContainer;
+    if (!container) {
+      lastChatLength = currentLength;
+      return;
+    }
+    const grew = currentLength > lastChatLength;
+    lastChatLength = currentLength;
+    if (!grew) return;
+    if (isScrolledToBottom(container)) {
+      // Defer to next tick so the DOM has the new node measured
+      queueMicrotask(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  });
+
   function openRoleModal(i: number) {
     editingRoleIndex = i;
     modalDraft = { ...editableRoles[i] };
@@ -181,6 +224,60 @@
     editingRoleIndex = null;
     modalDraft = null;
   }
+
+  // Trap focus inside the role edit modal: Tab cycles through focusable
+  // children, Shift+Tab cycles backwards. Escape closes the modal. Without
+  // this, keyboard users can tab out into the page behind the overlay.
+  function handleModalKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeRoleModal();
+      return;
+    }
+    if (event.key !== "Tab") return;
+
+    const container = event.currentTarget as HTMLElement;
+    const focusables = Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'button, [href], input, textarea, select, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+    if (focusables.length === 0) return;
+
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+
+    if (event.shiftKey) {
+      if (active === first || !container.contains(active)) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
+  // Move focus into the modal when it opens, and restore it to the trigger
+  // when it closes.
+  let modalReturnFocus: HTMLElement | null = null;
+  $effect(() => {
+    if (modalDraft === null) {
+      if (modalReturnFocus) {
+        modalReturnFocus.focus();
+        modalReturnFocus = null;
+      }
+      return;
+    }
+    modalReturnFocus = (document.activeElement as HTMLElement) ?? null;
+    queueMicrotask(() => {
+      const modal = document.querySelector<HTMLElement>(".modal-overlay .modal input, .modal-overlay .modal textarea, .modal-overlay .modal button");
+      modal?.focus();
+    });
+  });
 
   function rolesJson(): string {
     return JSON.stringify(
@@ -546,10 +643,11 @@
                   class="btn secondary role-btn"
                   onclick={() => openRoleModal(i)}
                   title="Edit role"
+                  aria-label="Edit role {role.visualName}"
                 >✏</button>
-                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, -1)} disabled={i === 0} title="Move up">▲</button>
-                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, 1)} disabled={i === editableRoles.length - 1} title="Move down">▼</button>
-                <button type="button" class="btn secondary role-btn role-btn--remove" onclick={() => removeRole(i)} title="Remove">×</button>
+                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, -1)} disabled={i === 0} title="Move up" aria-label="Move {role.visualName} up">▲</button>
+                <button type="button" class="btn secondary role-btn" onclick={() => moveRole(i, 1)} disabled={i === editableRoles.length - 1} title="Move down" aria-label="Move {role.visualName} down">▼</button>
+                <button type="button" class="btn secondary role-btn role-btn--remove" onclick={() => removeRole(i)} title="Remove" aria-label="Remove {role.visualName}">×</button>
               </div>
             {/if}
           </div>
@@ -576,8 +674,16 @@
 {/if}
 
 {#if modalDraft !== null}
-<div class="modal-overlay" role="dialog" aria-modal="true" aria-label="Edit role">
-  <div class="modal">
+<div
+  class="modal-overlay"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Edit role"
+  tabindex="-1"
+  onkeydown={handleModalKeydown}
+  onclick={(e) => { if (e.target === e.currentTarget) closeRoleModal(); }}
+>
+  <div class="modal" role="document">
     <div class="modal-header">
       <strong>Edit role</strong>
       <span class="pill muted" style="font-size: 0.75rem;">{modalDraft.roleKey}</span>
@@ -678,7 +784,7 @@
     {/if}
   </div>
 
-  <div class="chatroom-messages">
+  <div class="chatroom-messages" bind:this={chatScrollContainer}>
     {#if chatEntries.length === 0}
       <div class="chatroom-empty">
         {#if project.constitutionStatus === "missing"}
@@ -737,9 +843,22 @@
         {/each}
       </div>
     {/if}
-    <form method="POST" class="chatroom-form">
+    <form method="POST" class="chatroom-form" use:enhance={() => {
+      return async ({ update }) => {
+        await update({ reset: false });
+        chatInputValue = "";
+      };
+    }}>
       <input name="returnTab" type="hidden" value="chat" />
-      <textarea name="content" class="chatroom-textarea" placeholder={inInterview ? "Type your answer..." : "Type a message... Use @role to address a specific agent."} rows="2"></textarea>
+      <textarea
+        name="content"
+        class="chatroom-textarea"
+        placeholder={inInterview ? "Type your answer... (⌘⏎ to send)" : "Type a message... Use @role to address a specific agent. (⌘⏎ to send)"}
+        rows="2"
+        bind:this={chatTextarea}
+        bind:value={chatInputValue}
+        onkeydown={handleChatKeydown}
+      ></textarea>
       <button class="btn primary" formaction={inInterview ? "?/interview" : "?/message"} type="submit">{inInterview ? "Answer" : "Send"}</button>
     </form>
   </div>
@@ -779,6 +898,11 @@
   @keyframes pipeline-pulse {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent, #60a5fa) 40%, transparent); }
     50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-accent, #60a5fa) 0%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pipeline-node.info {
+      animation: none;
+    }
   }
   .pipeline-node.danger {
     border-color: var(--color-status-error, #ef4444);

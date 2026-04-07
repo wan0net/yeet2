@@ -104,6 +104,33 @@ function isLocalHost(host: string): boolean {
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "[::1]" || normalized === "::1";
 }
 
+/**
+ * Hosts allowed to receive the GitHub PAT in API calls. Defaults to public
+ * GitHub only. Operators using GitHub Enterprise can extend this via env:
+ *
+ *   YEET2_GITHUB_ALLOWED_HOSTS=github.example.com,git.corp.internal
+ *
+ * Without an explicit allowlist, registering a project with a non-GitHub
+ * host would otherwise route the operator's PAT to the attacker's server
+ * via the apiBaseUrlForHost call below.
+ */
+function allowedGitHubHosts(): Set<string> {
+  const hosts = new Set<string>(["github.com", "www.github.com", "api.github.com"]);
+  const extra = (process.env.YEET2_GITHUB_ALLOWED_HOSTS ?? "").trim();
+  if (extra) {
+    for (const host of extra.split(",")) {
+      const trimmed = host.trim().toLowerCase();
+      if (trimmed) hosts.add(trimmed);
+    }
+  }
+  return hosts;
+}
+
+function isAllowedGitHubHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return allowedGitHubHosts().has(normalized);
+}
+
 function apiBaseUrlForHost(host: string): string {
   if (host === "github.com" || host === "www.github.com") {
     return "https://api.github.com";
@@ -133,6 +160,13 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
     }
 
     const [, host, path] = match;
+    if (!isAllowedGitHubHost(host)) {
+      // Refuse to identify a repo as "GitHub" — and therefore refuse to send
+      // the GitHub PAT to that host — unless it's on the allowlist. The
+      // project can still be cloned via cloneRepository (subject to that
+      // function's separate scheme allowlist), but no API calls will be made.
+      return null;
+    }
     const parsedPath = parseRepositoryPath(path);
     if (!parsedPath) {
       return null;
@@ -150,6 +184,9 @@ export function parseGitHubRepositoryUrl(repositoryUrl: string): GitHubRepositor
   try {
     const url = new URL(trimmed);
     if (url.protocol !== "https:" || !url.host || isLocalHost(url.hostname)) {
+      return null;
+    }
+    if (!isAllowedGitHubHost(url.hostname)) {
       return null;
     }
 
