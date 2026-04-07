@@ -8,8 +8,11 @@
 
   function effectiveStatus(worker: Record<string, unknown>): string {
     const heartbeat = typeof worker.lastHeartbeatAt === "string" ? worker.lastHeartbeatAt : null;
-    if (heartbeat && Date.now() - new Date(heartbeat).getTime() > STALE_THRESHOLD_MS) {
-      return "stale";
+    if (heartbeat) {
+      const parsed = Date.parse(heartbeat);
+      if (Number.isFinite(parsed) && Date.now() - parsed > STALE_THRESHOLD_MS) {
+        return "stale";
+      }
     }
     return typeof worker.status === "string" ? worker.status : "unknown";
   }

@@ -257,6 +257,98 @@ def _sandbox_extra_args() -> list[str]:
     return shlex.split(cleanText(os.getenv("YEET2_EXECUTOR_SANDBOX_EXTRA_ARGS")))
 
 
+# Environment variables that are safe (or required) to pass into the agent
+# subprocess. Everything else — including unrelated API keys stored in the
+# executor's environment — is stripped so a compromised agent can't steal them.
+_OPENHANDS_ENV_WHITELIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TERM",
+        "TMPDIR",
+        "SHELL",
+        # Python / runtime
+        "PYTHONPATH",
+        "PYTHONUNBUFFERED",
+        # LLM routing
+        "LLM_MODEL",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_MODEL_NAME",
+        "OPENROUTER_API_KEY",
+        "OPENROUTER_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "MODEL",
+        # OpenHands config passthrough (callers set these deliberately)
+        "YEET2_OPENHANDS_COMMAND",
+        "YEET2_OPENHANDS_EXTRA_ARGS",
+        "YEET2_OPENHANDS_TIMEOUT_SECONDS",
+        "YEET2_OPENHANDS_PYTHON",
+        "YEET2_OPENHANDS_PACKAGE",
+        "YEET2_OPENHANDS_BIN",
+    }
+)
+
+
+def _build_openhands_env(record: JobRecord) -> dict[str, str]:
+    """Build a minimal environment for the OpenHands subprocess. Only pass
+    whitelisted variables so secrets from the executor's own environment
+    cannot be exfiltrated by agent-controlled code."""
+    env: dict[str, str] = {"PYTHONUNBUFFERED": "1"}
+    for name in _OPENHANDS_ENV_WHITELIST:
+        value = os.environ.get(name)
+        if value is not None:
+            env[name] = value
+
+    llm_model_override = cleanText(record.payload.get("llm_model"))
+    if llm_model_override:
+        env["LLM_MODEL"] = llm_model_override
+        env["OPENAI_MODEL_NAME"] = llm_model_override
+        env["MODEL"] = llm_model_override
+    return env
+
+
+# Regex patterns used to redact likely secret material (API keys, tokens) from
+# command strings before they are written to log files on disk.
+_SECRET_TOKEN_RE = re.compile(
+    r"\b("
+    r"sk-[A-Za-z0-9_\-]{16,}"  # OpenAI / Anthropic-style keys
+    r"|ghp_[A-Za-z0-9]{20,}"  # GitHub PATs
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|xox[baprs]-[A-Za-z0-9\-]{10,}"  # Slack tokens
+    r"|AIza[0-9A-Za-z\-_]{20,}"  # Google API keys
+    r")\b"
+)
+
+
+def _redact_secrets(text: str) -> str:
+    """Replace anything that looks like an API key with *** in a string."""
+    return _SECRET_TOKEN_RE.sub("***", text)
+
+
+def _redact_command(command: list[str]) -> str:
+    """Serialize a command list for logging, redacting any secret-looking
+    arguments and any env-var style KEY=VALUE pairs where KEY contains SECRET,
+    TOKEN, PASSWORD, or KEY."""
+    redacted: list[str] = []
+    secret_key_re = re.compile(r"(SECRET|TOKEN|PASSWORD|KEY)", re.IGNORECASE)
+    for part in command:
+        if "=" in part:
+            name, _, value = part.partition("=")
+            if secret_key_re.search(name) and value:
+                redacted.append(f"{name}=***")
+                continue
+        redacted.append(_redact_secrets(part))
+    return shlex.join(redacted)
+
+
 def _truncate(value: str, limit: int = 140) -> str:
     if len(value) <= limit:
         return value
@@ -723,13 +815,7 @@ class OpenHandsAdapter:
             if timeout_seconds <= 0:
                 timeout_seconds = None
 
-        env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
-        llm_model_override = cleanText(record.payload.get("llm_model"))
-        if llm_model_override:
-            env["LLM_MODEL"] = llm_model_override
-            env["OPENAI_MODEL_NAME"] = llm_model_override
-            env["MODEL"] = llm_model_override
+        env = _build_openhands_env(record)
 
         launch_command = command
         config_path: Path | None = None
@@ -737,15 +823,15 @@ class OpenHandsAdapter:
             config_path = _write_asrt_config(self.asrt_configs_dir, record.id, _build_asrt_config(workspace_path, sandbox_enabled))
             launch_command = [_resolve_srt_binary(), *_sandbox_extra_args(), "--settings", str(config_path), *command]
             record.payload["sandbox_config_path"] = str(config_path)
-            record.payload["sandbox_wrapped_command"] = shlex.join(launch_command)
+            record.payload["sandbox_wrapped_command"] = _redact_command(launch_command)
         else:
             record.payload.pop("sandbox_config_path", None)
             record.payload.pop("sandbox_wrapped_command", None)
 
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(f"openhands_cwd: {workspace_path}\n")
-            handle.write(f"openhands_command: {shlex.join(command)}\n")
-            handle.write(f"sandbox_command: {shlex.join(launch_command)}\n")
+            handle.write(f"openhands_command: {_redact_command(command)}\n")
+            handle.write(f"sandbox_command: {_redact_command(launch_command)}\n")
             if config_path is not None:
                 handle.write(f"sandbox_config_path: {config_path}\n")
             handle.flush()

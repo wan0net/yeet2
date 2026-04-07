@@ -51,7 +51,11 @@
 
   let { form }: { form: ActionData } = $props();
 
-  let selectedTemplate = $state((form as any)?.values?.pipelineTemplate ?? "software");
+  const initialPipelineTemplate =
+    form && typeof form === "object" && "values" in form && form.values && typeof form.values === "object" && "pipelineTemplate" in form.values && typeof form.values.pipelineTemplate === "string"
+      ? form.values.pipelineTemplate
+      : "software";
+  let selectedTemplate = $state(initialPipelineTemplate);
 </script>
 
 <section class="page-header">

@@ -33,6 +33,7 @@ import {
   registerProject,
   planProject,
   resolveProjectBlocker,
+  dismissProjectBlocker,
   ProjectBlockerError,
   ProjectDispatchError,
   ProjectApprovalError,
@@ -1208,6 +1209,38 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       return reply.code(500).send({
         error: "internal_error",
         message: "Unable to resolve blocker"
+      });
+    }
+  });
+
+  app.post("/projects/:projectId/blockers/:blockerId/dismiss", async (request, reply) => {
+    const { projectId, blockerId } = request.params as { projectId?: string; blockerId?: string };
+    if (!projectId || !blockerId) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "projectId and blockerId are required"
+      });
+    }
+
+    try {
+      const result = await dismissProjectBlocker(projectId, blockerId);
+      const run = await triggerProjectRunIfEnabled(projectId);
+      return reply.code(200).send({
+        ...result,
+        ...run
+      });
+    } catch (error) {
+      if (error instanceof ProjectBlockerError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "internal_error",
+        message: "Unable to dismiss blocker"
       });
     }
   });

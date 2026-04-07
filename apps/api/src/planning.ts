@@ -639,6 +639,12 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
     return null;
   }
 
+  // Reject task drafts that arrive with an unexpected status — the brain must
+  // only propose tasks in the "ready" state (or omit status entirely).
+  if (raw.status !== undefined && raw.status !== null && raw.status !== "ready") {
+    return null;
+  }
+
   const acceptanceCriteria = Array.isArray(raw.acceptanceCriteria)
     ? raw.acceptanceCriteria.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
     : [];
@@ -649,7 +655,11 @@ function normalizeTaskDraft(value: unknown, fallbackPriority: number): PlanningT
     agentRole,
     assignedRoleDefinitionId: cleanText(typeof raw.assignedRoleDefinitionId === "string" ? raw.assignedRoleDefinitionId : typeof raw.assigned_role_definition_id === "string" ? raw.assigned_role_definition_id : undefined) || null,
     assignedRoleDefinitionLabel: cleanText(typeof raw.assignedRoleDefinitionLabel === "string" ? raw.assignedRoleDefinitionLabel : typeof raw.assigned_role_definition_label === "string" ? raw.assigned_role_definition_label : undefined) || null,
-    status: raw.status === "ready" ? "ready" : "ready",
+    // New task drafts are always created in "ready" status — the brain only
+    // proposes new work, it doesn't resurrect in-flight tasks. Status
+    // transitions happen later via the dispatch/execution pipeline. If the
+    // brain sends anything other than "ready" we reject the draft below.
+    status: "ready",
     priority: typeof raw.priority === "number" && Number.isFinite(raw.priority) ? raw.priority : fallbackPriority,
     acceptanceCriteria,
     attempts: typeof raw.attempts === "number" && Number.isFinite(raw.attempts) ? raw.attempts : 0,

@@ -1,5 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 
+import { logger } from "./logger";
 import {
   advanceProject,
   createProjectPullRequest,
@@ -98,8 +99,12 @@ async function recoverStuckJobs(project: ProjectSummary, timeoutMs: number): Pro
         // Job is stuck — mark as failed
         try {
           await forceFailStuckJob(project.id, job.id, task.id, task.attempts);
-        } catch {
-          // Best effort
+        } catch (error) {
+          logger.bestEffortFailure("force_fail_stuck_job", error, {
+            projectId: project.id,
+            taskId: task.id,
+            jobId: job.id
+          });
         }
       }
     }
@@ -392,8 +397,12 @@ async function processProjectPullRequestAutomation(
   } else if (project.mergeApprovalMode === "human_approval" && project.pullRequestDraftMode === "ready") {
     try {
       await createProjectPullRequest(project.id, candidate.jobId);
-    } catch {
+    } catch (error) {
       // Best-effort blocker refresh only.
+      logger.bestEffortFailure("create_pull_request_blocker_refresh", error, {
+        projectId: project.id,
+        jobId: candidate.jobId
+      });
     }
   }
 
@@ -739,8 +748,12 @@ export class AutonomyLoopManager {
               reason: decision.reason
             }
           });
-        } catch {
+        } catch (error) {
           // Best-effort stage log only.
+          logger.bestEffortFailure("stage_dispatch_decision_log", error, {
+            projectId: currentProject.id,
+            taskId: decision.targetTaskId ?? null
+          });
         }
       }
 

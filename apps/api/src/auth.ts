@@ -1,4 +1,16 @@
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
+
+/** Constant-time string comparison. Returns false on length mismatch so we
+ * don't leak token length via timing. */
+function safeCompareStrings(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
 
 function envText(name: string): string {
   return (process.env[name] ?? "").trim();
@@ -91,7 +103,7 @@ export async function requireApiAuth(request: FastifyRequest, reply: FastifyRepl
   }
 
   const receivedToken = parseAuthorizationHeader(request);
-  if (receivedToken && receivedToken === normalizeBearerToken(configuredToken)) {
+  if (receivedToken && safeCompareStrings(receivedToken, normalizeBearerToken(configuredToken))) {
     return;
   }
 

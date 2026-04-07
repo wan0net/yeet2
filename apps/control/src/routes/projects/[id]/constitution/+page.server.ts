@@ -5,6 +5,11 @@ import { apiJson } from "$lib/server/api";
 import { putJson } from "$lib/server/mutations";
 
 const FILE_KEYS = ["vision", "spec", "roadmap", "architecture", "decisions", "qualityBar"] as const;
+type FileKey = (typeof FILE_KEYS)[number];
+
+function isFileKey(value: string): value is FileKey {
+	return (FILE_KEYS as readonly string[]).includes(value);
+}
 
 interface ConstitutionFileResponse {
 	fileKey: string;
@@ -20,7 +25,7 @@ export const load: PageServerLoad = async ({ params, url }) => {
 	}
 
 	const activeKey = url.searchParams.get("file") || "vision";
-	const validKey = FILE_KEYS.includes(activeKey as any) ? activeKey : "vision";
+	const validKey: FileKey = isFileKey(activeKey) ? activeKey : "vision";
 
 	let file: ConstitutionFileResponse | null = null;
 	try {
@@ -43,7 +48,7 @@ export const actions: Actions = {
 		const fileKey = String(form.get("fileKey") || "").trim();
 		const content = String(form.get("content") || "");
 
-		if (!fileKey || !FILE_KEYS.includes(fileKey as any)) {
+		if (!fileKey || !isFileKey(fileKey)) {
 			return fail(400, { actionError: "Invalid file key" });
 		}
 

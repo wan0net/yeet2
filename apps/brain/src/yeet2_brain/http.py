@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 from urllib.parse import urlparse
 
 from .planner import ConstitutionSection, PlanningInput, plan_project
@@ -18,6 +20,26 @@ from .orchestrator import (
 )
 from .roles import PlanningRoleDefinition, normalize_planning_role_definitions
 from .plan_store import RunStore
+
+
+# Refuse request bodies larger than this to avoid memory-exhaustion DoS via
+# attacker-controlled Content-Length values.
+MAX_REQUEST_BODY_BYTES = 4 * 1024 * 1024  # 4 MiB (constitution docs can be large)
+
+
+def _expected_bearer_token() -> str | None:
+    token = (os.environ.get("YEET2_BRAIN_BEARER_TOKEN") or "").strip()
+    return token or None
+
+
+def _extract_bearer_token(headers: Any) -> str | None:
+    raw = headers.get("Authorization") if headers is not None else None
+    if not isinstance(raw, str):
+        return None
+    stripped = raw.strip()
+    if not stripped.lower().startswith("bearer "):
+        return None
+    return stripped[7:].strip() or None
 
 
 def _clean_text(value: object) -> str:
@@ -152,10 +174,35 @@ class BrainApp:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _require_auth(self) -> bool:
+                """Return True if the request is authorized. /health is public.
+                If YEET2_BRAIN_BEARER_TOKEN is unset, auth is disabled."""
+                configured = _expected_bearer_token()
+                if configured is None:
+                    return True
+                received = _extract_bearer_token(self.headers)
+                if received is None or not hmac.compare_digest(received, configured):
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+                    return False
+                return True
+
+            def _read_body(self) -> bytes | None:
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except (TypeError, ValueError):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_content_length"})
+                    return None
+                if length < 0 or length > MAX_REQUEST_BODY_BYTES:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "payload_too_large"})
+                    return None
+                return self.rfile.read(length) if length else b"{}"
+
             def do_GET(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
                 if path == "/health":
                     self._send_json(HTTPStatus.OK, {"status": "ok", "service": "brain"})
+                    return
+                if not self._require_auth():
                     return
                 if path.startswith("/orchestration/runs/"):
                     run_id = path.rsplit("/", 1)[-1]
@@ -172,8 +219,11 @@ class BrainApp:
                 if path not in {"/orchestration/plan", "/orchestration/decide", "/orchestration/brief", "/orchestration/interview"}:
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                     return
-                length = int(self.headers.get("Content-Length", "0"))
-                raw = self.rfile.read(length) if length else b"{}"
+                if not self._require_auth():
+                    return
+                raw = self._read_body()
+                if raw is None:
+                    return
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except json.JSONDecodeError:

@@ -2,13 +2,42 @@
 
 from __future__ import annotations
 
+import hmac
 import json
+import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 from typing import Any
 
 from .state import JobStore
+
+
+# Refuse request bodies larger than this to avoid memory-exhaustion DoS via
+# attacker-controlled Content-Length values.
+MAX_REQUEST_BODY_BYTES = 1 * 1024 * 1024  # 1 MiB
+
+# Cap individual acceptance criteria to keep prompt size bounded and reject
+# obvious prompt-injection fodder.
+MAX_ACCEPTANCE_CRITERION_CHARS = 2000
+MAX_ACCEPTANCE_CRITERIA_COUNT = 50
+
+
+def _expected_bearer_token() -> str | None:
+    """Return the bearer token required for executor requests, or None if
+    auth is disabled via env config."""
+    token = (os.environ.get("YEET2_EXECUTOR_BEARER_TOKEN") or "").strip()
+    return token or None
+
+
+def _extract_bearer_token(headers: Any) -> str | None:
+    raw = headers.get("Authorization") if headers is not None else None
+    if not isinstance(raw, str):
+        return None
+    stripped = raw.strip()
+    if not stripped.lower().startswith("bearer "):
+        return None
+    return stripped[7:].strip() or None
 
 
 def _require_text(payload: dict[str, Any], field: str) -> str:
@@ -24,11 +53,20 @@ def _normalize_acceptance_criteria(payload: dict[str, Any]) -> list[str] | None:
     value = payload["acceptance_criteria"]
     if not isinstance(value, list):
         raise ValueError("acceptance_criteria")
+    if len(value) > MAX_ACCEPTANCE_CRITERIA_COUNT:
+        raise ValueError("acceptance_criteria")
     criteria: list[str] = []
     for item in value:
-        if not isinstance(item, str) or not item.strip():
+        if not isinstance(item, str):
             raise ValueError("acceptance_criteria")
-        criteria.append(item.strip())
+        stripped = item.strip()
+        if not stripped:
+            raise ValueError("acceptance_criteria")
+        if "\x00" in stripped:
+            raise ValueError("acceptance_criteria")
+        if len(stripped) > MAX_ACCEPTANCE_CRITERION_CHARS:
+            raise ValueError("acceptance_criteria")
+        criteria.append(stripped)
     return criteria
 
 
@@ -48,10 +86,37 @@ class ExecutorApp:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def _require_auth(self) -> bool:
+                """Return True if the request is authorized. /health is public.
+                If YEET2_EXECUTOR_BEARER_TOKEN is unset, auth is disabled."""
+                configured = _expected_bearer_token()
+                if configured is None:
+                    return True
+                received = _extract_bearer_token(self.headers)
+                if received is None or not hmac.compare_digest(received, configured):
+                    self._send_json(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+                    return False
+                return True
+
+            def _read_body(self) -> bytes | None:
+                """Read the request body with a hard size cap. Sends the error
+                response and returns None if the body is too large or malformed."""
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except (TypeError, ValueError):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_content_length"})
+                    return None
+                if length < 0 or length > MAX_REQUEST_BODY_BYTES:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "payload_too_large"})
+                    return None
+                return self.rfile.read(length) if length else b"{}"
+
             def do_GET(self) -> None:  # noqa: N802
                 path = urlparse(self.path).path
                 if path == "/health":
                     self._send_json(HTTPStatus.OK, {"status": "ok", "service": "executor"})
+                    return
+                if not self._require_auth():
                     return
                 if path.startswith("/jobs/"):
                     job_id = path.rsplit("/", 1)[-1]
@@ -68,8 +133,11 @@ class ExecutorApp:
                 if path != "/jobs":
                     self._send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                     return
-                length = int(self.headers.get("Content-Length", "0"))
-                raw = self.rfile.read(length) if length else b"{}"
+                if not self._require_auth():
+                    return
+                raw = self._read_body()
+                if raw is None:
+                    return
                 try:
                     payload = json.loads(raw.decode("utf-8"))
                 except json.JSONDecodeError:

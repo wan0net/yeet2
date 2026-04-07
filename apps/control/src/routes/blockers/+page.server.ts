@@ -33,7 +33,7 @@ export const actions: Actions = {
     }
 
     try {
-      await postJson(`/projects/${projectId}/blockers/${blockerId}/resolve`, {});
+      await postJson(`/projects/${projectId}/blockers/${blockerId}/dismiss`, {});
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to dismiss blocker" });
     }

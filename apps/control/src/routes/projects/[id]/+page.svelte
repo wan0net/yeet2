@@ -37,6 +37,11 @@
       .slice(0, 3)
   );
 
+  const currentTab = $derived((() => {
+    const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
+    return tab === "agents" || tab === "chat" || tab === "office" ? tab : "overview";
+  })());
+
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
@@ -56,10 +61,6 @@
   onDestroy(() => {
     if (pollInterval) clearInterval(pollInterval);
   });
-  const currentTab = $derived((() => {
-    const tab = page.url.searchParams.get("tab")?.trim().toLowerCase();
-    return tab === "agents" || tab === "chat" || tab === "office" ? tab : "overview";
-  })());
   const operatorGuidanceIds = $derived(new Set(project.operatorGuidance.map((entry) => entry.id)));
   const chatEntries = $derived(
     [

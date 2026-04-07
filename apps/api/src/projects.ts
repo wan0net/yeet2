@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import type {
@@ -36,6 +36,7 @@ import {
 
 import { prisma } from "./db";
 import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
+import { logger } from "./logger";
 import { getGitHubToken } from "./settings";
 import {
   buildGitHubCompareUrl,
@@ -557,7 +558,14 @@ export class ProjectAutonomyError extends Error {
 
 export class ProjectConstitutionError extends Error {
   constructor(
-    public readonly code: "project_not_found" | "project_no_local_path" | "invalid_file_key" | "file_read_failed" | "file_write_failed" | "path_traversal",
+    public readonly code:
+      | "project_not_found"
+      | "project_no_local_path"
+      | "invalid_file_key"
+      | "file_read_failed"
+      | "file_write_failed"
+      | "path_traversal"
+      | "path_resolution_failed",
     message: string,
     public readonly statusCode: number
   ) {
@@ -588,6 +596,69 @@ export interface ConstitutionFileWriteResult {
   written: true;
 }
 
+/**
+ * Canonicalize a target path and assert it is contained within the canonical
+ * root. Follows symlinks so an in-repo symlink cannot point outside.
+ *
+ * Handles the case where the target file doesn't exist yet: we canonicalize
+ * the deepest existing ancestor and compare that (plus any remaining suffix)
+ * against the canonical root.
+ *
+ * Returns the canonical absolute path that should be used for the actual IO.
+ */
+async function resolvePathInRoot(localRoot: string, relativePath: string): Promise<string> {
+  const canonicalRoot = await realpath(localRoot);
+  const absolute = resolve(join(localRoot, relativePath));
+
+  let current = absolute;
+  const suffixSegments: string[] = [];
+  // Walk up until we hit an ancestor that exists on disk, realpath it, then
+  // rebuild the full canonical path by re-appending the missing segments.
+  // This prevents a symlink in any ancestor from escaping the root.
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    try {
+      const canonicalCurrent = await realpath(current);
+      const canonicalAbsolute = suffixSegments.length
+        ? join(canonicalCurrent, ...suffixSegments.reverse())
+        : canonicalCurrent;
+      if (
+        canonicalAbsolute !== canonicalRoot &&
+        !canonicalAbsolute.startsWith(canonicalRoot + "/")
+      ) {
+        throw new ProjectConstitutionError(
+          "path_traversal",
+          "Resolved path is outside the project directory",
+          400
+        );
+      }
+      return canonicalAbsolute;
+    } catch (error) {
+      if (error instanceof ProjectConstitutionError) {
+        throw error;
+      }
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      if (code !== "ENOENT") {
+        throw new ProjectConstitutionError(
+          "path_resolution_failed",
+          "Failed to resolve path",
+          500
+        );
+      }
+      const parent = dirname(current);
+      if (parent === current) {
+        throw new ProjectConstitutionError(
+          "path_traversal",
+          "Unable to locate any existing ancestor of the target path",
+          400
+        );
+      }
+      suffixSegments.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
 export async function readConstitutionFile(projectId: string, fileKey: string): Promise<ConstitutionFileReadResult> {
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) {
@@ -603,10 +674,7 @@ export async function readConstitutionFile(projectId: string, fileKey: string): 
   }
 
   const localRoot = resolve(project.localPath);
-  const absolutePath = resolve(join(localRoot, relativePath));
-  if (!absolutePath.startsWith(localRoot + "/") && absolutePath !== localRoot) {
-    throw new ProjectConstitutionError("path_traversal", "Resolved path is outside the project directory", 400);
-  }
+  const absolutePath = await resolvePathInRoot(localRoot, relativePath);
 
   try {
     const content = await readFile(absolutePath, "utf8");
@@ -634,13 +702,12 @@ export async function writeConstitutionFile(projectId: string, fileKey: string, 
   }
 
   const localRoot = resolve(project.localPath);
-  const absolutePath = resolve(join(localRoot, relativePath));
-  if (!absolutePath.startsWith(localRoot + "/") && absolutePath !== localRoot) {
-    throw new ProjectConstitutionError("path_traversal", "Resolved path is outside the project directory", 400);
-  }
+  // Make sure the docs directory exists before canonicalizing so realpath has
+  // an existing ancestor to walk from.
+  await mkdir(resolve(join(localRoot, "docs")), { recursive: true });
+  const absolutePath = await resolvePathInRoot(localRoot, relativePath);
 
   try {
-    await mkdir(resolve(join(localRoot, "docs")), { recursive: true });
     await writeFile(absolutePath, content, "utf8");
   } catch {
     throw new ProjectConstitutionError("file_write_failed", `Failed to write file: ${relativePath}`, 500);
@@ -662,8 +729,13 @@ export async function writeConstitutionFile(projectId: string, fileKey: string, 
         }
       }
     });
-  } catch {
-    // Best-effort: don't fail the write if re-inspection fails
+  } catch (error) {
+    // Best-effort: don't fail the write if re-inspection fails — but surface
+    // the error so stale constitution metadata is debuggable.
+    logger.bestEffortFailure("reinspect_constitution_after_write", error, {
+      projectId,
+      fileKey
+    });
   }
 
   return { fileKey, path: relativePath, written: true };
@@ -2784,7 +2856,12 @@ async function persistDispatchedJob(
   });
 
   // GitHub sync — post dispatch comment (fire-and-forget)
-  syncGitHubTaskIssue({ project, task, event: "dispatched" }).catch(() => {});
+  syncGitHubTaskIssue({ project, task, event: "dispatched" }).catch((error) => {
+    logger.bestEffortFailure("syncGitHubTaskIssue.dispatched", error, {
+      projectId: project.id,
+      taskId: task.id
+    });
+  });
 
   return toProjectJobSummary(createdJob);
 }
@@ -2953,8 +3030,13 @@ async function createProjectJobPullRequest(
         githubPrUrl: pullRequest.htmlUrl,
         githubPrTitle: pullRequest.title
       });
-    } catch {
+    } catch (error) {
       // The PR was created successfully; blocker refresh is best-effort.
+      logger.bestEffortFailure("ensure_pull_request_review_blocker", error, {
+        projectId: project.id,
+        missionId: mission.id,
+        jobId: job.id
+      });
     }
   }
 
@@ -3410,12 +3492,18 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
   });
 
   // GitHub sync — fire-and-forget based on task outcome
+  const logSyncFailure = (event: string) => (error: unknown) => {
+    logger.bestEffortFailure(`syncGitHubTaskIssue.${event}`, error, {
+      projectId: project.id,
+      taskId: task.id
+    });
+  };
   if (taskStatus === "complete") {
-    syncGitHubTaskIssue({ project, task, event: "completed", detail: executorJob.artifact_summary || "" }).catch(() => {});
+    syncGitHubTaskIssue({ project, task, event: "completed", detail: executorJob.artifact_summary || "" }).catch(logSyncFailure("completed"));
   } else if (taskStatus === "blocked") {
-    syncGitHubTaskIssue({ project, task, event: "blocked", detail: blockerReason || "" }).catch(() => {});
+    syncGitHubTaskIssue({ project, task, event: "blocked", detail: blockerReason || "" }).catch(logSyncFailure("blocked"));
   } else if (taskStatus === "failed") {
-    syncGitHubTaskIssue({ project, task, event: "failed" }).catch(() => {});
+    syncGitHubTaskIssue({ project, task, event: "failed" }).catch(logSyncFailure("failed"));
   }
 
   const updatedProject = await loadProjectById(projectId);
@@ -3473,7 +3561,11 @@ export async function refreshProjectActiveJobs(projectId: string): Promise<Proje
   };
 }
 
-export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
+async function closeProjectBlockerWithStatus(
+  projectId: string,
+  blockerId: string,
+  finalStatus: "resolved" | "dismissed"
+): Promise<ProjectDetailResponse> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     select: { id: true }
@@ -3499,11 +3591,11 @@ export async function resolveProjectBlocker(projectId: string, blockerId: string
   }
 
   await prisma.$transaction(async (tx) => {
-    if (blocker.status !== "resolved") {
+    if (blocker.status !== finalStatus) {
       await tx.blocker.update({
         where: { id: blocker.id },
         data: {
-          status: "resolved",
+          status: finalStatus,
           resolvedAt: blocker.resolvedAt ?? new Date()
         }
       });
@@ -3536,6 +3628,14 @@ export async function resolveProjectBlocker(projectId: string, blockerId: string
   }
 
   return { project: updatedProject };
+}
+
+export async function resolveProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
+  return closeProjectBlockerWithStatus(projectId, blockerId, "resolved");
+}
+
+export async function dismissProjectBlocker(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {
+  return closeProjectBlockerWithStatus(projectId, blockerId, "dismissed");
 }
 
 function findProjectBlocker(

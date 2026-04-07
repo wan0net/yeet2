@@ -1,5 +1,6 @@
 <script lang="ts">
   import { marked } from "marked";
+  import DOMPurify from "isomorphic-dompurify";
 
   let { content = "", inline = false }: { content: string; inline?: boolean } = $props();
 
@@ -17,11 +18,13 @@
     if (!content) return "";
     try {
       const normalized = inline ? content : ensureNewlines(content);
-      return inline
+      const html = inline
         ? (marked.parseInline(normalized, options) as string)
         : (marked.parse(normalized, options) as string);
+      // Agent / API content flows through here — sanitize before {@html}
+      return DOMPurify.sanitize(html);
     } catch {
-      return content;
+      return DOMPurify.sanitize(content);
     }
   })());
 </script>
