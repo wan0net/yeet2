@@ -49,8 +49,9 @@ test("new project form has a Default branch input defaulting to main", async ({ 
 test("new project form shows pipeline template selection", async ({ page }) => {
   await page.goto("/projects/new");
   await expect(page.getByText("Pipeline template")).toBeVisible();
-  // Software Development template card is the default
-  await expect(page.getByText("Software Development")).toBeVisible();
+  // Software Development template card is the default — match by role to avoid
+  // truncated-text ambiguity inside the template cards
+  await expect(page.getByRole("button", { name: /Software Development/ })).toBeVisible();
 });
 
 test("new project form Attach project submit button is present", async ({ page }) => {
@@ -67,9 +68,12 @@ test("new project form has a Cancel link back to projects", async ({ page }) => 
 
 test("clicking a template card selects it", async ({ page }) => {
   await page.goto("/projects/new");
-  // Click the Research template
-  await page.getByText("Research").click();
-  // The Research card should now have the selected class
-  const researchCard = page.locator(".template-card", { hasText: "Research" });
+  // Click the Research template card — "Research" also appears in the Content
+  // & Writing description, so we scope to the card whose <strong> name equals
+  // "Research" exactly.
+  const researchCard = page.locator(".template-card").filter({
+    has: page.locator("strong", { hasText: /^Research$/ })
+  });
+  await researchCard.click();
   await expect(researchCard).toHaveClass(/selected/);
 });

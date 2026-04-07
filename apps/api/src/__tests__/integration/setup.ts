@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { afterAll, beforeAll, beforeEach } from "vitest";
 import { PrismaClient } from "@yeet2/db";
 
 export const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "postgresql://localhost/yeet2_test";
+
+/** Local paths that POST /projects tests use. They must exist on disk because
+ * inspectConstitution throws RepositoryPathError for missing directories. */
+const TEST_REPO_PATHS = ["/tmp/yeet2-test-repo", "/tmp/repo"];
 
 /** Check DB connectivity — returns false if the server is unreachable. */
 async function isDbReachable(): Promise<boolean> {
@@ -34,6 +39,11 @@ export function setupTestDatabase() {
     );
     if (result.status !== 0) {
       throw new Error("Prisma migrate deploy failed");
+    }
+    // Ensure the localPath values used by POST /projects tests exist on disk
+    // so inspectConstitution doesn't throw RepositoryPathError.
+    for (const path of TEST_REPO_PATHS) {
+      await mkdir(path, { recursive: true });
     }
   });
 }

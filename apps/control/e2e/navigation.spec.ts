@@ -11,9 +11,11 @@ test("homepage renders the Mission Control heading", async ({ page }) => {
 
 test("homepage shows key metric cards", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Projects")).toBeVisible();
-  await expect(page.getByText("Active missions")).toBeVisible();
-  await expect(page.getByText("Running jobs")).toBeVisible();
+  // Metric kickers live in the metrics grid at the top of the page. Several of
+  // these labels are repeated in lower sections, so match the kicker class.
+  await expect(page.locator(".metric-kicker", { hasText: "Active missions" })).toBeVisible();
+  await expect(page.locator(".metric-kicker", { hasText: "Running jobs" }).first()).toBeVisible();
+  await expect(page.locator(".metric-kicker", { hasText: "Open blockers" }).first()).toBeVisible();
 });
 
 test("homepage has a nav link to Projects", async ({ page }) => {
