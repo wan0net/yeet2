@@ -2,9 +2,16 @@
   import type { PageData, ActionData } from "./$types";
   import { planningProvenanceLabel } from "$lib/projects";
   import { formatTimestamp } from "$lib/project-detail";
+  import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
   import Markdown from "$lib/ui/Markdown.svelte";
 
   let { data, form }: { data: PageData; form: ActionData } = $props();
+
+  const formError = $derived(
+    form && typeof form === "object" && "actionError" in form && typeof form.actionError === "string"
+      ? form.actionError
+      : null
+  );
 </script>
 
 <section class="page-header">
@@ -23,11 +30,7 @@
   </div>
 </section>
 
-{#if form && 'actionError' in form}
-  <section class="card" style="border-color: var(--color-status-error);">
-    <div class="card-body">{(form as Record<string, unknown>).actionError}</div>
-  </section>
-{/if}
+<ErrorBanner message={formError} />
 
 <section class="split-grid">
   <div class="card">

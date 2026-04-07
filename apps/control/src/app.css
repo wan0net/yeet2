@@ -572,10 +572,11 @@ td {
 }
 
 .sidebar-link {
+  position: relative;
   display: flex;
   align-items: center;
   min-height: 38px;
-  padding: 0 12px;
+  padding: 0 12px 0 16px;
   border: 1px solid transparent;
   border-radius: 10px;
   color: var(--text-mid);
@@ -592,6 +593,17 @@ td {
   border-color: var(--border);
   background: var(--bg-subtle);
   color: var(--text);
+}
+
+.sidebar-link--active::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 .setup-note {

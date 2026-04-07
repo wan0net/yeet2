@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData, ActionData } from "./$types";
 	import Markdown from "$lib/ui/Markdown.svelte";
+	import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 
@@ -15,9 +16,22 @@
 
 	const fileContent = $derived(data.file?.content ?? "");
 	let editorContent = $state("");
+	// Debounced copy of editorContent used for the preview so large documents
+	// don't re-render marked + DOMPurify on every keystroke.
+	let debouncedContent = $state("");
+	const PREVIEW_DEBOUNCE_MS = 200;
 
 	$effect(() => {
 		editorContent = fileContent;
+		debouncedContent = fileContent;
+	});
+
+	$effect(() => {
+		const next = editorContent;
+		const handle = setTimeout(() => {
+			debouncedContent = next;
+		}, PREVIEW_DEBOUNCE_MS);
+		return () => clearTimeout(handle);
 	});
 </script>
 
@@ -47,11 +61,7 @@
 	{/each}
 </nav>
 
-{#if form?.actionError}
-	<section class="card" style="border-color: var(--color-status-error);">
-		<div class="card-body">{form.actionError}</div>
-	</section>
-{/if}
+<ErrorBanner message={form?.actionError} />
 
 <section class="constitution-editor">
 	<div class="editor-pane">
@@ -85,8 +95,8 @@
 		<div class="card">
 			<div class="card-header">Preview</div>
 			<div class="card-body">
-				{#if editorContent}
-					<Markdown content={editorContent} />
+				{#if debouncedContent}
+					<Markdown content={debouncedContent} />
 				{:else}
 					<div class="empty-state">Start typing to see a preview.</div>
 				{/if}

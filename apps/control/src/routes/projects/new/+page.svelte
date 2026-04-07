@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ActionData } from "./$types";
+  import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
 
   const TEMPLATES = [
     {
@@ -82,6 +83,8 @@
   <a class="btn secondary" href="/projects">Back to projects</a>
 </section>
 
+<ErrorBanner message={form?.registerError} />
+
 <section class="card">
   <div class="card-header">Pipeline template</div>
   <div class="card-body">
@@ -92,8 +95,10 @@
           type="button"
           class="template-card"
           class:selected={selectedTemplate === template.key}
+          aria-pressed={selectedTemplate === template.key}
           onclick={() => { selectedTemplate = template.key; }}
         >
+          <span class="template-check" aria-hidden="true">{selectedTemplate === template.key ? "✓" : ""}</span>
           <strong>{template.name}</strong>
           <span>{template.description}</span>
           {#if template.key === "custom"}
@@ -132,9 +137,6 @@
       <div class="token-row" style="grid-column: 1 / -1;">
         <button formaction="?/register" type="submit">Attach project</button>
         <a class="btn secondary" href="/projects">Cancel</a>
-        {#if form?.registerError}
-          <span class="pill danger">{form.registerError}</span>
-        {/if}
       </div>
     </form>
   </div>
@@ -149,17 +151,18 @@
   }
 
   .template-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.875rem 1rem;
-    border: 1px solid var(--color-border, #333);
+    border: 2px solid var(--color-border, #333);
     border-radius: var(--radius-md, 0.5rem);
     background: var(--color-surface-raised, #1a1a1a);
     color: var(--color-text-primary, #eee);
     cursor: pointer;
     text-align: left;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
     overflow: hidden;
     word-break: break-word;
   }
@@ -168,10 +171,35 @@
     border-color: var(--color-accent, #3b82f6);
   }
 
+  .template-card:active {
+    transform: scale(0.98);
+  }
+
   .template-card.selected {
     border-color: var(--color-accent, #3b82f6);
-    box-shadow: 0 0 0 2px var(--color-accent-dim, #2563eb33);
-    background: var(--color-accent-subtle, #1e3a5f);
+    box-shadow: 0 0 0 3px var(--color-accent-bg, #eff6ff);
+    background: var(--color-accent-bg, #eff6ff);
+  }
+
+  .template-check {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-inv, #fff);
+    background: transparent;
+    transition: background 0.15s;
+  }
+
+  .template-card.selected .template-check {
+    background: var(--color-accent, #3b82f6);
   }
 
   .template-card strong {

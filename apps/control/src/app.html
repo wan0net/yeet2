@@ -1,8 +1,25 @@
 <!doctype html>
-<html data-theme="light" lang="en">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <script>
+      // Apply the saved or system-preferred theme before SvelteKit hydrates
+      // so the page doesn't flash with the wrong colors.
+      (function () {
+        try {
+          var stored = localStorage.getItem("yeet2-theme");
+          var mode = stored === "dark" || stored === "light"
+            ? stored
+            : window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          document.documentElement.setAttribute("data-theme", mode);
+        } catch (err) {
+          document.documentElement.setAttribute("data-theme", "light");
+        }
+      })();
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

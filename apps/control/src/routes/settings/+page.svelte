@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData, ActionData } from "./$types";
+  import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
   let { data, form }: { data: PageData; form: ActionData } = $props();
 </script>
 
@@ -13,11 +14,7 @@
   </div>
 </section>
 
-{#if form?.actionError}
-  <section class="card" style="border-color: var(--color-status-error);">
-    <div class="card-body">{form.actionError}</div>
-  </section>
-{/if}
+<ErrorBanner message={form?.actionError} />
 
 <section class="card">
   <div class="card-header">GitHub token</div>

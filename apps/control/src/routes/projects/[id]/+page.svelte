@@ -14,6 +14,7 @@
     formatTimestamp
   } from "$lib/project-detail";
   import { formatConstitutionFiles, planningProvenanceLabel, projectModelCostSummary } from "$lib/projects";
+  import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
   import Markdown from "$lib/ui/Markdown.svelte";
   import OfficeView from "$lib/ui/OfficeView.svelte";
 
@@ -353,9 +354,7 @@
   </div>
 </section>
 
-{#if form?.actionError}
-  <div class="pill danger">{form.actionError}</div>
-{/if}
+<ErrorBanner message={form?.actionError} />
 
 <section class="project-tabs">
   <a aria-current={currentTab === "overview" ? "page" : undefined} class:project-tab--active={currentTab === "overview"} class="project-tab" href={tabHref("overview")}>
@@ -830,17 +829,29 @@
   <div class="chatroom-input">
     {#if runningJobs.length > 0}
       <div class="steer-bar">
-        <span class="steer-label">Steer running agent:</span>
-        {#each runningJobs as entry}
-          <form method="POST" class="steer-form" use:enhance={() => {
-            return async ({ update }) => { await update(); };
-          }}>
-            <input name="returnTab" type="hidden" value="chat" />
-            <input name="jobId" type="hidden" value={entry.job.id} />
-            <input class="steer-input" type="text" name="steerContent" placeholder="Redirect this agent..." />
-            <button class="btn secondary steer-btn" formaction="?/steer" type="submit">→ {entry.job.id.slice(0, 6)}</button>
-          </form>
-        {/each}
+        <div class="steer-header">Steer a running agent</div>
+        <div class="steer-cards">
+          {#each runningJobs as entry}
+            <form method="POST" class="steer-card" use:enhance={() => {
+              return async ({ update, formElement }) => {
+                await update();
+                const input = formElement.querySelector<HTMLInputElement>('input[name="steerContent"]');
+                if (input) input.value = "";
+              };
+            }}>
+              <input name="returnTab" type="hidden" value="chat" />
+              <input name="jobId" type="hidden" value={entry.job.id} />
+              <div class="steer-card-meta">
+                <span class="pill info" style="font-size: 0.625rem;">{entry.task.agentRole}</span>
+                <span class="muted steer-card-job">job {entry.job.id.slice(0, 8)}</span>
+              </div>
+              <div class="steer-card-row">
+                <input class="steer-input" type="text" name="steerContent" placeholder="Redirect this agent..." />
+                <button class="btn secondary steer-btn" formaction="?/steer" type="submit" aria-label="Send steering message">→</button>
+              </div>
+            </form>
+          {/each}
+        </div>
       </div>
     {/if}
     <form method="POST" class="chatroom-form" use:enhance={() => {
@@ -1194,24 +1205,48 @@
   }
   .steer-bar {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: var(--space-2, 0.5rem);
-    flex-wrap: wrap;
     padding: var(--space-2, 0.5rem) 0;
     border-bottom: 1px solid var(--color-border, #333);
     margin-bottom: var(--space-2, 0.5rem);
   }
-  .steer-label {
-    font-size: 0.75rem;
+  .steer-header {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--color-text-secondary, #888);
-    white-space: nowrap;
   }
-  .steer-form {
+  .steer-cards {
+    display: grid;
+    gap: var(--space-2, 0.5rem);
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  }
+  .steer-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1, 0.25rem);
+    padding: var(--space-2, 0.5rem);
+    border: 1px solid var(--color-accent-dim, var(--color-border));
+    border-radius: var(--radius-md, 0.5rem);
+    background: color-mix(in srgb, var(--color-accent, #60a5fa) 5%, var(--color-surface-raised, #1a1a1a));
+  }
+  .steer-card-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 0.5rem);
+  }
+  .steer-card-job {
+    font-size: 0.6875rem;
+  }
+  .steer-card-row {
     display: flex;
     gap: var(--space-1, 0.25rem);
     align-items: center;
   }
   .steer-input {
+    flex: 1;
     font-family: inherit;
     font-size: var(--font-size-sm, 0.8125rem);
     background: var(--color-surface-sunken, #111);
@@ -1219,11 +1254,11 @@
     border: 1px solid var(--color-accent-dim, #2563eb33);
     border-radius: var(--radius-sm, 0.375rem);
     padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
-    width: 200px;
   }
   .steer-btn {
-    font-size: 0.75rem;
-    padding: var(--space-1, 0.25rem) var(--space-2, 0.5rem);
+    flex-shrink: 0;
+    font-size: 0.875rem;
+    padding: var(--space-1, 0.25rem) var(--space-3, 0.75rem);
     white-space: nowrap;
   }
 </style>

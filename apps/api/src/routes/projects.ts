@@ -406,12 +406,13 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
         triggerError: null
       };
     } catch (error) {
-      const triggerError = error instanceof Error ? error.message : "Unable to trigger project run";
+      // Log the real error server-side; surface a generic summary to the
+      // client. Internal Prisma/Fastify messages could otherwise leak.
       app.log.error({ error, projectId }, "Unable to trigger project run");
       return {
         runTriggered: true,
         telemetry: null,
-        triggerError
+        triggerError: "Unable to trigger project run"
       };
     }
   }
@@ -897,11 +898,13 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
         });
       }
 
-      const message = error instanceof Error ? error.message : "Unable to trigger project run";
-      app.log.error(error);
-      return reply.code(message === "Project not found" ? 404 : 500).send({
-        error: message === "Project not found" ? "project_not_found" : "internal_error",
-        message
+      // Log the real error server-side but don't leak underlying details
+      // (Prisma query errors, internal paths, etc.) back to the caller.
+      app.log.error({ error }, "Autonomy trigger failed");
+      const isNotFound = error instanceof Error && error.message === "Project not found";
+      return reply.code(isNotFound ? 404 : 500).send({
+        error: isNotFound ? "project_not_found" : "internal_error",
+        message: isNotFound ? "Project not found" : "Unable to trigger project run"
       });
     }
   });
