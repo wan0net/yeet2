@@ -69,7 +69,15 @@
     }
     return "software";
   }
-  let selectedTemplate = $state(readPipelineTemplate(form));
+  const formTemplate = $derived(readPipelineTemplate(form));
+  let selectedTemplate = $state("software");
+  let lastFormTemplate = $state("");
+
+  $effect(() => {
+    if (formTemplate === lastFormTemplate) return;
+    selectedTemplate = formTemplate;
+    lastFormTemplate = formTemplate;
+  });
 </script>
 
 <section class="page-header">

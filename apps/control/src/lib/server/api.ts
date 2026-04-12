@@ -20,11 +20,24 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
   });
 }
 
+export async function readApiError(response: Response): Promise<string> {
+  const text = (await response.text()).trim();
+  if (!text) {
+    return `Request failed: ${response.status}`;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { message?: string; error?: string; detail?: string };
+    return payload.detail || payload.message || payload.error || text;
+  } catch {
+    return text;
+  }
+}
+
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, init);
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
+    throw new Error(await readApiError(response));
   }
 
   return (await response.json()) as T;

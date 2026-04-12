@@ -8,16 +8,22 @@ import { serverLogger } from "./logger";
 export interface GlobalJobEntry {
   projectId: string;
   projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
   missionId: string;
   missionTitle: string;
   taskId: string;
   taskTitle: string;
+  taskAgentRole: string;
+  taskStatus: string;
   job: ProjectJobRecord;
 }
 
 export interface GlobalTaskEntry {
   projectId: string;
   projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
   missionId: string;
   missionTitle: string;
   task: ProjectTaskRecord;
@@ -26,20 +32,26 @@ export interface GlobalTaskEntry {
 export interface GlobalMissionEntry {
   projectId: string;
   projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
   mission: ProjectMissionRecord & { taskCount: number };
 }
 
 export interface GlobalBlockerEntry {
   projectId: string;
   projectName: string;
+  projectRepoUrl?: string | null;
+  projectGitHubUrl?: string | null;
   taskId: string | null;
+  missionId: string;
+  missionTitle: string;
   taskTitle: string;
   blocker: ProjectBlockerRecord;
 }
 
 export async function loadOverview() {
   try {
-    return apiJson<{ overview: unknown }>("/overview");
+    return await apiJson<{ overview: unknown }>("/overview");
   } catch (error) {
     serverLogger.loadFailure("loadOverview", error);
     return { overview: null };
@@ -79,88 +91,58 @@ export async function loadProjectRoleModels(_projectId: string): Promise<Project
 }
 
 export async function loadMissionDetail(missionId: string): Promise<{ project: ProjectRecord; mission: ProjectMissionRecord } | null> {
-  const projects = await loadProjects();
-  for (const project of projects) {
-    const mission = project.missions.find((entry) => entry.id === missionId);
-    if (mission) {
-      return { project, mission };
+  try {
+    const payload = await apiJson<{ missions?: GlobalMissionEntry[] }>(`/missions?missionId=${encodeURIComponent(missionId)}`);
+    const entry = Array.isArray(payload.missions) ? payload.missions.find((candidate) => candidate.mission.id === missionId) : null;
+    if (!entry) {
+      return null;
     }
-  }
 
-  return null;
+    const project = await loadProject(entry.projectId);
+    if (!project) {
+      return null;
+    }
+
+    const mission = project.missions.find((candidate) => candidate.id === missionId) ?? null;
+    if (!mission) {
+      return null;
+    }
+
+    return { project, mission };
+  } catch (error) {
+    serverLogger.loadFailure("loadMissionDetail", error, { missionId });
+    return null;
+  }
 }
 
 export async function loadGlobalJobs() {
-  const projects = await loadProjects();
+  const payload = await apiJson<{ jobs?: GlobalJobEntry[] }>("/jobs");
+  return Array.isArray(payload.jobs) ? payload.jobs : [];
+}
 
-  return projects
-    .flatMap((project) =>
-      project.missions.flatMap((mission) =>
-        mission.tasks.flatMap((task) =>
-          task.jobs.map((job) => ({
-            projectId: project.id,
-            projectName: project.name,
-            missionId: mission.id,
-            missionTitle: mission.title,
-            taskId: task.id,
-            taskTitle: task.title,
-            job
-          }))
-        )
-      )
-    )
-    .sort((left, right) => (right.job.startedAt ?? right.job.completedAt ?? "").localeCompare(left.job.startedAt ?? left.job.completedAt ?? ""));
+export async function loadGlobalJob(jobId: string): Promise<GlobalJobEntry | null> {
+  const payload = await apiJson<{ jobs?: GlobalJobEntry[] }>(`/jobs?jobId=${encodeURIComponent(jobId)}`);
+  return Array.isArray(payload.jobs) ? payload.jobs.find((entry) => entry.job.id === jobId) ?? null : null;
 }
 
 export async function loadGlobalTasks() {
-  const projects = await loadProjects();
-
-  return projects.flatMap((project) =>
-    project.missions.flatMap((mission) =>
-      mission.tasks.map((task) => ({
-        projectId: project.id,
-        projectName: project.name,
-        missionId: mission.id,
-        missionTitle: mission.title,
-        task
-      }))
-    )
-  );
+  const payload = await apiJson<{ tasks?: GlobalTaskEntry[] }>("/tasks");
+  return Array.isArray(payload.tasks) ? payload.tasks : [];
 }
 
 export async function loadGlobalMissions() {
-  const projects = await loadProjects();
-
-  return projects.flatMap((project) =>
-    project.missions.map((mission) => ({
-      projectId: project.id,
-      projectName: project.name,
-      mission: {
-        ...mission,
-        taskCount: mission.tasks.length
-      }
-    }))
-  );
+  const payload = await apiJson<{ missions?: GlobalMissionEntry[] }>("/missions");
+  return Array.isArray(payload.missions) ? payload.missions : [];
 }
 
 export async function loadGlobalBlockers() {
-  const projects = await loadProjects();
-
-  return projects.flatMap((project) =>
-    project.blockers.map((blocker) => ({
-      projectId: project.id,
-      projectName: project.name,
-      taskId: blocker.taskId,
-      taskTitle:
-        project.missions.flatMap((mission) => mission.tasks).find((task) => task.id === blocker.taskId)?.title ?? "Project blocker",
-      blocker
-    }))
-  );
+  const payload = await apiJson<{ blockers?: GlobalBlockerEntry[] }>("/blockers");
+  return Array.isArray(payload.blockers) ? payload.blockers : [];
 }
 
 export async function loadApprovals() {
   try {
-    return apiJson<{ approvals?: unknown[] }>("/approvals");
+    return await apiJson<{ approvals?: unknown[] }>("/approvals");
   } catch (error) {
     serverLogger.loadFailure("loadApprovals", error);
     return { approvals: [] };

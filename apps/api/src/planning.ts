@@ -175,6 +175,17 @@ function brainBaseUrl(): string {
   return (process.env.YEET2_BRAIN_BASE_URL ?? process.env.BRAIN_BASE_URL ?? "http://127.0.0.1:8011").replace(/\/+$/, "");
 }
 
+function brainHeaders(): HeadersInit {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  const token = cleanText(process.env.YEET2_BRAIN_BEARER_TOKEN);
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export async function readBrainJson<T>(path: string, payload: Record<string, unknown>): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), brainPlanningTimeoutMs());
@@ -182,9 +193,7 @@ export async function readBrainJson<T>(path: string, payload: Record<string, unk
   try {
     const response = await fetch(`${brainBaseUrl()}${path}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: brainHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal
     });

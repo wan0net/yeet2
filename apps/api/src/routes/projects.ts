@@ -56,6 +56,24 @@ import {
   type ProjectRegistrationInput
 } from "../projects";
 
+const DEFAULT_GLOBAL_QUEUE_TAKE = 500;
+const MAX_GLOBAL_QUEUE_TAKE = 1000;
+
+function readOptionalQueryString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function parseTakeQuery(value: unknown, fallback = DEFAULT_GLOBAL_QUEUE_TAKE, max = MAX_GLOBAL_QUEUE_TAKE): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : fallback;
+
+  return Math.max(1, Math.min(max, Number.isFinite(parsed) ? Math.trunc(parsed) : fallback));
+}
+
 function parseProjectRegistrationBody(body: unknown): { input: ProjectRegistrationInput | null; error: string | null } {
   if (typeof body !== "object" || body === null) {
     return {
@@ -426,6 +444,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       status?: string;
       projectId?: string;
       project_id?: string;
+      jobId?: string;
+      job_id?: string;
+      take?: string | number;
     };
     const status =
       typeof query.status === "string" && query.status.trim()
@@ -447,7 +468,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
             ? query.projectId
             : typeof query.project_id === "string"
               ? query.project_id
-              : null
+              : null,
+        jobId: readOptionalQueryString(query.jobId) ?? readOptionalQueryString(query.job_id),
+        take: parseTakeQuery(query.take)
       })
     );
   });
@@ -457,6 +480,11 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       status?: string;
       projectId?: string;
       project_id?: string;
+      taskId?: string;
+      task_id?: string;
+      missionId?: string;
+      mission_id?: string;
+      take?: string | number;
     };
     const status =
       typeof query.status === "string" && query.status.trim()
@@ -491,7 +519,10 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
             ? query.projectId
             : typeof query.project_id === "string"
               ? query.project_id
-              : null
+              : null,
+        taskId: readOptionalQueryString(query.taskId) ?? readOptionalQueryString(query.task_id),
+        missionId: readOptionalQueryString(query.missionId) ?? readOptionalQueryString(query.mission_id),
+        take: parseTakeQuery(query.take)
       })
     );
   });
@@ -501,6 +532,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       status?: string;
       projectId?: string;
       project_id?: string;
+      missionId?: string;
+      mission_id?: string;
+      take?: string | number;
     };
     const status =
       typeof query.status === "string" && query.status.trim()
@@ -533,7 +567,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
             ? query.projectId
             : typeof query.project_id === "string"
               ? query.project_id
-              : null
+              : null,
+        missionId: readOptionalQueryString(query.missionId) ?? readOptionalQueryString(query.mission_id),
+        take: parseTakeQuery(query.take)
       })
     );
   });
@@ -543,6 +579,11 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       status?: string;
       projectId?: string;
       project_id?: string;
+      blockerId?: string;
+      blocker_id?: string;
+      taskId?: string;
+      task_id?: string;
+      take?: string | number;
     };
     const status =
       typeof query.status === "string" && query.status.trim()
@@ -564,7 +605,10 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
             ? query.projectId
             : typeof query.project_id === "string"
               ? query.project_id
-              : null
+              : null,
+        blockerId: readOptionalQueryString(query.blockerId) ?? readOptionalQueryString(query.blocker_id),
+        taskId: readOptionalQueryString(query.taskId) ?? readOptionalQueryString(query.task_id),
+        take: parseTakeQuery(query.take)
       })
     );
   });
@@ -717,11 +761,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       search?: string;
     };
 
-    const take = query.take ? Math.max(1, Math.min(200, parseInt(query.take, 10))) : 100;
-
     try {
       const activity = await listGlobalDecisionLogs({
-        take,
+        take: parseTakeQuery(query.take, 100, 200),
         projectId: query.projectId || null,
         kind: query.kind || null,
         actor: query.actor || null,
@@ -755,16 +797,9 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
       reply_to_id?: string;
     };
 
-    const take =
-      typeof query.take === "number"
-        ? query.take
-        : typeof query.take === "string" && query.take.trim()
-          ? Number(query.take)
-          : undefined;
-
     try {
       const activity = await listProjectDecisionLogs(projectId, {
-        take: Number.isFinite(take) ? Number(take) : undefined,
+        take: parseTakeQuery(query.take, 50, 200),
         kind: typeof query.kind === "string" ? query.kind : null,
         actor: typeof query.actor === "string" ? query.actor : null,
         mention: typeof query.mention === "string" ? query.mention : null,
@@ -788,7 +823,7 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
   app.get("/projects/:projectId/chat", async (request, reply) => {
     const { projectId } = request.params as { projectId: string };
     const query = request.query as {
-      take?: number;
+      take?: string | number;
       actor?: string;
       mention?: string;
       replyToId?: string;
@@ -797,7 +832,7 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
 
     try {
       const messages = await listProjectChatMessages(projectId, {
-        take: typeof query.take === "number" && Number.isFinite(query.take) ? query.take : undefined,
+        take: parseTakeQuery(query.take, 50, 200),
         actor: typeof query.actor === "string" ? query.actor : null,
         mention: typeof query.mention === "string" ? query.mention : null,
         replyToId: typeof query.replyToId === "string" ? query.replyToId : null,

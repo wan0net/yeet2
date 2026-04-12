@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-yeet2}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yeet2}
       POSTGRES_DB: ${POSTGRES_DB:-yeet2}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -19,8 +17,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -53,10 +49,9 @@ services:
       YEET2_BRAIN_PLANNER_BACKEND: ${YEET2_BRAIN_PLANNER_BACKEND:-auto}
       YEET2_BRAIN_CREWAI_ENABLED: ${YEET2_BRAIN_CREWAI_ENABLED:-false}
       YEET2_BRAIN_CREWAI_MODEL: ${YEET2_BRAIN_CREWAI_MODEL:-}
+      YEET2_BRAIN_BEARER_TOKEN: ${YEET2_BRAIN_BEARER_TOKEN:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    ports:
-      - "${BRAIN_PORT:-3002}:3002"
     volumes:
       - brain_data:/var/lib/yeet2
     healthcheck:
@@ -79,6 +74,8 @@ services:
       REDIS_URL: redis://redis:6379
       YEET2_BRAIN_BASE_URL: http://brain:3002
       YEET2_EXECUTOR_BASE_URL: http://executor:8021
+      YEET2_BRAIN_BEARER_TOKEN: ${YEET2_BRAIN_BEARER_TOKEN:-}
+      YEET2_EXECUTOR_BEARER_TOKEN: ${YEET2_EXECUTOR_BEARER_TOKEN:-}
       YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
@@ -114,7 +111,7 @@ services:
     environment:
       PORT: 3000
       HOST: 0.0.0.0
-      ORIGIN: http://10.42.10.101:3000
+      ORIGIN: ${YEET2_CONTROL_ORIGIN:-http://localhost:3000}
       YEET2_API_URL: http://api:3001
     command: ["pnpm", "--filter", "@yeet2/control", "start"]
     ports:
@@ -139,6 +136,7 @@ services:
       YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
       YEET2_EXECUTOR_BASE_DIR: /var/lib/yeet2/executor
       YEET2_EXECUTOR_MODE: ${YEET2_EXECUTOR_MODE:-openhands}
+      YEET2_EXECUTOR_BEARER_TOKEN: ${YEET2_EXECUTOR_BEARER_TOKEN:-}
       YEET2_EXECUTOR_SANDBOX_MODE: ${YEET2_EXECUTOR_SANDBOX_MODE:-off}
       YEET2_EXECUTOR_SANDBOX_BIN: ${YEET2_EXECUTOR_SANDBOX_BIN:-srt}
       YEET2_OPENHANDS_COMMAND: ${YEET2_OPENHANDS_COMMAND:-}
@@ -149,8 +147,6 @@ services:
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
-    ports:
-      - "${EXECUTOR_PORT:-3003}:8021"
     volumes:
       - projects_data:/var/lib/yeet2/projects
       - executor_data:/var/lib/yeet2/executor

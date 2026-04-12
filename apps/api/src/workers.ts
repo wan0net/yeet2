@@ -404,19 +404,23 @@ export async function heartbeatWorker(workerId: string, input: WorkerHeartbeatIn
     where: { id: workerId }
   });
 
-  const name = normalizeText(input.name) ?? existing?.name ?? `worker-${workerId.slice(0, 8)}`;
-  const executorType = normalizeText(input.executorType) ?? existing?.executorType ?? "local";
+  const name = typeof input.name !== "undefined"
+    ? normalizeText(input.name) ?? `worker-${workerId.slice(0, 8)}`
+    : existing?.name ?? `worker-${workerId.slice(0, 8)}`;
+  const executorType = typeof input.executorType !== "undefined"
+    ? normalizeText(input.executorType) ?? "local"
+    : existing?.executorType ?? "local";
 
   return persistWorker({
     id: workerId,
     name,
     executorType,
-    status: normalizeWorkerStatus(input.status) ?? existing?.status ?? "online",
-    capabilities: input.capabilities ?? (existing ? normalizeCapabilities(existing.capabilities) : []),
-    leaseExpiresAt: input.leaseExpiresAt ?? existing?.leaseExpiresAt?.toISOString() ?? null,
-    currentJobId: normalizeText(input.currentJobId) ?? existing?.currentJobId ?? null,
-    host: normalizeText(input.host) ?? existing?.host ?? null,
-    endpoint: normalizeText(input.endpoint) ?? existing?.endpoint ?? null
+    status: typeof input.status !== "undefined" ? normalizeWorkerStatus(input.status) ?? existing?.status ?? "online" : existing?.status ?? "online",
+    capabilities: typeof input.capabilities !== "undefined" ? input.capabilities : (existing ? normalizeCapabilities(existing.capabilities) : []),
+    leaseExpiresAt: typeof input.leaseExpiresAt !== "undefined" ? input.leaseExpiresAt : existing?.leaseExpiresAt?.toISOString() ?? null,
+    currentJobId: typeof input.currentJobId !== "undefined" ? normalizeText(input.currentJobId) : existing?.currentJobId ?? null,
+    host: typeof input.host !== "undefined" ? normalizeText(input.host) : existing?.host ?? null,
+    endpoint: typeof input.endpoint !== "undefined" ? normalizeText(input.endpoint) : existing?.endpoint ?? null
   });
 }
 
