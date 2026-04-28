@@ -4,18 +4,18 @@ import { test, expect } from "@playwright/test";
 // without a real API. All server-side load() functions have error boundaries
 // that return safe empty defaults when the API is unreachable.
 
-test("homepage renders the Mission Control heading", async ({ page }) => {
+test("homepage renders the company dashboard heading", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Mission Control" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Run the team, not the tabs." })).toBeVisible();
 });
 
 test("homepage shows key metric cards", async ({ page }) => {
   await page.goto("/");
   // Metric kickers live in the metrics grid at the top of the page. Several of
   // these labels are repeated in lower sections, so match the kicker class.
-  await expect(page.locator(".metric-kicker", { hasText: "Active missions" })).toBeVisible();
+  await expect(page.locator(".metric-kicker", { hasText: "Open tickets" })).toBeVisible();
   await expect(page.locator(".metric-kicker", { hasText: "Running jobs" }).first()).toBeVisible();
-  await expect(page.locator(".metric-kicker", { hasText: "Open blockers" }).first()).toBeVisible();
+  await expect(page.locator(".metric-kicker", { hasText: "Available agents" }).first()).toBeVisible();
 });
 
 test("homepage has a nav link to Projects", async ({ page }) => {
