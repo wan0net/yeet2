@@ -42,6 +42,7 @@ export const RECOMMENDED_ROLE_MODELS: Record<ProjectRoleKey, string> = {
 };
 
 export { AGENT_THEMES, AGENT_THEME_NAMES, pickCharacters, type AgentCharacter } from "./agent-themes";
+export * from "./hermes";
 export { PIPELINE_TEMPLATES, PIPELINE_TEMPLATE_KEYS, type PipelineStage, type PipelineTemplate } from "./pipeline-templates";
 
 export interface OperatorGuidanceSummary {

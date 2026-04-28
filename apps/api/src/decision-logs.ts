@@ -53,9 +53,9 @@ export async function recordDecisionLog(input: DecisionLogInput): Promise<Projec
 /** Hard ceiling for any decision log query to prevent runaway result sets. */
 const MAX_DECISION_LOG_TAKE = 500;
 
-function clampTake(value: number, defaultValue: number): number {
+function clampTake(value: number, defaultValue: number, maxValue = MAX_DECISION_LOG_TAKE): number {
   if (!Number.isFinite(value)) return defaultValue;
-  return Math.max(1, Math.min(MAX_DECISION_LOG_TAKE, Math.trunc(value)));
+  return Math.max(1, Math.min(maxValue, Math.trunc(value)));
 }
 
 export async function loadRecentDecisionLogs(projectId: string, take = 5): Promise<ProjectDecisionLogSummary[]> {
@@ -128,7 +128,7 @@ export interface GlobalDecisionLogQuery {
 }
 
 export async function listGlobalDecisionLogs(query: GlobalDecisionLogQuery = {}): Promise<ProjectDecisionLogSummary[]> {
-  const take = Math.max(1, Math.min(200, Math.trunc(query.take ?? 100)));
+  const take = clampTake(query.take ?? 100, 100, 200);
   const where: Record<string, unknown> = {};
   if (normalizeFilterText(query.projectId)) {
     where.projectId = normalizeFilterText(query.projectId);
@@ -160,7 +160,7 @@ export async function listGlobalDecisionLogs(query: GlobalDecisionLogQuery = {})
 }
 
 export async function listProjectDecisionLogs(projectId: string, query: DecisionLogQuery = {}): Promise<ProjectDecisionLogSummary[]> {
-  const take = Math.max(1, Math.min(200, Math.trunc(query.take ?? 50)));
+  const take = clampTake(query.take ?? 50, 50, 200);
   const logs = await prisma.decisionLog.findMany({
     where: {
       projectId,

@@ -37,7 +37,7 @@ function normalizeBearerToken(value: string): string {
   return value.replace(/^bearer\s+/i, "").trim();
 }
 
-function readConfiguredApiToken(): string | null {
+export function readConfiguredApiToken(): string | null {
   const token = envText("YEET2_API_BEARER_TOKEN") || envText("YEET2_API_TOKEN");
   return token || null;
 }
@@ -54,13 +54,17 @@ function isPublicPath(pathname: string): boolean {
   return pathname === "/health";
 }
 
-function parseAuthorizationHeader(request: FastifyRequest): string | null {
+export function parseAuthorizationHeader(request: FastifyRequest): string | null {
   const authorization = request.headers.authorization;
   if (typeof authorization !== "string" || !authorization.trim()) {
     return null;
   }
 
   return normalizeBearerToken(authorization);
+}
+
+export function matchesBearerToken(receivedToken: string | null, configuredToken: string): boolean {
+  return Boolean(receivedToken && safeCompareStrings(receivedToken, normalizeBearerToken(configuredToken)));
 }
 
 export function shouldRequireApiAuth(request: FastifyRequest): boolean {
@@ -103,7 +107,7 @@ export async function requireApiAuth(request: FastifyRequest, reply: FastifyRepl
   }
 
   const receivedToken = parseAuthorizationHeader(request);
-  if (receivedToken && safeCompareStrings(receivedToken, normalizeBearerToken(configuredToken))) {
+  if (matchesBearerToken(receivedToken, configuredToken)) {
     return;
   }
 

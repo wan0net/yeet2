@@ -1,7 +1,7 @@
 import type { Actions, PageServerLoad } from "./$types";
 import { fail, redirect } from "@sveltejs/kit";
 import { apiJson } from "$lib/server/api";
-import { putJson } from "$lib/server/mutations";
+import { deleteJson, putJson } from "$lib/server/mutations";
 
 interface ThemeOption { key: string; label: string }
 
@@ -44,8 +44,7 @@ export const actions: Actions = {
   },
   removeToken: async () => {
     try {
-      const { apiFetch } = await import("$lib/server/api");
-      await apiFetch("/settings/github-token", { method: "DELETE" });
+      await deleteJson("/settings/github-token");
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to remove token" });
     }

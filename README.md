@@ -125,6 +125,7 @@ See [docs/INSTALL.md](./docs/INSTALL.md) for full setup instructions.
 |---|---|
 | [INSTALL.md](./docs/INSTALL.md) | Step-by-step deployment guide |
 | [GETTING_STARTED.md](./docs/GETTING_STARTED.md) | First project walkthrough |
+| [HERMES_AGENT.md](./docs/HERMES_AGENT.md) | External Hermes polling + trigger contract |
 | [VISION.md](./docs/VISION.md) | Project purpose and principles |
 | [SPEC.md](./docs/SPEC.md) | Technical specification |
 | [PRODUCT_SPEC.md](./docs/PRODUCT_SPEC.md) | MVP product definition |

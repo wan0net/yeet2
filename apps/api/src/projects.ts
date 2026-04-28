@@ -1000,6 +1000,15 @@ export function executorBaseUrl(): string {
   return (process.env.YEET2_EXECUTOR_BASE_URL ?? process.env.EXECUTOR_BASE_URL ?? "http://127.0.0.1:8021").replace(/\/+$/, "");
 }
 
+function executorHeaders(init: Record<string, string> = {}): HeadersInit {
+  const headers: Record<string, string> = { ...init };
+  const token = (process.env.YEET2_EXECUTOR_BEARER_TOKEN ?? "").trim();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 function normalizeOptionalString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -2318,9 +2327,9 @@ export function validateExecutorJobRecord(value: unknown, jobId: string): Execut
 async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
   const response = await fetch(`${executorBaseUrl()}/jobs/${encodeURIComponent(jobId)}`, {
     method: "GET",
-    headers: {
+    headers: executorHeaders({
       Accept: "application/json"
-    }
+    })
   });
 
   const rawText = await response.text();
@@ -2755,9 +2764,9 @@ async function submitTaskToExecutor(
   const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentActionableGuidance(project.id, 8)).slice(0, 4);
   const response = await fetch(`${executorBaseUrl()}/jobs`, {
     method: "POST",
-    headers: {
+    headers: executorHeaders({
       "Content-Type": "application/json"
-    },
+    }),
     body: JSON.stringify({
       repo_path: project.localPath,
       base_branch: project.defaultBranch,
@@ -4121,33 +4130,57 @@ export async function listProjectApprovals(input: { projectId?: string | null; s
   return { approvals };
 }
 
-export async function listGlobalJobs(input: { status?: ProjectJobStatus | "all" | null; projectId?: string | null } = {}): Promise<GlobalJobQueueResponse> {
-  const projects = await loadProjects();
+function clampGlobalQueueTake(value: number | null | undefined): number {
+  return Math.max(1, Math.min(1000, Number.isFinite(value) ? Math.trunc(value as number) : 500));
+}
+
+function boundedStatusScanTake(take: number): number {
+  return Math.min(5000, take * 4);
+}
+
+export async function listGlobalJobs(input: {
+  status?: ProjectJobStatus | "all" | null;
+  projectId?: string | null;
+  jobId?: string | null;
+  take?: number | null;
+} = {}): Promise<GlobalJobQueueResponse> {
+  const take = clampGlobalQueueTake(input.take);
+  const jobs = await prisma.job.findMany({
+    where: {
+      ...(input.jobId ? { id: input.jobId } : {}),
+      ...(input.status && input.status !== "all" ? { status: input.status } : {}),
+      ...(input.projectId ? { task: { mission: { projectId: input.projectId } } } : {})
+    },
+    include: {
+      task: {
+        include: {
+          mission: {
+            include: {
+              project: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: [{ completedAt: "desc" }, { startedAt: "desc" }],
+    take
+  });
 
   return {
-    jobs: projects
-      .filter((project) => !input.projectId || project.id === input.projectId)
-      .flatMap((project) =>
-        project.missions.flatMap((mission) =>
-          mission.tasks.flatMap((task) =>
-            (task.jobs ?? [])
-              .filter((job) => !input.status || input.status === "all" || job.status === input.status)
-              .map((job) => ({
-                projectId: project.id,
-                projectName: project.name,
-                projectRepoUrl: project.repoUrl,
-                projectGitHubUrl: project.githubRepoUrl,
-                missionId: mission.id,
-                missionTitle: mission.title,
-                taskId: task.id,
-                taskTitle: task.title,
-                taskAgentRole: task.agentRole as GlobalJobQueueItem["taskAgentRole"],
-                taskStatus: task.status as GlobalJobQueueItem["taskStatus"],
-                job
-              }))
-          )
-        )
-      )
+    jobs: jobs
+      .map((job) => ({
+        projectId: job.task.mission.project.id,
+        projectName: job.task.mission.project.name,
+        projectRepoUrl: job.task.mission.project.repoUrl,
+        projectGitHubUrl: job.task.mission.project.githubRepoUrl,
+        missionId: job.task.mission.id,
+        missionTitle: job.task.mission.title,
+        taskId: job.task.id,
+        taskTitle: job.task.title,
+        taskAgentRole: job.task.agentRole as GlobalJobQueueItem["taskAgentRole"],
+        taskStatus: job.task.status as GlobalJobQueueItem["taskStatus"],
+        job: toProjectJobSummary(job)
+      }))
       .sort((left, right) => {
         const leftTime = Date.parse(left.job.completedAt ?? left.job.startedAt ?? "") || 0;
         const rightTime = Date.parse(right.job.completedAt ?? right.job.startedAt ?? "") || 0;
@@ -4156,35 +4189,65 @@ export async function listGlobalJobs(input: { status?: ProjectJobStatus | "all" 
   };
 }
 
-export async function listGlobalBlockers(input: { status?: DbBlocker["status"] | "all" | null; projectId?: string | null } = {}): Promise<GlobalBlockerQueueResponse> {
-  const projects = await loadProjects();
+export async function listGlobalBlockers(input: {
+  status?: DbBlocker["status"] | "all" | null;
+  projectId?: string | null;
+  blockerId?: string | null;
+  taskId?: string | null;
+  take?: number | null;
+} = {}): Promise<GlobalBlockerQueueResponse> {
+  const take = clampGlobalQueueTake(input.take);
+  const blockers = await prisma.blocker.findMany({
+    where: {
+      ...(input.blockerId ? { id: input.blockerId } : {}),
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.status && input.status !== "all" ? { status: input.status } : {}),
+      ...(input.projectId ? { task: { mission: { projectId: input.projectId } } } : {})
+    },
+    include: {
+      task: {
+        include: {
+          mission: {
+            include: {
+              project: true
+            }
+          }
+        }
+      }
+    },
+    orderBy: [{ createdAt: "desc" }],
+    take
+  });
 
   return {
-    blockers: projects
-      .filter((project) => !input.projectId || project.id === input.projectId)
-      .flatMap((project) =>
-        project.missions.flatMap((mission) =>
-          mission.tasks.flatMap((task) =>
-            project.blockers
-              .filter((blocker) => blocker.taskId === task.id)
-              .filter((blocker) => !input.status || input.status === "all" || blocker.status === input.status)
-              .map((blocker) => ({
-                projectId: project.id,
-                projectName: project.name,
-                projectRepoUrl: project.repoUrl,
-                projectGitHubUrl: project.githubRepoUrl,
-                missionId: mission.id,
-                missionTitle: mission.title,
-                taskId: task.id,
-                taskTitle: task.title,
-                blocker: {
-                  ...blocker,
-                  taskAgentRole: task.agentRole as GlobalBlockerQueueItem["blocker"]["taskAgentRole"]
-                }
-              }))
-          )
-        )
-      )
+    blockers: blockers
+      .map((blocker) => ({
+        projectId: blocker.task.mission.project.id,
+        projectName: blocker.task.mission.project.name,
+        projectRepoUrl: blocker.task.mission.project.repoUrl,
+        projectGitHubUrl: blocker.task.mission.project.githubRepoUrl,
+        missionId: blocker.task.mission.id,
+        missionTitle: blocker.task.mission.title,
+        taskId: blocker.task.id,
+        taskTitle: blocker.task.title,
+        blocker: {
+          id: blocker.id,
+          taskId: blocker.taskId,
+          missionId: blocker.task.missionId,
+          taskTitle: blocker.task.title,
+          taskStatus: blocker.task.status,
+          taskAgentRole: blocker.task.agentRole as GlobalBlockerQueueItem["blocker"]["taskAgentRole"],
+          title: blocker.title,
+          context: blocker.context,
+          options: normalizeBlockerOptions(blocker.options),
+          recommendation: blocker.recommendation ?? null,
+          status: blocker.status,
+          githubIssueNumber: blocker.githubIssueNumber ?? null,
+          githubIssueUrl: blocker.githubIssueUrl ?? null,
+          createdAt: blocker.createdAt.toISOString(),
+          resolvedAt: blocker.resolvedAt?.toISOString() ?? null
+        }
+      }))
       .sort((left, right) => {
         const leftOpen = left.blocker.status === "open";
         const rightOpen = right.blocker.status === "open";
@@ -4197,31 +4260,49 @@ export async function listGlobalBlockers(input: { status?: DbBlocker["status"] |
   };
 }
 
-export async function listGlobalTasks(input: { status?: ProjectTaskStatus | "all" | null; projectId?: string | null } = {}): Promise<GlobalTaskQueueResponse> {
-  const projects = await loadProjects();
+export async function listGlobalTasks(input: {
+  status?: ProjectTaskStatus | "all" | null;
+  projectId?: string | null;
+  taskId?: string | null;
+  missionId?: string | null;
+  take?: number | null;
+} = {}): Promise<GlobalTaskQueueResponse> {
+  const take = clampGlobalQueueTake(input.take);
+  const tasks = await prisma.task.findMany({
+    where: {
+      ...(input.taskId ? { id: input.taskId } : {}),
+      ...(input.status && input.status !== "all" ? { status: input.status } : {}),
+      ...(input.missionId ? { missionId: input.missionId } : {}),
+      ...(input.projectId ? { mission: { projectId: input.projectId } } : {})
+    },
+    include: {
+      jobs: true,
+      blockers: true,
+      mission: {
+        include: {
+          project: true
+        }
+      }
+    },
+    orderBy: [{ priority: "desc" }, { title: "asc" }],
+    take
+  });
 
   return {
-    tasks: projects
-      .filter((project) => !input.projectId || project.id === input.projectId)
-      .flatMap((project) =>
-        project.missions.flatMap((mission) =>
-          mission.tasks
-            .filter((task) => !input.status || input.status === "all" || task.status === input.status)
-            .map((task) => ({
-              projectId: project.id,
-              projectName: project.name,
-              projectRepoUrl: project.repoUrl,
-              projectGitHubUrl: project.githubRepoUrl,
-              missionId: mission.id,
-              missionTitle: mission.title,
-              task: {
-                ...task,
-                agentRole: task.agentRole as GlobalTaskQueueItem["task"]["agentRole"],
-                status: task.status as GlobalTaskQueueItem["task"]["status"]
-              }
-            }))
-        )
-      )
+    tasks: tasks
+      .map((task) => ({
+        projectId: task.mission.project.id,
+        projectName: task.mission.project.name,
+        projectRepoUrl: task.mission.project.repoUrl,
+        projectGitHubUrl: task.mission.project.githubRepoUrl,
+        missionId: task.mission.id,
+        missionTitle: task.mission.title,
+        task: {
+          ...toProjectTaskSummary(task),
+          agentRole: task.agentRole as GlobalTaskQueueItem["task"]["agentRole"],
+          status: task.status as GlobalTaskQueueItem["task"]["status"]
+        }
+      }))
       .sort((left, right) => {
         if (left.task.priority !== right.task.priority) {
           return right.task.priority - left.task.priority;
@@ -4232,39 +4313,64 @@ export async function listGlobalTasks(input: { status?: ProjectTaskStatus | "all
   };
 }
 
-export async function listGlobalMissions(input: { status?: ProjectMissionSummary["status"] | "all" | null; projectId?: string | null } = {}): Promise<GlobalMissionQueueResponse> {
-  const projects = await loadProjects();
+export async function listGlobalMissions(input: {
+  status?: ProjectMissionSummary["status"] | "all" | null;
+  projectId?: string | null;
+  missionId?: string | null;
+  take?: number | null;
+} = {}): Promise<GlobalMissionQueueResponse> {
+  const take = clampGlobalQueueTake(input.take);
+  const missions = await prisma.mission.findMany({
+    where: {
+      ...(input.missionId ? { id: input.missionId } : {}),
+      ...(input.projectId ? { projectId: input.projectId } : {})
+    },
+    include: {
+      project: true,
+      tasks: {
+        include: {
+          blockers: true
+        }
+      }
+    },
+    orderBy: [{ startedAt: "desc" }, { completedAt: "desc" }],
+    take: input.status && input.status !== "all" ? boundedStatusScanTake(take) : take
+  });
 
   return {
-    missions: projects
-      .filter((project) => !input.projectId || project.id === input.projectId)
-      .flatMap((project) =>
-        project.missions
-          .filter((mission) => !input.status || input.status === "all" || mission.status === input.status)
-          .map((mission) => ({
-            projectId: project.id,
-            projectName: project.name,
-            projectRepoUrl: project.repoUrl,
-            projectGitHubUrl: project.githubRepoUrl,
-            mission: {
-              id: mission.id,
-              projectId: mission.projectId,
-              title: mission.title,
-              objective: mission.objective,
-              status: mission.status as GlobalMissionQueueItem["mission"]["status"],
-              createdBy: mission.createdBy ?? null,
-              planningProvenance: mission.planningProvenance ?? null,
-              startedAt: mission.startedAt ?? null,
-              completedAt: mission.completedAt ?? null,
-              taskCount: mission.tasks.length
-            }
-          }))
-      )
+    missions: missions
+      .map((mission) => {
+        const normalizedStatus =
+          mission.tasks.some((task) => isDispatchableTaskRole(task.agentRole)) && !mission.tasks.some((task) => hasActionableTaskWork(task))
+            ? "complete"
+            : mission.status;
+
+        return {
+          projectId: mission.project.id,
+          projectName: mission.project.name,
+          projectRepoUrl: mission.project.repoUrl,
+          projectGitHubUrl: mission.project.githubRepoUrl,
+          mission: {
+            id: mission.id,
+            projectId: mission.projectId,
+            title: mission.title,
+            objective: mission.objective,
+            status: normalizedStatus as GlobalMissionQueueItem["mission"]["status"],
+            createdBy: mission.createdBy ?? null,
+            planningProvenance: planningProvenanceFromCreatedBy(mission.createdBy),
+            startedAt: mission.startedAt?.toISOString() ?? null,
+            completedAt: mission.completedAt?.toISOString() ?? null,
+            taskCount: mission.tasks.length
+          }
+        };
+      })
+      .filter((entry) => !input.status || input.status === "all" || entry.mission.status === input.status)
       .sort((left, right) => {
         const leftTime = Date.parse(left.mission.startedAt ?? left.mission.completedAt ?? "") || 0;
         const rightTime = Date.parse(right.mission.startedAt ?? right.mission.completedAt ?? "") || 0;
         return rightTime - leftTime;
       })
+      .slice(0, take)
   };
 }
 
@@ -4745,6 +4851,13 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   if (!content) {
     throw new ProjectRoleDefinitionError("invalid_role_definition", "Message content is required", 400);
   }
+  if (content.length > MAX_PROJECT_MESSAGE_CHARS) {
+    throw new ProjectRoleDefinitionError(
+      "invalid_role_definition",
+      `Message content must be at most ${MAX_PROJECT_MESSAGE_CHARS} characters`,
+      400
+    );
+  }
 
   const replyTarget =
     input.replyToId
@@ -4776,7 +4889,7 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
     (input.messageMode === "working" || input.messageMode === "handoff" || input.messageMode === "directive" || input.messageMode === "comment")
       ? input.messageMode
       : source === "operator" ? "comment" : "working";
-  const choices = Array.isArray(input.choices) ? input.choices.filter((c): c is string => typeof c === "string" && c.trim().length > 0) : [];
+  const choices = normalizeProjectMessageChoices(input.choices);
 
   return recordDecisionLog({
     projectId,
@@ -4797,9 +4910,25 @@ export async function createProjectMessage(projectId: string, input: ProjectMess
   });
 }
 
-/** Maximum length of operator steering content. Caps the size of guidance
- * that gets stored in the decision log and later fed into LLM prompts. */
-const MAX_STEER_CONTENT_CHARS = 8 * 1024;
+/** Maximum length of chat / steering content. Caps the size of guidance that
+ * gets stored in decision logs, returned to the UI, and later fed into LLM prompts. */
+const MAX_PROJECT_MESSAGE_CHARS = 8 * 1024;
+const MAX_STEER_CONTENT_CHARS = MAX_PROJECT_MESSAGE_CHARS;
+const MAX_PROJECT_MESSAGE_CHOICES = 20;
+const MAX_PROJECT_MESSAGE_CHOICE_CHARS = 512;
+
+function normalizeProjectMessageChoices(choices: ProjectMessageInput["choices"]): string[] {
+  if (!Array.isArray(choices)) {
+    return [];
+  }
+
+  return choices
+    .filter((choice): choice is string => typeof choice === "string")
+    .map((choice) => choice.trim())
+    .filter(Boolean)
+    .map((choice) => choice.slice(0, MAX_PROJECT_MESSAGE_CHOICE_CHARS))
+    .slice(0, MAX_PROJECT_MESSAGE_CHOICES);
+}
 
 export async function steerProjectJob(projectId: string, jobId: string, content: string): Promise<ProjectDecisionLogSummary> {
   const job = await prisma.job.findFirst({
@@ -4858,9 +4987,10 @@ export async function steerProjectJob(projectId: string, jobId: string, content:
 }
 
 export async function listProjectChatMessages(projectId: string, query: ProjectChatQuery = {}): Promise<ProjectChatMessageSummary[]> {
+  const take = typeof query.take === "number" && Number.isFinite(query.take) ? query.take : 50;
   const logs = await listProjectDecisionLogs(projectId, {
     kind: "message",
-    take: Math.max(1, Math.min(200, Math.trunc(query.take ?? 50))),
+    take: Math.max(1, Math.min(200, Math.trunc(take))),
     actor: query.actor ?? null,
     mention: query.mention ?? null,
     replyToId: query.replyToId ?? null

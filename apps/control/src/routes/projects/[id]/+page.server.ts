@@ -3,6 +3,11 @@ import type { Actions, PageServerLoad } from "./$types";
 import { loadProject, loadProjectRoleModels } from "$lib/server/control-data";
 import { postJson, putJson } from "$lib/server/mutations";
 
+function projectRedirect(projectId: string, tab?: string | null): string {
+  const normalizedTab = tab?.trim();
+  return normalizedTab ? `/projects/${projectId}?tab=${encodeURIComponent(normalizedTab)}` : `/projects/${projectId}`;
+}
+
 export const load: PageServerLoad = async ({ params }) => {
   const project = await loadProject(params.id);
   if (!project) {
@@ -26,7 +31,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to plan project" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   run: async ({ params, request }) => {
     const form = await request.formData();
@@ -38,7 +43,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to run project" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   autonomy: async ({ params, request }) => {
     const form = await request.formData();
@@ -51,7 +56,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to update autonomy" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   message: async ({ params, request }) => {
     const form = await request.formData();
@@ -70,7 +75,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to post message" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   interview: async ({ params, request }) => {
     const form = await request.formData();
@@ -83,7 +88,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to start interview" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   toggleGithubSync: async ({ params, request }) => {
     const form = await request.formData();
@@ -96,7 +101,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to update GitHub sync" });
     }
 
-    throw redirect(303, returnTab ? `/projects/${params.id}?tab=${returnTab}` : `/projects/${params.id}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   },
   saveRoles: async ({ params, request }) => {
     const form = await request.formData();
@@ -115,7 +120,7 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to save roles" });
     }
 
-    throw redirect(303, `/projects/${params.id}?tab=agents`);
+    throw redirect(303, projectRedirect(params.id, "agents"));
   },
   steer: async ({ params, request }) => {
     const form = await request.formData();
@@ -133,6 +138,6 @@ export const actions: Actions = {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to steer job" });
     }
 
-    throw redirect(303, `/projects/${params.id}?tab=${returnTab}`);
+    throw redirect(303, projectRedirect(params.id, returnTab));
   }
 };

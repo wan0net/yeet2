@@ -6,6 +6,24 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readOptionalNullableString(candidate: Record<string, unknown>, ...keys: string[]): string | null | undefined {
+  for (const key of keys) {
+    if (!(key in candidate)) {
+      continue;
+    }
+
+    const value = candidate[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed || null;
+    }
+
+    return null;
+  }
+
+  return undefined;
+}
+
 function readStringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
@@ -85,14 +103,14 @@ function parseWorkerHeartbeatBody(body: unknown): {
   const candidate = body as Record<string, unknown>;
   return {
     input: {
-      name: readString(candidate.name) || null,
-      executorType: readString(candidate.executorType ?? candidate.kind) || null,
-      status: parseWorkerStatus(candidate.status),
-      capabilities: readStringArray(candidate.capabilities),
-      leaseExpiresAt: readString(candidate.leaseExpiresAt ?? candidate.lease_expires_at) || null,
-      currentJobId: readString(candidate.currentJobId ?? candidate.current_job_id) || null,
-      host: readString(candidate.host) || null,
-      endpoint: readString(candidate.endpoint) || null
+      name: readOptionalNullableString(candidate, "name"),
+      executorType: readOptionalNullableString(candidate, "executorType", "kind"),
+      status: "status" in candidate ? parseWorkerStatus(candidate.status) : undefined,
+      capabilities: "capabilities" in candidate ? readStringArray(candidate.capabilities) : undefined,
+      leaseExpiresAt: readOptionalNullableString(candidate, "leaseExpiresAt", "lease_expires_at"),
+      currentJobId: readOptionalNullableString(candidate, "currentJobId", "current_job_id"),
+      host: readOptionalNullableString(candidate, "host"),
+      endpoint: readOptionalNullableString(candidate, "endpoint")
     },
     error: null
   };

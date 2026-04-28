@@ -1,13 +1,4 @@
-import { apiFetch } from "./api";
-
-async function extractError(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as { message?: string; error?: string; detail?: string };
-    return payload.detail || payload.message || payload.error || `Request failed: ${response.status}`;
-  } catch {
-    return `Request failed: ${response.status}`;
-  }
-}
+import { apiFetch, readApiError } from "./api";
 
 export async function postJson(path: string, body: unknown): Promise<unknown> {
   const response = await apiFetch(path, {
@@ -19,7 +10,7 @@ export async function postJson(path: string, body: unknown): Promise<unknown> {
   });
 
   if (!response.ok) {
-    throw new Error(await extractError(response));
+    throw new Error(await readApiError(response));
   }
 
   return response.json().catch(() => null);
@@ -35,7 +26,19 @@ export async function putJson(path: string, body: unknown): Promise<unknown> {
   });
 
   if (!response.ok) {
-    throw new Error(await extractError(response));
+    throw new Error(await readApiError(response));
+  }
+
+  return response.json().catch(() => null);
+}
+
+export async function deleteJson(path: string): Promise<unknown> {
+  const response = await apiFetch(path, {
+    method: "DELETE"
+  });
+
+  if (!response.ok) {
+    throw new Error(await readApiError(response));
   }
 
   return response.json().catch(() => null);

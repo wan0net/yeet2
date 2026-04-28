@@ -15,6 +15,18 @@ ok()    { echo -e "${GREEN}✓ $*${NC}"; }
 warn()  { echo -e "${YELLOW}⚠ $*${NC}"; }
 die()   { echo -e "${RED}✗ $*${NC}" >&2; exit 1; }
 
+generate_token() {
+  openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32
+}
+
+replace_env_value() {
+  local file="$1" key="$2" value="$3" escaped_value
+  escaped_value=${value//\\/\\\\}
+  escaped_value=${escaped_value//&/\\&}
+  sed -i.bak "s|^${key}=.*|${key}=${escaped_value}|" "$file"
+  rm -f "$file.bak"
+}
+
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 check_deps() {
   info "Checking dependencies..."
@@ -55,39 +67,48 @@ setup_env() {
     echo "  Required configuration:"
     echo ""
 
-    read -rp "  Host URL for the Control UI (e.g. http://$(hostname -I | awk '{print $1}'):3000): " origin
+    read -rp "  Host URL for the Control UI (e.g. http://localhost:3000): " origin
     if [ -n "$origin" ]; then
-      sed -i "s|YEET2_CONTROL_ORIGIN=.*|YEET2_CONTROL_ORIGIN=$origin|" "$env_file"
+      replace_env_value "$env_file" "YEET2_CONTROL_ORIGIN" "$origin"
     fi
 
     read -rp "  LLM API key (OpenRouter or OpenAI): " llm_key
     if [ -n "$llm_key" ]; then
-      sed -i "s|LLM_API_KEY=.*|LLM_API_KEY=$llm_key|" "$env_file"
-      sed -i "s|OPENROUTER_API_KEY=.*|OPENROUTER_API_KEY=$llm_key|" "$env_file"
+      replace_env_value "$env_file" "LLM_API_KEY" "$llm_key"
+      replace_env_value "$env_file" "OPENROUTER_API_KEY" "$llm_key"
     fi
 
     read -rp "  LLM model (e.g. openrouter/openai/gpt-4.1-mini): " llm_model
     if [ -n "$llm_model" ]; then
-      sed -i "s|LLM_MODEL=.*|LLM_MODEL=$llm_model|" "$env_file"
-      sed -i "s|YEET2_BRAIN_CREWAI_MODEL=.*|YEET2_BRAIN_CREWAI_MODEL=openrouter/$llm_model|" "$env_file"
+      local brain_model="$llm_model"
+      if [[ "$brain_model" != openrouter/* ]]; then
+        brain_model="openrouter/$brain_model"
+      fi
+      replace_env_value "$env_file" "LLM_MODEL" "$llm_model"
+      replace_env_value "$env_file" "YEET2_BRAIN_CREWAI_MODEL" "$brain_model"
     fi
 
     read -rp "  GitHub token (optional, for PR automation): " gh_token
     if [ -n "$gh_token" ]; then
-      sed -i "s|GITHUB_TOKEN=.*|GITHUB_TOKEN=$gh_token|" "$env_file"
+      replace_env_value "$env_file" "GITHUB_TOKEN" "$gh_token"
     fi
 
     read -rsp "  Postgres password (leave blank for default 'yeet2'): " pg_pass
     echo ""
     if [ -n "$pg_pass" ]; then
-      sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$pg_pass|" "$env_file"
-      sed -i "s|DATABASE_URL=postgresql://yeet2:yeet2@|DATABASE_URL=postgresql://yeet2:$pg_pass@|" "$env_file"
+      replace_env_value "$env_file" "POSTGRES_PASSWORD" "$pg_pass"
+      replace_env_value "$env_file" "DATABASE_URL" "postgresql://yeet2:$pg_pass@localhost:5432/yeet2?schema=public"
     fi
 
-    # Generate a random API bearer token
-    local api_token
-    api_token=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32)
-    sed -i "s|YEET2_API_BEARER_TOKEN=.*|YEET2_API_BEARER_TOKEN=$api_token|" "$env_file"
+    local api_token brain_token executor_token hermes_token
+    api_token=$(generate_token)
+    brain_token=$(generate_token)
+    executor_token=$(generate_token)
+    hermes_token=$(generate_token)
+    replace_env_value "$env_file" "YEET2_API_BEARER_TOKEN" "$api_token"
+    replace_env_value "$env_file" "YEET2_BRAIN_BEARER_TOKEN" "$brain_token"
+    replace_env_value "$env_file" "YEET2_EXECUTOR_BEARER_TOKEN" "$executor_token"
+    replace_env_value "$env_file" "YEET2_HERMES_BEARER_TOKEN" "$hermes_token"
 
     echo ""
   fi

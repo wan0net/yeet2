@@ -140,8 +140,8 @@
     sortOrder: number;
   };
 
-  let editableRoles = $state<EditableRole[]>(
-    [...project.roleDefinitions]
+  function toEditableRoles(): EditableRole[] {
+    return [...project.roleDefinitions]
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((r, i) => ({
         roleKey: r.roleKey as RoleKey,
@@ -151,8 +151,25 @@
         model: r.model ?? null,
         enabled: r.enabled,
         sortOrder: i
+      }));
+  }
+
+  const projectRoleSeed = $derived(JSON.stringify(
+    [...project.roleDefinitions]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((r) => ({
+        roleKey: r.roleKey,
+        visualName: r.visualName,
+        goal: r.goal,
+        backstory: r.backstory,
+        model: r.model ?? null,
+        enabled: r.enabled,
+        sortOrder: r.sortOrder
       }))
-  );
+  ));
+
+  let editableRoles = $state<EditableRole[]>(toEditableRoles());
+  let lastProjectRoleSeed = $state("");
 
   let addRoleKey = $state<RoleKey | "">("");
 
@@ -162,6 +179,13 @@
   // Modal state — draft is a working copy so cancel discards changes
   let editingRoleIndex = $state<number | null>(null);
   let modalDraft = $state<EditableRole | null>(null);
+
+  $effect(() => {
+    if (projectRoleSeed === lastProjectRoleSeed) return;
+    if (editingRoleIndex !== null || modalDraft !== null) return;
+    editableRoles = toEditableRoles();
+    lastProjectRoleSeed = projectRoleSeed;
+  });
 
   // Chat input state — bound so we can clear after submit and trigger send
   // via keyboard shortcut.

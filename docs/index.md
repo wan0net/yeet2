@@ -59,6 +59,7 @@ flowchart LR
 - [Install](./INSTALL.md) — deployment guide
 - [Vision](./VISION.md) — project purpose
 - [Spec](./SPEC.md) — technical specification
+- [Hermes Agent](./HERMES_AGENT.md) — external polling and trigger integration
 - [Roadmap](./ROADMAP.md) — milestone breakdown
 
 ## System Reference

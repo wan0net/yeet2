@@ -4,6 +4,7 @@ import rateLimit from "@fastify/rate-limit";
 import { createAutonomyLoopManager } from "./autonomy-loop";
 import { describeApiAuth, requireApiAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerHermesRoutes } from "./routes/hermes";
 import { registerProjectRoutes } from "./routes/projects";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerSystemRoutes } from "./routes/system";
@@ -130,6 +131,7 @@ export async function createApp(opts: CreateAppOptions = {}): Promise<FastifyIns
   await app.register(registerProjectRoutes, { loopManager });
   await app.register(registerWorkerRoutes);
   await app.register(registerSystemRoutes);
+  await app.register(registerHermesRoutes, { loopManager });
   await app.register(registerSettingsRoutes);
   await app.register(registerAuthRoutes);
   await app.register(registerWebhookRoutes);

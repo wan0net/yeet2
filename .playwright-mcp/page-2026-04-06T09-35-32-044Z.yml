@@ -1,0 +1,58 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Project registry
+        - generic [ref=e26]:
+          - heading "Projects" [level=1] [ref=e27]
+          - paragraph [ref=e28]: Browse active work, inspect constitutions, and jump into the project that needs attention next.
+      - link "Add project" [ref=e29] [cursor=pointer]:
+        - /url: /projects/new
+    - generic [ref=e30]:
+      - generic [ref=e31]: Attached projects
+      - article [ref=e34]:
+        - generic [ref=e35]:
+          - generic [ref=e36]:
+            - generic [ref=e38]: pending
+            - generic [ref=e39]:
+              - heading "thistle-os" [level=2] [ref=e40]
+              - paragraph [ref=e41]: https://github.com/wan0net/thistle-os
+          - link "Open project" [ref=e42] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - generic [ref=e45]: Constitution
+            - generic [ref=e46]: 0/6 files present
+          - generic [ref=e47]:
+            - generic [ref=e48]: Active mission
+            - generic [ref=e49]: No active mission
+          - generic [ref=e50]:
+            - generic [ref=e51]: Open blockers
+            - generic [ref=e52]: "0"

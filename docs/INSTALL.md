@@ -57,6 +57,13 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 # Optional: protect the API with a bearer token
 YEET2_API_BEARER_TOKEN=   # leave blank to disable auth
+
+# Recommended: protect the internal Brain and Executor services
+YEET2_BRAIN_BEARER_TOKEN=
+YEET2_EXECUTOR_BEARER_TOKEN=
+
+# Optional: dedicated bearer token for Hermes or other external trigger/poll integrations
+YEET2_HERMES_BEARER_TOKEN=
 ```
 
 **3. Build and start**
@@ -127,6 +134,9 @@ All variables live in `.env`. Full defaults are in `.env.example`.
 | `BRAIN_PORT` | `3002` | Host port for the Brain |
 | `EXECUTOR_PORT` | `3003` | Host port for the Executor |
 | `YEET2_API_BEARER_TOKEN` | _(blank)_ | Bearer token for API write access. Generate: `openssl rand -hex 32`. Leave blank to disable. |
+| `YEET2_BRAIN_BEARER_TOKEN` | _(blank)_ | Bearer token for the internal Brain service. Recommended for deploy/release stacks. |
+| `YEET2_EXECUTOR_BEARER_TOKEN` | _(blank)_ | Bearer token for the internal Executor service. Recommended for deploy/release stacks. |
+| `YEET2_HERMES_BEARER_TOKEN` | _(blank)_ | Optional bearer token for `/integrations/hermes/*`. Falls back to the API bearer token when blank. |
 
 ### LLM / Keys
 
@@ -193,9 +203,10 @@ To register yeet2 as its own project on a fresh install:
 
 ```bash
 curl http://localhost:3001/health   # API
-curl http://localhost:3002/health   # Brain
-curl http://localhost:3003/health   # Executor
+docker compose -f docker-compose.deploy.yml ps
 ```
+
+In deploy/release compose stacks, Brain and Executor stay on the internal Docker network and are not published on host ports by default.
 
 In the UI:
 - **Workers page** — executor should appear as online

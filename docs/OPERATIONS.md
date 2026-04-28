@@ -71,7 +71,8 @@ The usual operator flow is:
 2. verify service health
 3. register or inspect projects
 4. start or supervise autonomy
-5. watch approvals, blockers, jobs, and project chat
+5. work the unified Tickets queue
+6. inspect project chat, jobs, or PR state only when deeper context is needed
 
 ## Core Operator Surfaces
 
@@ -79,10 +80,34 @@ The usual operator flow is:
 
 Use Dashboard to answer:
 
-- what needs attention now
-- are approvals waiting
-- are blockers piling up
-- are workers available
+- what is the current board-level item
+- which agents are working, queued, idle, blocked, or complete
+- how much ticket pressure exists across approvals, blockers, tasks, and jobs
+- which projects need attention next
+
+The dashboard is intentionally company-like: projects are the companies, role definitions are the staff, and work items are tickets. It is the fastest place to decide whether the system is healthy or needs operator input.
+
+### Tickets
+
+Use Tickets as the primary daily operations queue.
+
+Tickets unify:
+
+- approvals
+- blockers
+- agent tasks
+- active and failed jobs
+
+Ticket priority is operator-oriented:
+
+1. approvals awaiting human review
+2. open blockers
+3. failed jobs
+4. running work
+5. ready tasks
+6. waiting or completed work
+
+Each ticket shows the owning project, mission, owner or role when known, status, summary, and action links. Use the ticket action for the immediate decision, or open the project when you need the full mission, chat, job artifacts, or GitHub PR context.
 
 ### Projects
 
@@ -103,15 +128,21 @@ Use Project Detail to answer:
 
 ### Approvals
 
-Use Approvals for human-gated decisions that are blocking progress.
+Use Approvals for a focused view of human-gated decisions. In normal operation, approvals also appear at the top of Tickets.
 
 ### Blockers
 
-Use Blockers for open clarification or failure states that need attention.
+Use Blockers for a focused view of open clarification or failure states. In normal operation, open blockers also appear near the top of Tickets.
 
 ### Jobs / Tasks / Missions
 
-Use these pages as queue views for system-wide triage.
+Use these pages as focused drill-down views:
+
+- Jobs: execution logs, artifacts, branches, workers, and PR/compare links
+- Tasks: role-scoped work state and dispatchability
+- Missions: mission objectives and stage breakdowns
+
+Tickets should be the first triage stop; these pages are for deeper investigation.
 
 ## Chat Operations
 
