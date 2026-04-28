@@ -100,13 +100,15 @@ setup_env() {
       replace_env_value "$env_file" "DATABASE_URL" "postgresql://yeet2:$pg_pass@localhost:5432/yeet2?schema=public"
     fi
 
-    local api_token brain_token executor_token
+    local api_token brain_token executor_token hermes_token
     api_token=$(generate_token)
     brain_token=$(generate_token)
     executor_token=$(generate_token)
+    hermes_token=$(generate_token)
     replace_env_value "$env_file" "YEET2_API_BEARER_TOKEN" "$api_token"
     replace_env_value "$env_file" "YEET2_BRAIN_BEARER_TOKEN" "$brain_token"
     replace_env_value "$env_file" "YEET2_EXECUTOR_BEARER_TOKEN" "$executor_token"
+    replace_env_value "$env_file" "YEET2_HERMES_BEARER_TOKEN" "$hermes_token"
 
     echo ""
   fi

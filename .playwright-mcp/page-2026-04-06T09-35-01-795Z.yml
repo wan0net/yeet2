@@ -1,0 +1,219 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e21]:
+    - complementary [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: Project
+        - navigation [ref=e25]:
+          - link "Overview" [ref=e26] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+          - link "Agents" [ref=e27] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=agents
+          - link "Chat" [ref=e28] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=chat
+          - link "Constitution" [ref=e29] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f/constitution
+    - main [ref=e30]:
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]:
+            - generic [ref=e35]: Project detail
+            - generic [ref=e36]: pending
+            - generic [ref=e37]: manual
+          - generic [ref=e38]:
+            - heading "thistle-os" [level=1] [ref=e39]
+            - paragraph [ref=e40]: https://github.com/wan0net/thistle-os
+        - generic [ref=e41]:
+          - button "Plan" [ref=e43] [cursor=pointer]
+          - button "Run now" [ref=e45] [cursor=pointer]
+          - link "Back" [ref=e46] [cursor=pointer]:
+            - /url: /projects
+      - generic [ref=e47]:
+        - link "Overview" [ref=e48] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - link "Agents" [ref=e49] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=agents
+        - link "Chat" [ref=e50] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=chat
+        - link "Office" [ref=e51] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=office
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: Autonomy
+          - generic [ref=e55]: manual
+        - generic [ref=e56]:
+          - generic [ref=e57]: Next action
+          - generic [ref=e58]: Waiting
+        - generic [ref=e59]:
+          - generic [ref=e60]: Blockers
+          - generic [ref=e61]: "0"
+        - generic [ref=e62]:
+          - generic [ref=e63]: Running scope
+          - generic [ref=e64]: "0"
+      - generic [ref=e65]:
+        - generic [ref=e67]:
+          - generic [ref=e68]:
+            - text: Team
+            - generic [ref=e69]:
+              - combobox [disabled] [ref=e70]:
+                - option "Add role..." [selected]
+              - button "+" [disabled] [ref=e71] [cursor=pointer]
+              - button "Save" [ref=e72] [cursor=pointer]
+          - generic [ref=e73]:
+            - generic [ref=e74]:
+              - generic [ref=e75]:
+                - strong [ref=e76]: Apollo (Planner)
+                - generic [ref=e77]: planner
+              - generic [ref=e78]:
+                - generic [ref=e79]: Default
+                - generic [ref=e80]: Standing by
+              - generic [ref=e81]:
+                - button "✏" [ref=e82] [cursor=pointer]
+                - button "▲" [disabled] [ref=e83] [cursor=pointer]
+                - button "▼" [ref=e84] [cursor=pointer]
+                - button "×" [ref=e85] [cursor=pointer]
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - strong [ref=e88]: Momus (Architect)
+                - generic [ref=e89]: architect
+              - generic [ref=e90]:
+                - generic [ref=e91]: Default
+                - generic [ref=e92]: Standing by
+              - generic [ref=e93]:
+                - button "✏" [ref=e94] [cursor=pointer]
+                - button "▲" [ref=e95] [cursor=pointer]
+                - button "▼" [ref=e96] [cursor=pointer]
+                - button "×" [ref=e97] [cursor=pointer]
+            - generic [ref=e98]:
+              - generic [ref=e99]:
+                - strong [ref=e100]: Pygmalion (Implementer)
+                - generic [ref=e101]: implementer
+              - generic [ref=e102]:
+                - generic [ref=e103]: Default
+                - generic [ref=e104]: Standing by
+              - generic [ref=e105]:
+                - button "✏" [ref=e106] [cursor=pointer]
+                - button "▲" [ref=e107] [cursor=pointer]
+                - button "▼" [ref=e108] [cursor=pointer]
+                - button "×" [ref=e109] [cursor=pointer]
+            - generic [ref=e110]:
+              - generic [ref=e111]:
+                - strong [ref=e112]: Hera (Tester)
+                - generic [ref=e113]: tester
+              - generic [ref=e114]:
+                - generic [ref=e115]: Default
+                - generic [ref=e116]: Standing by
+              - generic [ref=e117]:
+                - button "✏" [ref=e118] [cursor=pointer]
+                - button "▲" [ref=e119] [cursor=pointer]
+                - button "▼" [ref=e120] [cursor=pointer]
+                - button "×" [ref=e121] [cursor=pointer]
+            - generic [ref=e122]:
+              - generic [ref=e123]:
+                - strong [ref=e124]: Artemis (Coder)
+                - generic [ref=e125]: coder
+              - generic [ref=e126]:
+                - generic [ref=e127]: Default
+                - generic [ref=e128]: Standing by
+              - generic [ref=e129]:
+                - button "✏" [ref=e130] [cursor=pointer]
+                - button "▲" [ref=e131] [cursor=pointer]
+                - button "▼" [ref=e132] [cursor=pointer]
+                - button "×" [ref=e133] [cursor=pointer]
+            - generic [ref=e134]:
+              - generic [ref=e135]:
+                - strong [ref=e136]: Hephaestus (QA)
+                - generic [ref=e137]: qa
+              - generic [ref=e138]:
+                - generic [ref=e139]: Default
+                - generic [ref=e140]: Standing by
+              - generic [ref=e141]:
+                - button "✏" [ref=e142] [cursor=pointer]
+                - button "▲" [ref=e143] [cursor=pointer]
+                - button "▼" [ref=e144] [cursor=pointer]
+                - button "×" [ref=e145] [cursor=pointer]
+            - generic [ref=e146]:
+              - generic [ref=e147]:
+                - strong [ref=e148]: Argus (Reviewer)
+                - generic [ref=e149]: reviewer
+              - generic [ref=e150]:
+                - generic [ref=e151]: Default
+                - generic [ref=e152]: Standing by
+              - generic [ref=e153]:
+                - button "✏" [ref=e154] [cursor=pointer]
+                - button "▲" [ref=e155] [cursor=pointer]
+                - button "▼" [ref=e156] [cursor=pointer]
+                - button "×" [ref=e157] [cursor=pointer]
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - strong [ref=e160]: Hermes (Visual)
+                - generic [ref=e161]: visual
+              - generic [ref=e162]:
+                - generic [ref=e163]: Default
+                - generic [ref=e164]: Standing by
+              - generic [ref=e165]:
+                - button "✏" [ref=e166] [cursor=pointer]
+                - button "▲" [ref=e167] [cursor=pointer]
+                - button "▼" [disabled] [ref=e168] [cursor=pointer]
+                - button "×" [ref=e169] [cursor=pointer]
+        - generic [ref=e170]:
+          - generic [ref=e171]: Model cost analysis
+          - generic [ref=e172]:
+            - generic [ref=e173]:
+              - strong [ref=e174]: Apollo (Planner)
+              - generic [ref=e175]: openrouter/anthropic/claude-opus-4.6 (default)
+              - generic [ref=e176]: in $5.00/1M · out $25.00/1M
+            - generic [ref=e177]:
+              - strong [ref=e178]: Momus (Architect)
+              - generic [ref=e179]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e180]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e181]:
+              - strong [ref=e182]: Pygmalion (Implementer)
+              - generic [ref=e183]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e184]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e185]:
+              - strong [ref=e186]: Hera (Tester)
+              - generic [ref=e187]: openrouter/openai/gpt-5.1-codex-mini (default)
+              - generic [ref=e188]: in $0.2500/1M · out $2.00/1M
+            - generic [ref=e189]:
+              - strong [ref=e190]: Artemis (Coder)
+              - generic [ref=e191]: openrouter/openai/gpt-5.3-codex (default)
+              - generic [ref=e192]: in $1.75/1M · out $14.00/1M
+            - generic [ref=e193]:
+              - strong [ref=e194]: Hephaestus (QA)
+              - generic [ref=e195]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e196]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e197]:
+              - strong [ref=e198]: Argus (Reviewer)
+              - generic [ref=e199]: openrouter/anthropic/claude-opus-4.6 (default)
+              - generic [ref=e200]: in $5.00/1M · out $25.00/1M
+            - generic [ref=e201]:
+              - strong [ref=e202]: Hermes (Visual)
+              - generic [ref=e203]: openrouter/google/gemini-3.1-pro (default)
+              - generic [ref=e204]: No published pricing available.

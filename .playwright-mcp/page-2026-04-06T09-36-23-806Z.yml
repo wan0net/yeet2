@@ -1,0 +1,137 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e22]:
+    - generic [ref=e24]:
+      - generic [ref=e25]: Getting started
+      - generic [ref=e26]:
+        - heading "Your first autonomous project" [level=1] [ref=e27]
+        - paragraph [ref=e28]: Follow these steps to register a project, configure autonomy, and let yeet2 start working.
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]: "1"
+        - text: Register a project
+      - generic [ref=e32]:
+        - paragraph [ref=e33]:
+          - text: Add your repository by giving it a name, a repo URL or local path, and a default branch. yeet2 clones the repo and scans the
+          - code [ref=e34]: docs/
+          - text: directory for constitution files that tell agents how to plan and execute work.
+        - link "Add project" [ref=e36] [cursor=pointer]:
+          - /url: /projects/new
+    - generic [ref=e37]:
+      - generic [ref=e38]:
+        - generic [ref=e39]: "2"
+        - text: Check constitution status
+      - generic [ref=e40]:
+        - paragraph [ref=e41]:
+          - text: Open the project detail page and find the Constitution section. Green pills mean the file was detected; grey means it's missing. The three required files are
+          - code [ref=e42]: VISION.md
+          - text: ","
+          - code [ref=e43]: SPEC.md
+          - text: ", and"
+          - code [ref=e44]: ROADMAP.md
+          - text: — without them, planning will not start. Recommended additions are
+          - code [ref=e45]: ARCHITECTURE.md
+          - text: ","
+          - code [ref=e46]: DECISIONS.md
+          - text: ", and"
+          - code [ref=e47]: QUALITY_BAR.md
+          - text: .
+        - paragraph [ref=e48]: Use the built-in constitution editor to create or update any of these files directly from the UI. These documents are the primary input agents use when forming plans.
+        - link "Open projects" [ref=e50] [cursor=pointer]:
+          - /url: /projects
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - generic [ref=e53]: "3"
+        - text: Configure roles
+      - generic [ref=e54]:
+        - paragraph [ref=e55]: "Each project uses seven specialist roles: Planner, Architect, Implementer, Tester, Coder, QA, and Reviewer. Each role can be assigned a different LLM model to balance cost and capability. All core roles must be enabled before planning will run."
+        - paragraph [ref=e56]: The Implementer plans the concrete code changes (which files, what approach, what to test), while the Coder executes that plan by writing and testing the actual code.
+        - paragraph [ref=e57]: Role configuration lives on the project detail page under the Roles section. Adjust model assignments at any time — changes take effect on the next autonomy loop cycle.
+    - generic [ref=e58]:
+      - generic [ref=e59]:
+        - generic [ref=e60]: "4"
+        - text: Set autonomy mode
+      - generic [ref=e61]:
+        - paragraph [ref=e62]:
+          - text: yeet2 has three autonomy modes.
+          - strong [ref=e63]: Manual
+          - text: — nothing runs automatically; you trigger planning and dispatch by hand.
+          - strong [ref=e64]: Supervised
+          - text: — the loop plans missions automatically but waits for your approval before dispatching tasks.
+          - strong [ref=e65]: Autonomous
+          - text: "— full self-driving: the loop plans, dispatches, creates PRs, and merges without intervention."
+        - paragraph [ref=e66]:
+          - text: Start with
+          - strong [ref=e67]: Supervised
+          - text: . It lets you review what the agents intend to do before anything executes, so you can catch misaligned plans early.
+    - generic [ref=e68]:
+      - generic [ref=e69]:
+        - generic [ref=e70]: "5"
+        - text: Trigger the first plan
+      - generic [ref=e71]:
+        - paragraph [ref=e72]:
+          - text: Click
+          - strong [ref=e73]: Plan
+          - text: on the project detail page, or switch autonomy to Supervised or Autonomous and wait for the loop to fire. yeet2 reads the constitution, generates a mission, and breaks it into tasks assigned to each specialist role.
+        - paragraph [ref=e74]: The Architect validates scope and design, the Implementer plans the changes, the Tester writes test cases, the Coder writes the code, QA verifies correctness, and the Reviewer checks everything before the branch is merged.
+        - link "View missions" [ref=e76] [cursor=pointer]:
+          - /url: /missions
+    - generic [ref=e77]:
+      - generic [ref=e78]:
+        - generic [ref=e79]: "6"
+        - text: Watch the pipeline
+      - generic [ref=e80]:
+        - paragraph [ref=e81]: "The autonomy loop dispatches tasks in stage order: Architect → Implementer → Tester → Coder → QA → Reviewer. Each stage runs as an isolated job in its own git worktree, so stages never interfere with each other. View job logs, artifact summaries, and stage verdicts in the Jobs page."
+        - paragraph [ref=e82]: After all stages complete successfully, yeet2 can automatically create and merge a pull request depending on your autonomy mode and approval settings.
+        - link "View jobs" [ref=e84] [cursor=pointer]:
+          - /url: /jobs
+    - generic [ref=e85]:
+      - generic [ref=e86]:
+        - generic [ref=e87]: "7"
+        - text: Handle blockers and approvals
+      - generic [ref=e88]:
+        - paragraph [ref=e89]: If a task fails twice in a row, it becomes blocked and the loop stops advancing that task. Blocked tasks appear on the Blockers page — you can resolve them with guidance, retry with adjusted instructions, or dismiss them to let the loop move on.
+        - paragraph [ref=e90]: In Supervised mode and when human-approval gates are configured, PRs and merges wait for explicit sign-off. Review and approve pending items from the Approvals page.
+        - generic [ref=e91]:
+          - link "View blockers" [ref=e92] [cursor=pointer]:
+            - /url: /blockers
+          - link "View approvals" [ref=e93] [cursor=pointer]:
+            - /url: /approvals
+    - generic [ref=e94]:
+      - generic [ref=e95]:
+        - generic [ref=e96]: "8"
+        - text: Monitor ongoing work
+      - generic [ref=e97]:
+        - paragraph [ref=e98]: "The Overview dashboard shows project health at a glance: pending approvals, open blockers, and running jobs. The Workers page shows executor heartbeat and availability — stale or offline workers will stall the queue."
+        - paragraph [ref=e99]: Every autonomy decision is written to the project's Chat tab as a decision log entry. This gives you a full audit trail of what the loop decided and why, without needing to dig through raw logs.
+        - generic [ref=e100]:
+          - link "Back to overview" [ref=e101] [cursor=pointer]:
+            - /url: /
+          - link "View workers" [ref=e102] [cursor=pointer]:
+            - /url: /workers

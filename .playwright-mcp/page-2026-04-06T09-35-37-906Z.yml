@@ -1,0 +1,95 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Project setup
+        - generic [ref=e26]:
+          - heading "Add project" [level=1] [ref=e27]
+          - paragraph [ref=e28]: Attach a repository once, then let yeet2 plan, dispatch, and keep the work moving over time.
+      - link "Back to projects" [ref=e29] [cursor=pointer]:
+        - /url: /projects
+    - generic [ref=e30]:
+      - generic [ref=e31]: Pipeline template
+      - generic [ref=e32]:
+        - paragraph [ref=e33]: Choose the type of work this project will handle. You can edit individual roles after creation.
+        - generic [ref=e34]:
+          - button "Software Development Architecture, implementation, testing, and review pipeline for code projects." [ref=e35] [cursor=pointer]:
+            - strong: Software Development
+            - generic [ref=e36]: Architecture, implementation, testing, and review pipeline for code projects.
+          - button "Content & Writing Research, writing, editing, fact-checking, and publishing stages." [ref=e37] [cursor=pointer]:
+            - strong: Content & Writing
+            - generic [ref=e38]: Research, writing, editing, fact-checking, and publishing stages.
+          - button "Solution Architecture Discovery, design, documentation, review, and approval workflow." [ref=e39] [cursor=pointer]:
+            - strong: Solution Architecture
+            - generic [ref=e40]: Discovery, design, documentation, review, and approval workflow.
+          - button "Research Question framing, investigation, synthesis, critique, and publishing." [ref=e41] [cursor=pointer]:
+            - strong: Research
+            - generic [ref=e42]: Question framing, investigation, synthesis, critique, and publishing.
+          - button "Marketing Strategy, copywriting, design, review, and campaign publishing." [ref=e43] [cursor=pointer]:
+            - strong: Marketing
+            - generic [ref=e44]: Strategy, copywriting, design, review, and campaign publishing.
+          - button "Legal & Compliance Analysis, drafting, review, compliance check, and approval sign-off." [ref=e45] [cursor=pointer]:
+            - strong: Legal & Compliance
+            - generic [ref=e46]: Analysis, drafting, review, compliance check, and approval sign-off.
+          - button "Data Analysis Collection, analysis, visualization, narrative, and review stages." [ref=e47] [cursor=pointer]:
+            - strong: Data Analysis
+            - generic [ref=e48]: Collection, analysis, visualization, narrative, and review stages.
+          - button "Product PM requirements, design, engineering, QA, and stakeholder review." [ref=e49] [cursor=pointer]:
+            - strong: Product
+            - generic [ref=e50]: PM requirements, design, engineering, QA, and stakeholder review.
+          - button "Custom Start with a blank worker role and build your own pipeline after creation. Edit roles after creation" [ref=e51] [cursor=pointer]:
+            - strong: Custom
+            - generic [ref=e52]: Start with a blank worker role and build your own pipeline after creation.
+            - generic [ref=e53]: Edit roles after creation
+    - generic [ref=e54]:
+      - generic [ref=e55]: Repository attachment
+      - generic [ref=e57]:
+        - generic [ref=e58]:
+          - text: Project name
+          - textbox "Project name" [ref=e59]:
+            - /placeholder: forgeyard
+        - generic [ref=e60]:
+          - text: Repository URL
+          - textbox "Repository URL" [ref=e61]:
+            - /placeholder: https://github.com/wan0net/yeet2.git
+        - generic [ref=e62]:
+          - text: Default branch
+          - textbox "Default branch" [ref=e63]:
+            - /placeholder: main
+            - text: main
+        - generic [ref=e64]:
+          - text: Local path
+          - textbox "Local path" [ref=e65]:
+            - /placeholder: /srv/forgeyard (optional)
+        - generic [ref=e66]: Use either a repository URL for clone-based setup or a local path for an already-mounted checkout.
+        - generic [ref=e67]:
+          - button "Attach project" [ref=e68] [cursor=pointer]
+          - link "Cancel" [ref=e69] [cursor=pointer]:
+            - /url: /projects

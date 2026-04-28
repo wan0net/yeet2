@@ -1,0 +1,233 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - generic [ref=e21]:
+    - complementary [ref=e22]:
+      - generic [ref=e23]:
+        - generic [ref=e24]: Project
+        - navigation [ref=e25]:
+          - link "Overview" [ref=e26] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+          - link "Agents" [ref=e27] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=agents
+          - link "Chat" [ref=e28] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=chat
+          - link "Constitution" [ref=e29] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f/constitution
+    - main [ref=e30]:
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - generic [ref=e34]:
+            - generic [ref=e35]: Project detail
+            - generic [ref=e36]: pending
+            - generic [ref=e37]: manual
+          - generic [ref=e38]:
+            - heading "thistle-os" [level=1] [ref=e39]
+            - paragraph [ref=e40]: https://github.com/wan0net/thistle-os
+        - generic [ref=e41]:
+          - button "Plan" [ref=e43] [cursor=pointer]
+          - button "Run now" [ref=e45] [cursor=pointer]
+          - link "Back" [ref=e46] [cursor=pointer]:
+            - /url: /projects
+      - generic [ref=e47]:
+        - link "Overview" [ref=e48] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - link "Agents" [ref=e49] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=agents
+        - link "Chat" [ref=e50] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=chat
+        - link "Office" [ref=e51] [cursor=pointer]:
+          - /url: /projects/cmnmyfxxx0001pe10t7696k0f?tab=office
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - generic [ref=e54]: Autonomy
+          - generic [ref=e55]: manual
+        - generic [ref=e56]:
+          - generic [ref=e57]: Next action
+          - generic [ref=e58]: Waiting
+        - generic [ref=e59]:
+          - generic [ref=e60]: Blockers
+          - generic [ref=e61]: "0"
+        - generic [ref=e62]:
+          - generic [ref=e63]: Running scope
+          - generic [ref=e64]: "0"
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67]: Operate
+          - generic [ref=e68]:
+            - generic [ref=e69]:
+              - generic [ref=e70]: What needs attention
+              - generic [ref=e71]:
+                - strong [ref=e72]: No immediate action queued.
+                - generic [ref=e73]: Run planning or wait for the autonomy loop.
+            - generic [ref=e74]:
+              - button "Stop AI" [ref=e76] [cursor=pointer]
+              - button "Supervised" [ref=e78] [cursor=pointer]
+              - button "Start AI" [ref=e80] [cursor=pointer]
+            - generic [ref=e81]: "Last run: Unknown"
+            - generic [ref=e82]: No recent autonomy message.
+        - generic [ref=e83]:
+          - generic [ref=e84]: Project facts
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - strong [ref=e87]: "Repo:"
+              - text: https://github.com/wan0net/thistle-os
+            - generic [ref=e88]:
+              - strong [ref=e89]: "Local path:"
+              - text: /var/lib/yeet2/projects/github-com-wan0net-thistle-os
+            - generic [ref=e90]:
+              - strong [ref=e91]: "Default branch:"
+              - text: main
+            - generic [ref=e92]:
+              - strong [ref=e93]: "Constitution:"
+              - text: 0/6 files present
+              - generic [ref=e94]:
+                - generic [ref=e95]: vision
+                - generic [ref=e96]: spec
+                - generic [ref=e97]: roadmap
+                - generic [ref=e98]: architecture
+                - generic [ref=e99]: decisions
+                - generic [ref=e100]: qualityBar
+              - link "Edit constitution" [ref=e101] [cursor=pointer]:
+                - /url: /projects/cmnmyfxxx0001pe10t7696k0f/constitution
+            - generic [ref=e102]:
+              - strong [ref=e103]: "Planner source:"
+              - text: No mission yet
+      - generic [ref=e104]:
+        - generic [ref=e105]: GitHub sync
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]: "Status:"
+            - generic [ref=e109]: disabled
+          - button "Enable sync" [ref=e111] [cursor=pointer]
+      - generic [ref=e112]:
+        - generic [ref=e113]: Current mission
+        - generic [ref=e115]: No active mission yet.
+      - generic [ref=e117]: Task lanes
+      - generic [ref=e119]:
+        - generic [ref=e121]:
+          - generic [ref=e122]: Team
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - generic [ref=e125]:
+                - strong [ref=e126]: Apollo (Planner)
+                - generic [ref=e127]: planner
+              - generic [ref=e128]:
+                - generic [ref=e129]: Default
+                - generic [ref=e130]: Standing by
+            - generic [ref=e131]:
+              - generic [ref=e132]:
+                - strong [ref=e133]: Momus (Architect)
+                - generic [ref=e134]: architect
+              - generic [ref=e135]:
+                - generic [ref=e136]: Default
+                - generic [ref=e137]: Standing by
+            - generic [ref=e138]:
+              - generic [ref=e139]:
+                - strong [ref=e140]: Pygmalion (Implementer)
+                - generic [ref=e141]: implementer
+              - generic [ref=e142]:
+                - generic [ref=e143]: Default
+                - generic [ref=e144]: Standing by
+            - generic [ref=e145]:
+              - generic [ref=e146]:
+                - strong [ref=e147]: Hera (Tester)
+                - generic [ref=e148]: tester
+              - generic [ref=e149]:
+                - generic [ref=e150]: Default
+                - generic [ref=e151]: Standing by
+            - generic [ref=e152]:
+              - generic [ref=e153]:
+                - strong [ref=e154]: Artemis (Coder)
+                - generic [ref=e155]: coder
+              - generic [ref=e156]:
+                - generic [ref=e157]: Default
+                - generic [ref=e158]: Standing by
+            - generic [ref=e159]:
+              - generic [ref=e160]:
+                - strong [ref=e161]: Hephaestus (QA)
+                - generic [ref=e162]: qa
+              - generic [ref=e163]:
+                - generic [ref=e164]: Default
+                - generic [ref=e165]: Standing by
+            - generic [ref=e166]:
+              - generic [ref=e167]:
+                - strong [ref=e168]: Argus (Reviewer)
+                - generic [ref=e169]: reviewer
+              - generic [ref=e170]:
+                - generic [ref=e171]: Default
+                - generic [ref=e172]: Standing by
+            - generic [ref=e173]:
+              - generic [ref=e174]:
+                - strong [ref=e175]: Hermes (Visual)
+                - generic [ref=e176]: visual
+              - generic [ref=e177]:
+                - generic [ref=e178]: Default
+                - generic [ref=e179]: Standing by
+        - generic [ref=e180]:
+          - generic [ref=e181]: Model cost analysis
+          - generic [ref=e182]:
+            - generic [ref=e183]:
+              - strong [ref=e184]: Apollo (Planner)
+              - generic [ref=e185]: openrouter/anthropic/claude-opus-4.6 (default)
+              - generic [ref=e186]: in $5.00/1M · out $25.00/1M
+            - generic [ref=e187]:
+              - strong [ref=e188]: Momus (Architect)
+              - generic [ref=e189]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e190]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e191]:
+              - strong [ref=e192]: Pygmalion (Implementer)
+              - generic [ref=e193]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e194]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e195]:
+              - strong [ref=e196]: Hera (Tester)
+              - generic [ref=e197]: openrouter/openai/gpt-5.1-codex-mini (default)
+              - generic [ref=e198]: in $0.2500/1M · out $2.00/1M
+            - generic [ref=e199]:
+              - strong [ref=e200]: Artemis (Coder)
+              - generic [ref=e201]: openrouter/openai/gpt-5.3-codex (default)
+              - generic [ref=e202]: in $1.75/1M · out $14.00/1M
+            - generic [ref=e203]:
+              - strong [ref=e204]: Hephaestus (QA)
+              - generic [ref=e205]: openrouter/openai/gpt-5.4 (default)
+              - generic [ref=e206]: in $2.50/1M · out $15.00/1M
+            - generic [ref=e207]:
+              - strong [ref=e208]: Argus (Reviewer)
+              - generic [ref=e209]: openrouter/anthropic/claude-opus-4.6 (default)
+              - generic [ref=e210]: in $5.00/1M · out $25.00/1M
+            - generic [ref=e211]:
+              - strong [ref=e212]: Hermes (Visual)
+              - generic [ref=e213]: openrouter/google/gemini-3.1-pro (default)
+              - generic [ref=e214]: No published pricing available.
+      - generic [ref=e215]:
+        - generic [ref=e216]:
+          - generic [ref=e217]: Recent jobs
+          - generic [ref=e219]: No jobs recorded yet.
+        - generic [ref=e220]:
+          - generic [ref=e221]: Blockers
+          - generic [ref=e223]: No blockers are open.

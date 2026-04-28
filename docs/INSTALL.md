@@ -61,6 +61,9 @@ YEET2_API_BEARER_TOKEN=   # leave blank to disable auth
 # Recommended: protect the internal Brain and Executor services
 YEET2_BRAIN_BEARER_TOKEN=
 YEET2_EXECUTOR_BEARER_TOKEN=
+
+# Optional: dedicated bearer token for Hermes or other external trigger/poll integrations
+YEET2_HERMES_BEARER_TOKEN=
 ```
 
 **3. Build and start**
@@ -133,6 +136,7 @@ All variables live in `.env`. Full defaults are in `.env.example`.
 | `YEET2_API_BEARER_TOKEN` | _(blank)_ | Bearer token for API write access. Generate: `openssl rand -hex 32`. Leave blank to disable. |
 | `YEET2_BRAIN_BEARER_TOKEN` | _(blank)_ | Bearer token for the internal Brain service. Recommended for deploy/release stacks. |
 | `YEET2_EXECUTOR_BEARER_TOKEN` | _(blank)_ | Bearer token for the internal Executor service. Recommended for deploy/release stacks. |
+| `YEET2_HERMES_BEARER_TOKEN` | _(blank)_ | Optional bearer token for `/integrations/hermes/*`. Falls back to the API bearer token when blank. |
 
 ### LLM / Keys
 

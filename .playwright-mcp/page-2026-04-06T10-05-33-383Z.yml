@@ -1,0 +1,157 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "yeet2 control plane" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e7]:
+        - generic [ref=e8]: yeet2
+        - generic [ref=e9]: control plane
+    - navigation [ref=e10]:
+      - link "Overview" [ref=e11] [cursor=pointer]:
+        - /url: /
+      - link "Projects" [ref=e12] [cursor=pointer]:
+        - /url: /projects
+      - link "Jobs" [ref=e13] [cursor=pointer]:
+        - /url: /jobs
+      - link "Tasks" [ref=e14] [cursor=pointer]:
+        - /url: /tasks
+      - link "Approvals" [ref=e15] [cursor=pointer]:
+        - /url: /approvals
+      - link "Blockers" [ref=e16] [cursor=pointer]:
+        - /url: /blockers
+      - link "Workers" [ref=e17] [cursor=pointer]:
+        - /url: /workers
+      - link "Audit" [ref=e18] [cursor=pointer]:
+        - /url: /audit
+      - link "Guide" [ref=e19] [cursor=pointer]:
+        - /url: /guide
+      - link "Settings" [ref=e20] [cursor=pointer]:
+        - /url: /settings
+  - main [ref=e22]:
+    - generic [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Control plane
+        - generic [ref=e26]:
+          - heading "Mission Control" [level=1] [ref=e27]
+          - paragraph [ref=e28]: Factory status at a glance
+      - generic [ref=e29]:
+        - link "Review approvals" [ref=e30] [cursor=pointer]:
+          - /url: /approvals
+        - link "Inspect blockers" [ref=e31] [cursor=pointer]:
+          - /url: /blockers
+        - link "Add project" [ref=e32] [cursor=pointer]:
+          - /url: /projects/new
+        - link "Open projects" [ref=e33] [cursor=pointer]:
+          - /url: /projects
+        - link "Get started" [ref=e34] [cursor=pointer]:
+          - /url: /guide
+    - generic [ref=e35]:
+      - generic [ref=e36]:
+        - generic [ref=e37]: Projects
+        - generic [ref=e38]: "1"
+      - generic [ref=e39]:
+        - generic [ref=e40]: Active missions
+        - generic [ref=e41]: "0"
+      - generic [ref=e42]:
+        - generic [ref=e43]: Running jobs
+        - generic [ref=e44]: "0"
+      - generic [ref=e45]:
+        - generic [ref=e46]: Open blockers
+        - generic [ref=e47]: "0"
+    - generic [ref=e48]:
+      - link "Apollo (Planner) thistle-os idle" [ref=e49] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e50]: Apollo (Planner)
+        - generic [ref=e51]: thistle-os
+        - generic [ref=e52]: idle
+      - link "Momus (Architect) thistle-os idle" [ref=e53] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e54]: Momus (Architect)
+        - generic [ref=e55]: thistle-os
+        - generic [ref=e56]: idle
+      - link "Pygmalion (Implementer) thistle-os idle" [ref=e57] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e58]: Pygmalion (Implementer)
+        - generic [ref=e59]: thistle-os
+        - generic [ref=e60]: idle
+      - link "Hera (Tester) thistle-os idle" [ref=e61] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e62]: Hera (Tester)
+        - generic [ref=e63]: thistle-os
+        - generic [ref=e64]: idle
+      - link "Artemis (Coder) thistle-os idle" [ref=e65] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e66]: Artemis (Coder)
+        - generic [ref=e67]: thistle-os
+        - generic [ref=e68]: idle
+      - link "Hephaestus (QA) thistle-os idle" [ref=e69] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e70]: Hephaestus (QA)
+        - generic [ref=e71]: thistle-os
+        - generic [ref=e72]: idle
+      - link "Argus (Reviewer) thistle-os idle" [ref=e73] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e74]: Argus (Reviewer)
+        - generic [ref=e75]: thistle-os
+        - generic [ref=e76]: idle
+      - link "Hermes (Visual) thistle-os idle" [ref=e77] [cursor=pointer]:
+        - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e78]: Hermes (Visual)
+        - generic [ref=e79]: thistle-os
+        - generic [ref=e80]: idle
+    - generic [ref=e81]:
+      - generic [ref=e82]: Needs attention now
+      - generic [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - generic [ref=e88]: Approvals
+              - heading "Nothing waiting" [level=2] [ref=e89]
+            - link "Open" [ref=e90] [cursor=pointer]:
+              - /url: /approvals
+          - paragraph [ref=e91]: No human-gated approvals are blocking the line right now.
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - generic [ref=e94]:
+              - generic [ref=e95]: Open blockers
+              - heading "0 active" [level=2] [ref=e96]
+            - link "Open" [ref=e97] [cursor=pointer]:
+              - /url: /blockers
+          - paragraph [ref=e98]: No active blockers are open across the fleet.
+        - generic [ref=e99]:
+          - generic [ref=e100]:
+            - generic [ref=e101]:
+              - generic [ref=e102]: Workers
+              - heading "1 available" [level=2] [ref=e103]
+            - link "Open" [ref=e104] [cursor=pointer]:
+              - /url: /workers
+          - paragraph [ref=e105]: "Healthy workers: 1. Busy workers: 0. Stale workers: 2."
+    - generic [ref=e106]:
+      - generic [ref=e107]: Projects to watch
+      - article [ref=e110]:
+        - generic [ref=e111]:
+          - generic [ref=e112]:
+            - generic [ref=e114]: manual
+            - generic [ref=e115]:
+              - heading "thistle-os" [level=2] [ref=e116]
+              - paragraph [ref=e117]: No active mission
+          - link "Open project" [ref=e118] [cursor=pointer]:
+            - /url: /projects/cmnmyfxxx0001pe10t7696k0f
+        - generic [ref=e119]:
+          - generic [ref=e120]:
+            - generic [ref=e121]: Next action
+            - generic [ref=e122]: Waiting on loop
+          - generic [ref=e123]:
+            - generic [ref=e124]: Active tasks
+            - generic [ref=e125]: "0"
+          - generic [ref=e126]:
+            - generic [ref=e127]: Last autonomy run
+            - generic [ref=e128]: Never
+    - generic [ref=e129]:
+      - generic [ref=e130]: Control plane overview
+      - generic [ref=e132]:
+        - generic [ref=e133]:
+          - generic [ref=e134]: Auth open
+          - paragraph [ref=e135]: The hosted yeet2 instance tracks projects, jobs, missions, approvals, blockers, and workers through the same API-first control plane.
+        - generic [ref=e136]:
+          - generic [ref=e137]: Available workers 1
+          - paragraph [ref=e138]: "Queued jobs: 0. Running jobs: 0. Failed jobs: 0."
