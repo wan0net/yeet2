@@ -20,6 +20,7 @@ import { logger } from "./logger";
 
 const SENSITIVE_SETTING_KEYS = new Set(["github_token"]);
 const ENCRYPTED_PREFIX = "enc:v1:";
+const GCM_AUTH_TAG_LENGTH = 16;
 
 function deriveKey(): Buffer | null {
   const raw = (process.env.YEET2_SETTING_ENCRYPTION_KEY ?? "").trim();
@@ -31,7 +32,7 @@ function encryptValue(plaintext: string): string {
   const key = deriveKey();
   if (!key) return plaintext;
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const cipher = createCipheriv("aes-256-gcm", key, iv, { authTagLength: GCM_AUTH_TAG_LENGTH });
   const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return `${ENCRYPTED_PREFIX}${iv.toString("base64")}:${ciphertext.toString("base64")}:${tag.toString("base64")}`;
@@ -59,7 +60,10 @@ function decryptValue(stored: string): string {
   const iv = Buffer.from(ivB64, "base64");
   const ciphertext = Buffer.from(ctB64, "base64");
   const tag = Buffer.from(tagB64, "base64");
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  if (tag.length !== GCM_AUTH_TAG_LENGTH) {
+    throw new Error("Encrypted setting has invalid authentication tag length");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, { authTagLength: GCM_AUTH_TAG_LENGTH });
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 }
