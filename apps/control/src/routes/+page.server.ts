@@ -1,4 +1,4 @@
-import { loadApprovals, loadGlobalBlockers, loadProjects } from "$lib/server/control-data";
+import { loadApprovals, loadGlobalBlockers, loadGlobalJobs, loadGlobalTasks, loadProjects } from "$lib/server/control-data";
 import { serverLogger } from "$lib/server/logger";
 import { buildControlPlaneOverview } from "$lib/server/overview-local";
 import type { ProjectRecord, ProjectRoleDefinition, ProjectTaskRecord } from "$lib/projects";
@@ -65,11 +65,13 @@ function buildAgentCards(projects: ProjectRecord[]): AgentCard[] {
 
 export async function load() {
   try {
-    const [overview, approvalsPayload, blockers, projects] = await Promise.all([
+    const [overview, approvalsPayload, blockers, projects, tasks, jobs] = await Promise.all([
       buildControlPlaneOverview(),
       loadApprovals(),
       loadGlobalBlockers(),
-      loadProjects()
+      loadProjects(),
+      loadGlobalTasks(),
+      loadGlobalJobs()
     ]);
 
     return {
@@ -78,6 +80,8 @@ export async function load() {
       blockers,
       projects,
       agents: buildAgentCards(projects),
+      tasks,
+      jobs,
       error: null
     };
   } catch (error) {
@@ -92,6 +96,8 @@ export async function load() {
       blockers: [],
       projects: [],
       agents: [] as AgentCard[],
+      tasks: [],
+      jobs: [],
       error: "Unable to reach the API. Check that the API service is running."
     };
   }

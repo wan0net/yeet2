@@ -8,11 +8,22 @@
   type ApprovalEntry = {
     projectName: string;
     taskTitle: string;
+    blockerTitle?: string;
+    taskAgentRole?: string;
   };
 
   const approvals = $derived((data.approvals ?? []) as ApprovalEntry[]);
+  const projects = $derived(data.projects as ProjectRecord[]);
+  const agents = $derived(data.agents ?? []);
+  const activeAgents = $derived(agents.filter((agent) => agent.status === "working" || agent.status === "queued"));
+  const blockedAgents = $derived(agents.filter((agent) => agent.status === "blocked"));
+  const activeTasks = $derived(data.tasks.filter((entry) => entry.task.status === "running" || entry.task.status === "in_progress"));
+  const readyTasks = $derived(data.tasks.filter((entry) => entry.task.dispatchable));
+  const runningJobs = $derived(data.jobs.filter((entry) => entry.job.status === "running" || entry.job.status === "in_progress"));
+  const openBlockers = $derived(data.blockers.filter((entry) => entry.blocker.status === "open"));
+  const openTickets = $derived(approvals.length + openBlockers.length + activeTasks.length + readyTasks.length);
   const urgentProjects = $derived(
-    ([...(data.projects as ProjectRecord[])])
+    [...projects]
       .sort((left, right) => {
         const blockerDelta = (right.blockerCount || 0) - (left.blockerCount || 0);
         if (blockerDelta !== 0) return blockerDelta;
@@ -22,8 +33,30 @@
       })
       .slice(0, 4)
   );
-
-  const agents = $derived(data.agents ?? []);
+  const leadTicket = $derived(
+    approvals[0]
+      ? {
+          label: "approval",
+          title: approvals[0].blockerTitle || "Human review required",
+          subtitle: `${approvals[0].projectName} · ${approvals[0].taskTitle || approvals[0].taskAgentRole || "operator decision"}`,
+          href: "/approvals"
+        }
+      : openBlockers[0]
+        ? {
+            label: "blocker",
+            title: openBlockers[0].blocker.title,
+            subtitle: `${openBlockers[0].projectName} · ${openBlockers[0].taskTitle}`,
+            href: "/blockers"
+          }
+        : activeTasks[0]
+          ? {
+              label: "active task",
+              title: activeTasks[0].task.title,
+              subtitle: `${activeTasks[0].projectName} · ${activeTasks[0].task.agentRole}`,
+              href: `/projects/${activeTasks[0].projectId}`
+            }
+          : null
+  );
 </script>
 
 {#if data.error}
@@ -32,117 +65,109 @@
   </section>
 {/if}
 
-<div class="page-header">
-  <div class="stack">
-    <span class="eyebrow">Control plane</span>
-    <div>
-      <h1>Mission Control</h1>
-      <p>Factory status at a glance</p>
+<section class="company-hero">
+  <div class="company-hero__copy">
+    <span class="eyebrow">Autonomous software company</span>
+    <h1>Run the team, not the tabs.</h1>
+    <p>
+      Track every agent, ticket, blocker, approval, and execution trace from one command surface.
+    </p>
+    <div class="token-row">
+      <a class="btn" href="/tickets">Open tickets</a>
+      <a class="btn secondary" href="/projects/new">Add project</a>
+      <a class="btn secondary" href="/settings">Configure agents</a>
     </div>
   </div>
-  <div class="token-row">
-    <a class="btn" href="/approvals">Review approvals</a>
-    <a class="btn secondary" href="/blockers">Inspect blockers</a>
-    <a class="btn secondary" href="/projects/new">Add project</a>
-    <a class="btn secondary" href="/projects">Open projects</a>
-    <a class="btn secondary" href="/guide">Get started</a>
-  </div>
-</div>
-
-<section class="metrics">
-  <div class="metric">
-    <div class="metric-kicker">Projects</div>
-    <div class="metric-value">{data.overview.totals.projects}</div>
-  </div>
-  <div class="metric">
-    <div class="metric-kicker">Active missions</div>
-    <div class="metric-value">{data.overview.totals.activeMissions}</div>
-  </div>
-  <div class="metric">
-    <div class="metric-kicker">Running jobs</div>
-    <div class="metric-value">{data.overview.totals.runningJobs}</div>
-  </div>
-  <div class="metric">
-    <div class="metric-kicker">Open blockers</div>
-    <div class="metric-value">{data.overview.totals.openBlockers}</div>
+  <div class="company-hero__panel">
+    <div class="metric-kicker">Current board item</div>
+    {#if leadTicket}
+      <div class="lead-ticket">
+        <span class="pill purple">{leadTicket.label}</span>
+        <h2>{leadTicket.title}</h2>
+        <p>{leadTicket.subtitle}</p>
+        <a class="btn secondary" href={leadTicket.href}>Review</a>
+      </div>
+    {:else}
+      <div class="lead-ticket">
+        <span class="pill success">clear</span>
+        <h2>No human decision waiting</h2>
+        <p>The active company queue has no urgent approval or blocker.</p>
+        <a class="btn secondary" href="/tickets">View queue</a>
+      </div>
+    {/if}
   </div>
 </section>
 
-{#if agents.length === 0}
-  <section class="card">
+<section class="metrics">
+  <a class="metric metric-link" href="/projects">
+    <div class="metric-kicker">Companies / projects</div>
+    <div class="metric-value">{data.overview.totals.projects}</div>
+  </a>
+  <a class="metric metric-link" href="/tickets">
+    <div class="metric-kicker">Open tickets</div>
+    <div class="metric-value">{openTickets}</div>
+  </a>
+  <a class="metric metric-link" href="/workers">
+    <div class="metric-kicker">Available agents</div>
+    <div class="metric-value">{data.overview.workers.availableWorkers}</div>
+  </a>
+  <a class="metric metric-link" href="/jobs">
+    <div class="metric-kicker">Running jobs</div>
+    <div class="metric-value">{runningJobs.length || data.overview.totals.runningJobs}</div>
+  </a>
+</section>
+
+<section class="ops-grid">
+  <article class="card company-card">
+    <div class="card-header">Agent roster</div>
     <div class="card-body">
-      <div class="empty-state">
-        <p>No agents configured yet. <a href="/projects/new">Add a project</a> to get started.</p>
-      </div>
+      {#if agents.length === 0}
+        <div class="empty-state">No agents configured yet. Add a project to hire the first team.</div>
+      {:else}
+        <div class="agent-roster">
+          {#each agents.slice(0, 12) as agent}
+            <a class="agent-row" href={`/projects/${agent.projectId}`}>
+              <span class="agent-avatar">{agent.characterName.slice(0, 1)}</span>
+              <span class="agent-row__body">
+                <strong>{agent.characterName}</strong>
+                <small>{agent.projectName} · {agent.roleKey}</small>
+                {#if agent.currentTask}
+                  <span>{agent.currentTask}</span>
+                {/if}
+              </span>
+              <span class="pill {agent.status === 'working' ? 'info' : agent.status === 'blocked' ? 'danger' : agent.status === 'complete' ? 'success' : agent.status === 'queued' ? 'warn' : ''}">{agent.status}</span>
+            </a>
+          {/each}
+        </div>
+      {/if}
     </div>
-  </section>
-{:else}
-  <section class="mission-control">
-    {#each agents as agent}
-      <a class="agent-card {agent.status}" href={`/projects/${agent.projectId}`}>
-        <div class="agent-character">{agent.characterName}</div>
-        <div class="agent-project">{agent.projectName}</div>
-        {#if agent.currentTask}
-          <div class="agent-task">{agent.currentTask}</div>
-        {/if}
-        <span class="pill {agent.status === 'working' ? 'info' : agent.status === 'blocked' ? 'danger' : agent.status === 'complete' ? 'success' : ''}">{agent.status}</span>
+  </article>
+
+  <article class="card company-card">
+    <div class="card-header">Ticket pressure</div>
+    <div class="card-body stack">
+      <a class="pressure-row" href="/approvals">
+        <span>Approvals</span>
+        <strong>{approvals.length}</strong>
       </a>
-    {/each}
-  </section>
-{/if}
-
-<section class="card">
-  <div class="card-header">Needs attention now</div>
-  <div class="card-body">
-    <div class="split-grid">
-      <div class="hero-card">
-        <div class="page-header">
-          <div>
-            <div class="metric-kicker">Approvals</div>
-            <h2>{approvals.length > 0 ? `${approvals.length} waiting` : "Nothing waiting"}</h2>
-          </div>
-          <a class="btn secondary" href="/approvals">Open</a>
-        </div>
-        <p>
-          {#if approvals[0]}
-            {approvals[0].projectName} · {approvals[0].taskTitle}
-          {:else}
-            No human-gated approvals are blocking the line right now.
-          {/if}
-        </p>
-      </div>
-
-      <div class="hero-card">
-        <div class="page-header">
-          <div>
-            <div class="metric-kicker">Open blockers</div>
-            <h2>{data.blockers.filter((entry) => entry.blocker.status === "open").length} active</h2>
-          </div>
-          <a class="btn secondary" href="/blockers">Open</a>
-        </div>
-        <p>
-          {#if data.blockers[0]}
-            {data.blockers[0].projectName} · {data.blockers[0].blocker.title}
-          {:else}
-            No active blockers are open across the fleet.
-          {/if}
-        </p>
-      </div>
-
-      <div class="hero-card">
-        <div class="page-header">
-          <div>
-            <div class="metric-kicker">Workers</div>
-            <h2>{data.overview.workers.availableWorkers} available</h2>
-          </div>
-          <a class="btn secondary" href="/workers">Open</a>
-        </div>
-        <p>
-          Healthy workers: {data.overview.workers.healthyWorkers}. Busy workers: {data.overview.workers.busyWorkers}. Stale workers: {data.overview.workers.staleWorkers}.
-        </p>
+      <a class="pressure-row" href="/blockers">
+        <span>Blockers</span>
+        <strong>{openBlockers.length}</strong>
+      </a>
+      <a class="pressure-row" href="/tasks">
+        <span>Ready tasks</span>
+        <strong>{readyTasks.length}</strong>
+      </a>
+      <a class="pressure-row" href="/jobs">
+        <span>Running jobs</span>
+        <strong>{runningJobs.length}</strong>
+      </a>
+      <div class="budget-card">
+        <div class="metric-kicker">Governance mode</div>
+        <p>Approvals, blockers, and merge gates remain enforced by yeet2 while the UI behaves like an agent company dashboard.</p>
       </div>
     </div>
-  </div>
+  </article>
 </section>
 
 <section class="card">
@@ -151,9 +176,9 @@
     {#if urgentProjects.length === 0}
       <div class="empty-state">No projects registered yet.</div>
     {:else}
-      <div class="stack">
+      <div class="project-company-grid">
         {#each urgentProjects as project}
-          <article class="hero-card">
+          <article class="hero-card project-company-card">
             <div class="page-header">
               <div class="stack">
                 <div class="token-row">
@@ -170,9 +195,9 @@
                   <p>{activeMission(project)?.title || "No active mission"}</p>
                 </div>
               </div>
-              <a class="btn secondary" href={`/projects/${project.id}`}>Open project</a>
+              <a class="btn secondary" href={`/projects/${project.id}`}>Open</a>
             </div>
-            <div class="split-grid compact-grid">
+            <div class="queue-meta">
               <div>
                 <div class="metric-kicker">Next action</div>
                 <div>{project.nextDispatchableTaskRole || "Waiting on loop"}</div>
@@ -182,7 +207,7 @@
                 <div>{project.activeTaskCount || 0}</div>
               </div>
               <div>
-                <div class="metric-kicker">Last autonomy run</div>
+                <div class="metric-kicker">Last run</div>
                 <div>{formatTimestamp(project.autonomy.lastRunAt) || "Never"}</div>
               </div>
             </div>
@@ -194,90 +219,21 @@
 </section>
 
 <section class="card">
-  <div class="card-header">Control plane overview</div>
+  <div class="card-header">Live operating model</div>
   <div class="card-body">
     <div class="split-grid">
       <div class="stack">
-        <div class="pill {data.overview.auth.enabled ? 'info' : 'success'}">
-          Auth {data.overview.auth.mode}
-        </div>
-        <p>
-          The hosted yeet2 instance tracks projects, jobs, missions, approvals, blockers, and workers through the same API-first control plane.
-        </p>
+        <span class="pill {activeAgents.length > 0 ? 'info' : 'success'}">{activeAgents.length} active agents</span>
+        <p>Agents are represented as persistent staff with current tickets, project context, model selection, and execution status.</p>
       </div>
       <div class="stack">
-        <div class="pill {data.overview.workers.availableWorkers > 0 ? 'success' : 'warn'}">
-          Available workers {data.overview.workers.availableWorkers}
-        </div>
-        <p>
-          Queued jobs: {data.overview.totals.queuedJobs}. Running jobs: {data.overview.totals.runningJobs}. Failed jobs: {data.overview.totals.failedJobs}.
-        </p>
+        <span class="pill {blockedAgents.length > 0 ? 'danger' : 'success'}">{blockedAgents.length} blocked agents</span>
+        <p>Blocked work is promoted into the ticket queue so the operator can resolve or dismiss it from a single surface.</p>
+      </div>
+      <div class="stack">
+        <span class="pill {data.overview.auth.enabled ? 'info' : 'success'}">Auth {data.overview.auth.mode}</span>
+        <p>Projects, jobs, missions, approvals, blockers, and workers still flow through the same API-first control plane.</p>
       </div>
     </div>
   </div>
 </section>
-
-<style>
-  .mission-control {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: var(--space-3);
-  }
-
-  .agent-card {
-    padding: var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--color-surface-raised);
-    border: 1px solid var(--color-border);
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 0.2s;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-
-  .agent-card:hover {
-    border-color: var(--color-accent);
-  }
-
-  .agent-card.working {
-    border-left: 3px solid var(--color-accent);
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .agent-card.working {
-      animation: none;
-    }
-  }
-
-  .agent-card.blocked {
-    border-left: 3px solid var(--color-status-error);
-  }
-
-  .agent-card.complete {
-    border-left: 3px solid var(--color-status-success);
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.85; }
-  }
-
-  .agent-character {
-    font-weight: 600;
-    font-size: var(--font-size-sm);
-  }
-
-  .agent-project {
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
-  }
-
-  .agent-task {
-    font-size: 0.8rem;
-    margin-top: var(--space-1);
-    color: var(--color-text-primary);
-  }
-</style>

@@ -133,11 +133,31 @@ Go to the **Approvals** page to review and approve or reject pending items.
 
 Once a project is running, the **Overview** dashboard gives you a top-level view:
 
-- **Pending approvals** — things waiting for your sign-off
-- **Open blockers** — tasks that have stalled and need attention
-- **Running jobs** — active execution happening right now
-- **Active missions** — current work units in progress
+- **Current board item** — the most urgent approval, blocker, or active task
+- **Agent roster** — each enabled specialist, its project, status, and current task
+- **Ticket pressure** — approvals, blockers, ready tasks, and running jobs in one panel
+- **Projects to watch** — projects sorted by blockers and active work
 
 The **Workers** page shows the status and heartbeat of executor processes. If workers go stale or offline, queued jobs will not run until a healthy worker is available.
 
 Every decision the autonomy loop makes is recorded as an entry in the project's **Chat** tab. This gives you a full audit trail — what the loop planned, what it dispatched, what it approved or skipped, and why.
+
+---
+
+## Step 9: Work from Tickets
+
+Use the **Tickets** page as the primary operating queue. It combines the older queue pages into a Paperclip-style command surface:
+
+- **Approvals** — human-gated decisions that need review
+- **Blockers** — failed or ambiguous work that needs operator guidance
+- **Tasks** — ready, running, blocked, and completed agent work items
+- **Jobs** — active or failed execution traces with logs and artifacts
+
+Tickets are sorted by operational urgency: approvals first, then open blockers, failed jobs, running work, ready tasks, and lower-priority completed or waiting items. Each ticket links back to the owning project so you can inspect the full mission, chat, job output, and PR state.
+
+The legacy **Tasks**, **Blockers**, **Approvals**, and **Jobs** pages still exist for focused triage, but the normal workflow is:
+
+1. Open **Overview** to see the company-level state.
+2. Open **Tickets** to choose the next operator action.
+3. Review or resolve the ticket.
+4. Jump into the project only when you need deeper context.

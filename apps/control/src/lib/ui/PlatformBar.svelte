@@ -33,6 +33,7 @@
   <nav id="platform-bar-nav" class="pb-nav" class:pb-nav--open={mobileMenuOpen}>
     <a href="/" class="pb-link" class:pb-link--active={page.url.pathname === "/"}>Overview</a>
     <a href="/projects" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/projects")}>Projects</a>
+    <a href="/tickets" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/tickets")}>Tickets</a>
     <a href="/jobs" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/jobs")}>Jobs</a>
     <a href="/tasks" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/tasks")}>Tasks</a>
     <a href="/missions" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/missions")}>Missions</a>
