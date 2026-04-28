@@ -139,9 +139,9 @@
     </div>
   </div>
   <div class="token-row">
-    <a class="btn" href="/approvals">Review approvals</a>
-    <a class="btn secondary" href="/blockers">Blockers</a>
-    <a class="btn secondary" href="/tasks">Legacy tasks</a>
+    <a class="btn" href="/tickets">Work queue</a>
+    <a class="btn secondary" href="/jobs">Execution traces</a>
+    <a class="btn secondary" href="/missions">Missions</a>
   </div>
 </section>
 
@@ -166,22 +166,26 @@
 
 <section class="workbench">
   <aside class="workbench-panel">
-    <div class="card-header">Command filters</div>
+    <div class="card-header">Focused drill-downs</div>
     <div class="card-body stack">
       <a class="filter-chip active" href="/tickets">
         <span>All work</span>
         <strong>{tickets.length}</strong>
       </a>
       <a class="filter-chip" href="/approvals">
-        <span>Board approvals</span>
+        <span>Approvals only</span>
         <strong>{approvalTickets.length}</strong>
       </a>
       <a class="filter-chip" href="/blockers">
-        <span>Blocked agents</span>
+        <span>Blockers only</span>
         <strong>{blockerTickets.length}</strong>
       </a>
+      <a class="filter-chip" href="/tasks">
+        <span>Tasks only</span>
+        <strong>{taskTickets.length}</strong>
+      </a>
       <a class="filter-chip" href="/jobs">
-        <span>Execution traces</span>
+        <span>Jobs only</span>
         <strong>{activeJobTickets.length}</strong>
       </a>
     </div>

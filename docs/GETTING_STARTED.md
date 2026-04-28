@@ -67,7 +67,7 @@ Autonomy mode controls how much yeet2 does without waiting for you. There are th
 Nothing runs automatically. You trigger planning and task dispatch by hand from the project detail page. Use this if you want full control over every step.
 
 **Supervised**
-The autonomy loop plans missions automatically on a schedule, but pauses before dispatching any tasks. You review the generated plan in the Approvals page and approve it before execution begins. Recommended for new projects.
+The autonomy loop plans missions automatically on a schedule, but pauses before dispatching any tasks. You review the generated plan from **Tickets** and approve it before execution begins. Recommended for new projects.
 
 **Autonomous**
 Full self-driving mode. The loop plans, dispatches tasks, creates pull requests, and merges — all without human intervention. Use this only after you trust the constitution files and role configuration.
@@ -104,7 +104,8 @@ Architect → Implementer → QA → Reviewer
 
 Each stage runs as a **job** in an isolated git worktree — stages cannot interfere with each other's working state. While a job is running you can:
 
-- Watch live log output on the **Jobs** page
+- Open **Tickets** first to see running or failed execution work
+- Drill into **Jobs** when you need raw logs, artifacts, branches, or worker details
 - See the artifact summary (what the agent produced) after each job completes
 - Check the stage verdict (pass / fail / blocked) to understand what happened
 
@@ -114,7 +115,7 @@ After all four stages complete successfully, yeet2 creates a pull request. If au
 
 ## Step 7: Handle blockers and approvals
 
-**Blockers** occur when a task fails twice in a row. The loop stops advancing the affected task and raises a blocker entry. Go to the **Blockers** page to:
+**Blockers** occur when a task fails twice in a row. The loop stops advancing the affected task and raises a blocker ticket. Open **Tickets** to:
 
 - Read the failure reason
 - Provide resolution guidance and retry
@@ -125,7 +126,7 @@ After all four stages complete successfully, yeet2 creates a pull request. If au
 - Autonomy mode is set to Supervised (the initial plan needs approval)
 - Human-approval gates are configured on the project (PRs or merges need sign-off)
 
-Go to the **Approvals** page to review and approve or reject pending items.
+Open **Tickets** to review and approve or reject pending items. The focused **Approvals** and **Blockers** pages still exist for drill-down triage, but Tickets is the normal operating surface.
 
 ---
 
@@ -155,7 +156,7 @@ Use the **Tickets** page as the primary operating queue. It combines the older q
 
 Tickets are sorted by operational urgency: approvals first, then open blockers, failed jobs, running work, ready tasks, and lower-priority completed or waiting items. Each ticket links back to the owning project so you can inspect the full mission, chat, job output, and PR state.
 
-The legacy **Tasks**, **Blockers**, **Approvals**, and **Jobs** pages still exist for focused triage, but the normal workflow is:
+The focused **Tasks**, **Blockers**, **Approvals**, and **Jobs** pages still exist for deep triage, but the normal workflow is:
 
 1. Open **Overview** to see the company-level state.
 2. Open **Tickets** to choose the next operator action.

@@ -29,6 +29,8 @@ While the alpha focuses on software development, the architecture is domain-agno
 - [x] Markdown rendering across the UI
 - [x] Chatroom-style project chat with agent bubbles
 - [x] Top navbar + per-project sidebar navigation
+- [x] Paperclip-style Tickets queue for approvals, blockers, tasks, and jobs
+- [x] Agent-company Overview dashboard for project health and ticket pressure
 - [x] GitHub PAT management via Settings UI
 - [x] 21 agent name themes (Star Trek, Star Wars, Stargate, LOTR, Dune, Firefly, and more)
 - [x] Character personalities injected into agent stage briefs
@@ -43,7 +45,8 @@ While the alpha focuses on software development, the architecture is domain-agno
 ### Beta Roadmap
 
 **Agent Experience & Visualization**
-- [ ] **Mission Control dashboard** — real-time grid of all active agents across projects with status (Cursor 2.0 style)
+- [x] **Company dashboard foundation** — cross-project agent roster, current board item, and ticket pressure
+- [ ] **Mission Control real-time grid** — live status grid of all active agents across projects (Cursor 2.0 style)
 - [ ] **Live pipeline graph** — active node pulses, completed nodes glow green, animated handoffs
 - [ ] **Mid-task chat steering** — talk to agents while they work, redirect without canceling (OpenHands/Devin style)
 - [ ] **Chunked progress summaries** — narrative updates during execution, not just raw logs

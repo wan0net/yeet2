@@ -13,6 +13,8 @@ Self-hosted autonomous team platform. Define a project, attach a pipeline of spe
 - [x] Autonomy modes: Manual, Supervised, Autonomous
 - [x] Job execution via OpenHands in isolated git worktrees
 - [x] Blocker creation, resolution, and approval workflows
+- [x] Paperclip-style Tickets queue for approvals, blockers, tasks, and jobs
+- [x] Agent-company Overview dashboard for project health and ticket pressure
 - [x] Pull request creation and merge automation
 - [x] QA/reviewer verdict recording
 - [x] Stuck job recovery with configurable timeout
@@ -25,7 +27,8 @@ Self-hosted autonomous team platform. Define a project, attach a pipeline of spe
 ### Beta Roadmap
 
 **Agent Experience**
-- [ ] Mission Control dashboard — real-time grid of all agents
+- [x] Company dashboard foundation — cross-project agent roster and ticket pressure
+- [ ] Mission Control real-time grid — live status grid of all agents
 - [ ] Live pipeline graph with animated handoffs
 - [ ] Mid-task chat steering — talk to agents while they work
 - [ ] Spatial agent visualization — characters in themed environments

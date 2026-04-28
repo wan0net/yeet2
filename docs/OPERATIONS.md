@@ -178,8 +178,8 @@ docker compose --env-file .env -f docker-compose.release.yml up -d
 If the system is not progressing:
 
 1. check health endpoints
-2. inspect the project page for blockers or waiting approvals
-3. inspect the Jobs queue for failed or stuck runs
+2. open Tickets for blockers, waiting approvals, failed jobs, and stalled tasks
+3. drill into Jobs only when raw logs, artifacts, branches, or worker details are needed
 4. inspect project chat and decision logs for the latest handoff or failure context
 5. verify Brain and Executor credentials are still valid
 

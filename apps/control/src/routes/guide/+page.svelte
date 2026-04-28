@@ -113,7 +113,8 @@
     <p>
       The autonomy loop dispatches tasks in stage order: Architect → Implementer → Tester → Coder → QA → Reviewer.
       Each stage runs as an isolated job in its own git worktree, so stages never interfere with each
-      other. View job logs, artifact summaries, and stage verdicts in the Jobs page.
+      other. Use Tickets as the first view for active work; open Jobs when you need raw logs,
+      artifact summaries, and stage verdicts.
     </p>
     <p>
       After all stages complete successfully, yeet2 can automatically create and merge a pull request
@@ -132,16 +133,17 @@
   <div class="card-body stack">
     <p>
       If a task fails twice in a row, it becomes blocked and the loop stops advancing that task.
-      Blocked tasks appear on the Blockers page — you can resolve them with guidance, retry with
-      adjusted instructions, or dismiss them to let the loop move on.
+      Blocked tasks appear at the top of Tickets, where you can decide whether to resolve, retry,
+      or drill into the focused Blockers page.
     </p>
     <p>
       In Supervised mode and when human-approval gates are configured, PRs and merges wait for
-      explicit sign-off. Review and approve pending items from the Approvals page.
+      explicit sign-off. Review pending items from Tickets first; use Approvals only for focused triage.
     </p>
     <div class="token-row">
-      <a class="btn secondary" href="/blockers">View blockers</a>
-      <a class="btn secondary" href="/approvals">View approvals</a>
+      <a class="btn" href="/tickets">Open tickets</a>
+      <a class="btn secondary" href="/blockers">Focused blockers</a>
+      <a class="btn secondary" href="/approvals">Focused approvals</a>
     </div>
   </div>
 </section>
@@ -152,9 +154,9 @@
   </div>
   <div class="card-body stack">
     <p>
-      The Overview dashboard shows project health at a glance: pending approvals, open blockers, and
-      running jobs. The Workers page shows executor heartbeat and availability — stale or offline
-      workers will stall the queue.
+      The Overview dashboard shows the company-level picture: current board item, agent roster,
+      ticket pressure, and projects to watch. Tickets is the default daily queue. Workers shows
+      executor heartbeat and availability — stale or offline workers will stall the queue.
     </p>
     <p>
       Every autonomy decision is written to the project's Chat tab as a decision log entry. This gives
@@ -162,6 +164,7 @@
     </p>
     <div class="token-row">
       <a class="btn secondary" href="/">Back to overview</a>
+      <a class="btn secondary" href="/tickets">Open tickets</a>
       <a class="btn secondary" href="/workers">View workers</a>
     </div>
   </div>

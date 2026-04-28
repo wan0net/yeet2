@@ -34,11 +34,8 @@
     <a href="/" class="pb-link" class:pb-link--active={page.url.pathname === "/"}>Overview</a>
     <a href="/projects" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/projects")}>Projects</a>
     <a href="/tickets" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/tickets")}>Tickets</a>
-    <a href="/jobs" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/jobs")}>Jobs</a>
-    <a href="/tasks" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/tasks")}>Tasks</a>
     <a href="/missions" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/missions")}>Missions</a>
-    <a href="/approvals" class="pb-link" class:pb-link--active={page.url.pathname === "/approvals"}>Approvals</a>
-    <a href="/blockers" class="pb-link" class:pb-link--active={page.url.pathname === "/blockers"}>Blockers</a>
+    <a href="/jobs" class="pb-link" class:pb-link--active={page.url.pathname.startsWith("/jobs")}>Jobs</a>
     <a href="/workers" class="pb-link" class:pb-link--active={page.url.pathname === "/workers"}>Workers</a>
     <a href="/audit" class="pb-link" class:pb-link--active={page.url.pathname === "/audit"}>Audit</a>
     <a href="/guide" class="pb-link" class:pb-link--active={page.url.pathname === "/guide"}>Guide</a>
