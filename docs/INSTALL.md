@@ -66,6 +66,25 @@ YEET2_EXECUTOR_BEARER_TOKEN=
 YEET2_HERMES_BEARER_TOKEN=
 ```
 
+To use Codex CLI or Claude Code instead of OpenHands:
+
+```dotenv
+# Codex CLI
+YEET2_EXECUTOR_MODE=codex
+OPENAI_API_KEY=sk-...
+
+# Claude Code
+YEET2_EXECUTOR_MODE=claude
+ANTHROPIC_API_KEY=sk-ant-...
+YEET2_CLAUDE_MODEL=sonnet
+```
+
+If you want the Docker executor image to install both CLIs during build:
+
+```dotenv
+YEET2_INSTALL_CODE_HARNESSES=true
+```
+
 **3. Build and start**
 
 ```bash
@@ -142,11 +161,12 @@ All variables live in `.env`. Full defaults are in `.env.example`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLM_API_KEY` | _(required)_ | API key for the Executor's OpenHands agent |
-| `LLM_MODEL` | _(required)_ | Model identifier (e.g. `openrouter/openai/gpt-4.1-mini`) |
-| `LLM_BASE_URL` | _(required)_ | Base URL (e.g. `https://openrouter.ai/api/v1`) |
+| `LLM_API_KEY` | _(required for OpenHands/passthrough)_ | API key for the Executor's OpenHands or passthrough agent |
+| `LLM_MODEL` | _(required for OpenHands/passthrough)_ | Model identifier (e.g. `openrouter/openai/gpt-4.1-mini`) |
+| `LLM_BASE_URL` | _(required for OpenHands/passthrough)_ | Base URL (e.g. `https://openrouter.ai/api/v1`) |
 | `OPENROUTER_API_KEY` | _(blank)_ | OpenRouter key for the Brain planner |
 | `OPENAI_API_KEY` | _(blank)_ | OpenAI key alternative for the Brain planner |
+| `ANTHROPIC_API_KEY` | _(blank)_ | Anthropic key for Claude Code executor mode |
 | `GITHUB_TOKEN` | _(blank)_ | PAT with `repo` scope — required for PR creation and branch push |
 
 ### Brain / Planning
@@ -162,8 +182,12 @@ All variables live in `.env`. Full defaults are in `.env.example`.
 
 | Variable | Default | Description |
 |---|---|---|
-| `YEET2_EXECUTOR_MODE` | `openhands` | Execution adapter (`openhands` or `passthrough`) |
+| `YEET2_EXECUTOR_MODE` | `openhands` | Execution adapter (`openhands`, `codex`, `claude`, `local`, or `passthrough`) |
+| `YEET2_INSTALL_CODE_HARNESSES` | `false` | Build Codex CLI and Claude Code into the Docker executor image |
+| `YEET2_HARNESS_TIMEOUT_SECONDS` | `1800` | Shared timeout for Codex/Claude runs unless overridden |
 | `YEET2_OPENHANDS_TIMEOUT_SECONDS` | `1800` | Per-job timeout. Blank = no timeout (risky in production). |
+| `YEET2_CODEX_COMMAND` | _(blank)_ | Optional Codex command override; default is `codex exec ... -` |
+| `YEET2_CLAUDE_COMMAND` | _(blank)_ | Optional Claude command override; default is `claude -p --bare ...` |
 | `YEET2_EXECUTOR_WORKTREE_CLEANUP` | `on_success` | When to clean up git worktrees: `on_success`, `always`, `never` |
 
 ### Autonomy
@@ -212,6 +236,7 @@ In the UI:
 - **Workers page** — executor should appear as online
 - **Project → Constitution** — pills for detected files
 - **Chat tab** — agents post progress messages here as they work
+- **Tickets page** — decision, escalation, work, and execution tickets are the operating queue
 
 ---
 

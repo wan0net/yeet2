@@ -260,7 +260,7 @@ def _sandbox_extra_args() -> list[str]:
 # Environment variables that are safe (or required) to pass into the agent
 # subprocess. Everything else — including unrelated API keys stored in the
 # executor's environment — is stripped so a compromised agent can't steal them.
-_OPENHANDS_ENV_WHITELIST = frozenset(
+_HARNESS_ENV_WHITELIST = frozenset(
     {
         "PATH",
         "HOME",
@@ -285,6 +285,8 @@ _OPENHANDS_ENV_WHITELIST = frozenset(
         "OPENROUTER_API_KEY",
         "OPENROUTER_BASE_URL",
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
         "MODEL",
         # OpenHands config passthrough (callers set these deliberately)
         "YEET2_OPENHANDS_COMMAND",
@@ -293,16 +295,57 @@ _OPENHANDS_ENV_WHITELIST = frozenset(
         "YEET2_OPENHANDS_PYTHON",
         "YEET2_OPENHANDS_PACKAGE",
         "YEET2_OPENHANDS_BIN",
+        # Codex CLI config passthrough
+        "CODEX_HOME",
+        "YEET2_CODEX_COMMAND",
+        "YEET2_CODEX_EXTRA_ARGS",
+        "YEET2_CODEX_MODEL",
+        "YEET2_CODEX_TIMEOUT_SECONDS",
+        "YEET2_CODEX_USE_TASK_MODEL",
+        # Claude Code config passthrough
+        "CLAUDE_CONFIG_DIR",
+        "CLAUDE_CODE_SIMPLE",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "YEET2_CLAUDE_COMMAND",
+        "YEET2_CLAUDE_EXTRA_ARGS",
+        "YEET2_CLAUDE_MODEL",
+        "YEET2_CLAUDE_TIMEOUT_SECONDS",
+        "YEET2_CLAUDE_USE_TASK_MODEL",
     }
 )
 
+_OPENHANDS_ENV_WHITELIST = _HARNESS_ENV_WHITELIST
+
+
+_CODING_HARNESS_MODES = {"openhands", "codex", "claude", "local"}
+
+
+def _executor_mode(payload: dict[str, Any] | None = None) -> str:
+    payload_adapter = cleanText((payload or {}).get("adapter")).lower()
+    raw_mode = payload_adapter or cleanText(os.getenv("YEET2_EXECUTOR_MODE")).lower() or "openhands"
+    if raw_mode in {"claude-code", "claudecode"}:
+        return "claude"
+    if raw_mode in {"codex-cli", "openai-codex"}:
+        return "codex"
+    return raw_mode
+
+
+def _harness_model(record: JobRecord, prefix: str) -> str:
+    explicit = cleanText(os.getenv(f"YEET2_{prefix}_MODEL"))
+    if explicit:
+        return explicit
+    if _is_truthy(os.getenv(f"YEET2_{prefix}_USE_TASK_MODEL")):
+        return cleanText(record.payload.get("llm_model"))
+    return ""
+
 
 def _build_openhands_env(record: JobRecord) -> dict[str, str]:
-    """Build a minimal environment for the OpenHands subprocess. Only pass
+    """Build a minimal environment for the agent subprocess. Only pass
     whitelisted variables so secrets from the executor's own environment
     cannot be exfiltrated by agent-controlled code."""
     env: dict[str, str] = {"PYTHONUNBUFFERED": "1"}
-    for name in _OPENHANDS_ENV_WHITELIST:
+    for name in _HARNESS_ENV_WHITELIST:
         value = os.environ.get(name)
         if value is not None:
             env[name] = value
@@ -478,7 +521,7 @@ def _write_asrt_config(config_dir: Path, job_id: str, config: dict[str, Any]) ->
     return config_path
 
 
-def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
+def _summarize_jsonl_output(log_path: Path, exit_code: int, executor_label: str = "OpenHands") -> str:
     """Parse a JSONL execution log and return a structured artifact JSON string."""
     events = 0
     action_counts: Counter[str] = Counter()
@@ -563,7 +606,7 @@ def _summarize_jsonl_output(log_path: Path, exit_code: int) -> str:
     elif last_text and exit_code != 0:
         parts.append(f"detail={last_text}")
 
-    human_summary = f"OpenHands {'completed successfully' if exit_code == 0 else 'failed'} ({'; '.join(parts)})."
+    human_summary = f"{executor_label} {'completed successfully' if exit_code == 0 else 'failed'} ({'; '.join(parts)})."
     handoff = human_summary
     if last_error and exit_code != 0:
         handoff = f"Execution failed: {last_error}"
@@ -619,7 +662,7 @@ class OpenHandsRuntimeError(RuntimeError):
 
 
 class OpenHandsAdapter:
-    """Replaceable adapter boundary for the first execution backend."""
+    """Replaceable adapter boundary for coding execution backends."""
 
     def __init__(self, base_dir: str | Path | None = None) -> None:
         root = base_dir or os.getenv("YEET2_EXECUTOR_BASE_DIR") or "/tmp/yeet2-executor"
@@ -642,13 +685,17 @@ class OpenHandsAdapter:
         normalized_payload["branch_name"] = branch_name
         normalized_payload["workspace_path"] = str(workspace_path)
         normalized_payload["log_path"] = str(log_path)
+        executor_type = _executor_mode(normalized_payload)
+        if executor_type not in _CODING_HARNESS_MODES:
+            executor_type = "openhands"
+        normalized_payload["execution_mode"] = executor_type
         normalized_payload["sandbox_mode"] = "asrt" if _is_asrt_enabled() else "off"
 
         record = JobRecord(
             id=job_id,
             task_id=task_id,
             status="running",
-            executor_type="openhands",
+            executor_type=executor_type,
             workspace_path=str(workspace_path),
             branch_name=branch_name,
             log_path=str(log_path),
@@ -720,26 +767,32 @@ class OpenHandsAdapter:
             if assigned_model:
                 _append_log(log_path, f"assigned_model: {assigned_model}")
 
-            mode = (os.getenv("YEET2_EXECUTOR_MODE") or "openhands").strip().lower()
+            mode = _executor_mode(record.payload)
             record.payload["execution_mode"] = mode
+            record.executor_type = mode
             if mode == "local":
                 summary = (
-                    "Prepared local worktree only; OpenHands was skipped because "
+                    "Prepared local worktree only; coding harness was skipped because "
                     "YEET2_EXECUTOR_MODE=local."
                 )
                 return self._complete_job(record, status="complete", summary=summary)
 
-            if mode != "openhands":
+            if mode not in {"openhands", "codex", "claude"}:
                 raise ValueError(
-                    "YEET2_EXECUTOR_MODE must be either 'openhands' or 'local'"
+                    "YEET2_EXECUTOR_MODE must be one of 'openhands', 'codex', 'claude', 'passthrough', or 'local'"
                 )
 
             sandbox_enabled = _is_asrt_enabled()
             record.payload["sandbox_mode"] = "asrt" if sandbox_enabled else "off"
             _append_log(log_path, f"sandbox_mode: {record.payload['sandbox_mode']}")
-            _append_log(log_path, "launching OpenHands headless run")
-            exit_code = self._run_openhands(record, workspace_path, task_file, log_path, sandbox_enabled)
-            summary = _summarize_jsonl_output(log_path, exit_code)
+            _append_log(log_path, f"launching {mode} headless run")
+            if mode == "openhands":
+                exit_code = self._run_openhands(record, workspace_path, task_file, log_path, sandbox_enabled)
+                label = "OpenHands"
+            else:
+                exit_code = self._run_coding_harness(record, workspace_path, task_file, log_path, sandbox_enabled, mode)
+                label = "Codex" if mode == "codex" else "Claude"
+            summary = _summarize_jsonl_output(log_path, exit_code, executor_label=label)
             status = "complete" if exit_code == 0 else "failed"
             error = summary if exit_code != 0 else None
             return self._complete_job(record, status=status, summary=summary, error=error)
@@ -828,6 +881,63 @@ class OpenHandsAdapter:
         )
         return command
 
+    def _build_codex_command(self, record: JobRecord, workspace_path: Path) -> list[str]:
+        configured = os.getenv("YEET2_CODEX_COMMAND")
+        if configured and configured.strip():
+            command = shlex.split(configured)
+        else:
+            command = [
+                "codex",
+                "exec",
+                "--cd",
+                str(workspace_path),
+                "--sandbox",
+                "workspace-write",
+                "--ask-for-approval",
+                "never",
+                "--skip-git-repo-check",
+                "--json",
+            ]
+        model = _harness_model(record, "CODEX")
+        if model and "--model" not in command and "-m" not in command:
+            command.extend(["--model", model])
+        extra_args = os.getenv("YEET2_CODEX_EXTRA_ARGS")
+        if extra_args and extra_args.strip():
+            command.extend(shlex.split(extra_args))
+        command.append("-")
+        return command
+
+    def _build_claude_command(self, record: JobRecord) -> list[str]:
+        configured = os.getenv("YEET2_CLAUDE_COMMAND")
+        if configured and configured.strip():
+            command = shlex.split(configured)
+        else:
+            command = [
+                "claude",
+                "-p",
+                "--bare",
+                "--permission-mode",
+                "acceptEdits",
+                "--output-format",
+                "stream-json",
+            ]
+        model = _harness_model(record, "CLAUDE")
+        if model and "--model" not in command:
+            command.extend(["--model", model])
+        extra_args = os.getenv("YEET2_CLAUDE_EXTRA_ARGS")
+        if extra_args and extra_args.strip():
+            command.extend(shlex.split(extra_args))
+        return command
+
+    def _harness_timeout_seconds(self, mode: str) -> int | None:
+        env_name = "YEET2_CODEX_TIMEOUT_SECONDS" if mode == "codex" else "YEET2_CLAUDE_TIMEOUT_SECONDS"
+        timeout_value = os.getenv(env_name) or os.getenv("YEET2_HARNESS_TIMEOUT_SECONDS")
+        if timeout_value and timeout_value.strip():
+            timeout_seconds = int(timeout_value)
+            if timeout_seconds > 0:
+                return timeout_seconds
+        return None
+
     def _run_openhands(
         self,
         record: JobRecord,
@@ -886,6 +996,70 @@ class OpenHandsAdapter:
                 process.wait()
                 raise OpenHandsRuntimeError(
                     f"timed out after {timeout_seconds} seconds"
+                ) from exc
+
+    def _run_coding_harness(
+        self,
+        record: JobRecord,
+        workspace_path: Path,
+        task_file: Path,
+        log_path: Path,
+        sandbox_enabled: bool,
+        mode: str,
+    ) -> int:
+        if mode == "codex":
+            command = self._build_codex_command(record, workspace_path)
+        elif mode == "claude":
+            command = self._build_claude_command(record)
+        else:
+            raise OpenHandsLaunchError(f"unsupported coding harness: {mode}")
+
+        timeout_seconds = self._harness_timeout_seconds(mode)
+        env = _build_openhands_env(record)
+        prompt = task_file.read_text(encoding="utf-8")
+
+        launch_command = command
+        config_path: Path | None = None
+        if sandbox_enabled:
+            config_path = _write_asrt_config(self.asrt_configs_dir, record.id, _build_asrt_config(workspace_path, sandbox_enabled))
+            launch_command = [_resolve_srt_binary(), *_sandbox_extra_args(), "--settings", str(config_path), *command]
+            record.payload["sandbox_config_path"] = str(config_path)
+            record.payload["sandbox_wrapped_command"] = _redact_command(launch_command)
+        else:
+            record.payload.pop("sandbox_config_path", None)
+            record.payload.pop("sandbox_wrapped_command", None)
+
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{mode}_cwd: {workspace_path}\n")
+            handle.write(f"{mode}_command: {_redact_command(command)}\n")
+            handle.write(f"sandbox_command: {_redact_command(launch_command)}\n")
+            if config_path is not None:
+                handle.write(f"sandbox_config_path: {config_path}\n")
+            handle.flush()
+            try:
+                process = subprocess.Popen(
+                    launch_command,
+                    cwd=str(workspace_path),
+                    stdin=subprocess.PIPE,
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    env=env,
+                )
+            except FileNotFoundError as exc:
+                missing = launch_command[0] if launch_command else command[0]
+                raise OpenHandsLaunchError(f"command not found: {missing}") from exc
+            except OSError as exc:
+                raise OpenHandsLaunchError(str(exc)) from exc
+
+            try:
+                process.communicate(input=prompt, timeout=timeout_seconds)
+                return process.returncode or 0
+            except subprocess.TimeoutExpired as exc:
+                process.kill()
+                process.wait()
+                raise OpenHandsRuntimeError(
+                    f"{mode} timed out after {timeout_seconds} seconds"
                 ) from exc
 
 

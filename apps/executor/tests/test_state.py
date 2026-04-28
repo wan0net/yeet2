@@ -103,6 +103,7 @@ _REGISTRY_ENV_VARS = [
     "YEET2_API_BASE_URL",
     "API_BASE_URL",
     "YEET2_EXECUTOR_WORKER_CAPABILITIES",
+    "YEET2_EXECUTOR_MODE",
 ]
 
 
@@ -120,8 +121,19 @@ def test_worker_registry_client_from_env_defaults(monkeypatch):
     assert client.worker_id
     # executor_type falls back to "local"
     assert client.executor_type == "local"
-    # capabilities falls back to ["local"]
-    assert client.capabilities == ["local"]
+    # capabilities include the local/git baseline and executor type
+    assert client.capabilities == ["local", "git"]
+
+
+def test_worker_registry_client_defaults_executor_type_from_executor_mode(monkeypatch):
+    for var in _REGISTRY_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("YEET2_EXECUTOR_MODE", "codex")
+
+    client = WorkerRegistryClient.from_env()
+
+    assert client.executor_type == "codex"
+    assert client.capabilities == ["local", "git", "codex"]
 
 
 def test_worker_registry_client_from_env_custom_values(monkeypatch):

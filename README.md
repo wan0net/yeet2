@@ -19,6 +19,7 @@ While the alpha focuses on software development, the architecture is domain-agno
 - [x] Stage-aware dispatch with role ranking
 - [x] Autonomy modes: Manual, Supervised, Autonomous
 - [x] Job execution via OpenHands in isolated git worktrees
+- [x] Coding harness modes for OpenHands, Codex CLI, and Claude Code (`claude -p`)
 - [x] Job logs and artifact summaries
 - [x] Blocker creation, resolution, and dismissal
 - [x] Approval approve/reject workflow
@@ -95,7 +96,7 @@ While the alpha focuses on software development, the architecture is domain-agno
 apps/control      SvelteKit web UI
 apps/api          Fastify REST API + autonomy loop
 apps/brain        Python planning service (CrewAI + deterministic)
-apps/executor     Python execution adapter (OpenHands)
+apps/executor     Python execution adapter (OpenHands, Codex CLI, Claude Code)
 packages/db       Prisma schema (PostgreSQL)
 packages/domain   Shared types, model defaults, agent themes
 packages/constitution  Constitution file discovery and parsing

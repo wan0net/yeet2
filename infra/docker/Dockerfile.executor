@@ -1,10 +1,14 @@
 FROM python:3.12-slim
 
+ARG YEET2_INSTALL_CODE_HARNESSES=false
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git curl \
+  && if [ "$YEET2_INSTALL_CODE_HARNESSES" = "true" ]; then apt-get install -y --no-install-recommends nodejs npm; fi \
+  && if [ "$YEET2_INSTALL_CODE_HARNESSES" = "true" ]; then npm install -g @openai/codex @anthropic-ai/claude-code; fi \
   && rm -rf /var/lib/apt/lists/* \
   # Create a non-root user. Executor shells out to git and OpenHands; the
   # whole adapter chain assumes the host is hostile, so don't run as root.

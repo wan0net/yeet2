@@ -42,7 +42,7 @@ describe("PIPELINE_TEMPLATES", () => {
   });
 
   it("stage adapters are valid values", () => {
-    const validAdapters = new Set(["openhands", "passthrough", "document", "research", "shell"]);
+    const validAdapters = new Set(["openhands", "codex", "claude", "passthrough", "document", "research", "shell"]);
     for (const [key, template] of Object.entries(PIPELINE_TEMPLATES)) {
       for (const stage of template.stages) {
         expect(validAdapters.has(stage.adapter), `stage "${stage.label}" in "${key}" has invalid adapter "${stage.adapter}"`).toBe(true);

@@ -12,6 +12,7 @@ Self-hosted autonomous team platform. Define a project, attach a pipeline of spe
 - [x] 7-stage TDD pipeline: Architect → Implementer → Tester → Coder → QA → Reviewer
 - [x] Autonomy modes: Manual, Supervised, Autonomous
 - [x] Job execution via OpenHands in isolated git worktrees
+- [x] Coding harness modes for OpenHands, Codex CLI, and Claude Code
 - [x] Blocker creation, resolution, and approval workflows
 - [x] Paperclip-style Tickets queue for approvals, blockers, tasks, and jobs
 - [x] Agent-company Overview dashboard for project health and ticket pressure
@@ -59,6 +60,8 @@ flowchart LR
 ## Read This First
 
 - [Get Started](./GETTING_STARTED.md) — first project walkthrough
+- [Go To Woah](./GO_TO_WOAH.md) — blank host to running software engineering project
+- [Review](./REVIEW.md) — optimisation, security, and workflow review
 - [Install](./INSTALL.md) — deployment guide
 - [Vision](./VISION.md) — project purpose
 - [Spec](./SPEC.md) — technical specification

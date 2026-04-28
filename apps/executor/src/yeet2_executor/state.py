@@ -15,6 +15,9 @@ from typing import Any
 from .adapters import JobRecord, OpenHandsAdapter, PassthroughAdapter
 
 
+_CODING_ADAPTER_MODES = {"openhands", "codex", "claude", "local", "claude-code", "claudecode", "codex-cli", "openai-codex"}
+
+
 def _clean_text(value: str | None) -> str:
     if not value:
         return ""
@@ -82,7 +85,7 @@ class WorkerRegistryClient:
 
         resolved_worker_name = worker_name or f"local-worker@{gethostname()}"
         resolved_worker_id = worker_id or resolved_worker_name or gethostname() or "local-worker"
-        resolved_executor_type = executor_type or "local"
+        resolved_executor_type = executor_type or _env_text("YEET2_EXECUTOR_MODE", default="local")
         resolved_host = host or gethostname()
         capabilities = _split_capabilities(os.getenv("YEET2_EXECUTOR_WORKER_CAPABILITIES"))
         return cls(
@@ -90,7 +93,7 @@ class WorkerRegistryClient:
             worker_id=resolved_worker_id,
             worker_name=resolved_worker_name,
             executor_type=resolved_executor_type,
-            capabilities=capabilities or ["local"],
+            capabilities=capabilities or list(dict.fromkeys(["local", "git", resolved_executor_type])),
             host=resolved_host,
             endpoint=endpoint or None,
         )
@@ -215,6 +218,8 @@ class JobStore:
         if adapter_override == "passthrough":
             adapter: OpenHandsAdapter | PassthroughAdapter = PassthroughAdapter()
         else:
+            if adapter_override in _CODING_ADAPTER_MODES:
+                job_payload["adapter"] = adapter_override
             adapter = self._adapter
 
         project_id = str(job_payload.get("project_id", "")).strip() or None

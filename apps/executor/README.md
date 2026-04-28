@@ -2,7 +2,7 @@
 
 Execution service for yeet2 jobs.
 
-`POST /jobs` validates the execution payload, prepares a yeet2-owned Git worktree, writes a per-job log, and then runs OpenHands headlessly inside that prepared workspace. The HTTP response shape stays the same as before:
+`POST /jobs` validates the execution payload, prepares a yeet2-owned Git worktree, writes a per-job log, and then runs the configured coding harness headlessly inside that prepared workspace. The HTTP response shape stays the same as before:
 
 - `id`
 - `task_id`
@@ -16,12 +16,13 @@ Execution service for yeet2 jobs.
 - `completed_at`
 - `payload`
 
-The service is still synchronous today, so `POST /jobs` blocks until OpenHands exits. The job record is created in `running` state before the subprocess starts, which lets concurrent `GET /jobs/:id` calls observe the in-flight job while the request is still being processed.
+The service is still synchronous today, so `POST /jobs` blocks until the configured harness exits. The job record is created in `running` state before the subprocess starts, which lets concurrent `GET /jobs/:id` calls observe the in-flight job while the request is still being processed.
 
 ## Runtime knobs
 
 - `YEET2_EXECUTOR_BASE_DIR`: workspace root for prepared worktrees and logs. Default: `/tmp/yeet2-executor`
-- `YEET2_EXECUTOR_MODE`: `openhands` by default. Set to `local` to keep the old worktree-only fallback mode.
+- `YEET2_EXECUTOR_MODE`: `openhands` by default. Supported values: `openhands`, `codex`, `claude`, `local`, `passthrough`.
+- `YEET2_HARNESS_TIMEOUT_SECONDS`: shared timeout for Codex/Claude runs. Default in compose: `1800`.
 - `YEET2_EXECUTOR_SANDBOX_MODE`: sandbox policy for executor jobs. Leave unset or set to `off` for the direct host path. Set to `asrt` to wrap the OpenHands command with `srt` and a per-job ASRT config.
 - `YEET2_EXECUTOR_SANDBOX_BIN`: sandbox launcher binary when ASRT mode is enabled. Default: `srt`
 - `YEET2_EXECUTOR_SANDBOX_BASE_CONFIG`: optional JSON object file path merged into each per-job sandbox config before launch.
@@ -34,7 +35,17 @@ The service is still synchronous today, so `POST /jobs` blocks until OpenHands e
 - `YEET2_OPENHANDS_BIN`: executable used by the default `uvx` command. Default: `openhands`
 - `YEET2_OPENHANDS_TIMEOUT_SECONDS`: optional hard timeout for the OpenHands subprocess. Unset means no timeout.
 - `YEET2_OPENHANDS_ALLOW_LOCAL_FALLBACK`: if true, a command-start failure falls back to a prepared local worktree instead of marking the job failed
+- `YEET2_CODEX_COMMAND`: optional Codex CLI command override. Default: `codex exec --cd <workspace> --sandbox workspace-write --ask-for-approval never --skip-git-repo-check --json -`.
+- `YEET2_CODEX_EXTRA_ARGS`: optional extra Codex CLI flags appended before the stdin marker.
+- `YEET2_CODEX_MODEL`: optional Codex model override.
+- `YEET2_CODEX_TIMEOUT_SECONDS`: Codex-specific timeout.
+- `YEET2_CLAUDE_COMMAND`: optional Claude Code command override. Default: `claude -p --bare --permission-mode acceptEdits --output-format stream-json`.
+- `YEET2_CLAUDE_EXTRA_ARGS`: optional extra Claude Code flags.
+- `YEET2_CLAUDE_MODEL`: optional Claude model override, e.g. `sonnet`.
+- `YEET2_CLAUDE_TIMEOUT_SECONDS`: Claude-specific timeout.
 - `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`: pass provider credentials/model settings through to OpenHands. The executor includes `--override-with-envs` in its managed flags so these env vars are honored by the subprocess.
+- `OPENAI_API_KEY`: used by Codex CLI.
+- `ANTHROPIC_API_KEY`: used by Claude Code, especially with the default `--bare` command.
 
 ## Sandbox mode
 
@@ -66,9 +77,46 @@ The generated task file lives inside the prepared workspace under `.yeet2-execut
 
 When `YEET2_EXECUTOR_SANDBOX_MODE=asrt`, the executor keeps that same OpenHands command shape but prepends the sandbox launcher and passes the rendered config with `--settings <config>`.
 
+## Codex CLI path
+
+Set:
+
+```bash
+YEET2_EXECUTOR_MODE=codex
+OPENAI_API_KEY=sk-...
+```
+
+Default command shape:
+
+```bash
+codex exec --cd <workspace> --sandbox workspace-write --ask-for-approval never --skip-git-repo-check --json -
+```
+
+The generated task file is sent on stdin. The run stays inside the prepared yeet2 worktree and writes stdout/stderr to the job log.
+
+## Claude Code path
+
+Set:
+
+```bash
+YEET2_EXECUTOR_MODE=claude
+ANTHROPIC_API_KEY=sk-ant-...
+YEET2_CLAUDE_MODEL=sonnet
+```
+
+Default command shape:
+
+```bash
+claude -p --bare --permission-mode acceptEdits --output-format stream-json
+```
+
+The generated task file is sent on stdin. `--bare` avoids implicit user config/keychain discovery; provide `ANTHROPIC_API_KEY` or a deliberate `YEET2_CLAUDE_COMMAND` override.
+
 ## Prerequisites
 
 - `uv`/`uvx` installed on the host if you use the default command path
+- `codex` installed on the host or in the executor image for Codex mode
+- `claude` installed on the host or in the executor image for Claude mode
 - `srt` installed on the host if you enable `YEET2_EXECUTOR_SANDBOX_MODE=asrt`
 - OpenHands-compatible model/provider environment configured for the subprocess, typically via `LLM_API_KEY`, `LLM_MODEL`, and optionally `LLM_BASE_URL`
 - Git available locally so the executor can create isolated worktrees

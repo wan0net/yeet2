@@ -113,6 +113,75 @@ class TestBuildOpenHandsCommandCustom:
 
 
 # ---------------------------------------------------------------------------
+# coding harness commands — Codex and Claude
+# ---------------------------------------------------------------------------
+
+class TestBuildCodingHarnessCommands:
+    def test_build_codex_command_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("YEET2_CODEX_COMMAND", raising=False)
+        monkeypatch.delenv("YEET2_CODEX_EXTRA_ARGS", raising=False)
+        monkeypatch.delenv("YEET2_CODEX_MODEL", raising=False)
+
+        adapter = OpenHandsAdapter(base_dir=str(tmp_path))
+        record = _make_record(tmp_path)
+
+        command = adapter._build_codex_command(record, Path(record.workspace_path))
+
+        assert command[:2] == ["codex", "exec"]
+        assert "--cd" in command
+        assert str(Path(record.workspace_path)) in command
+        assert "--sandbox" in command
+        assert "workspace-write" in command
+        assert "--ask-for-approval" in command
+        assert "never" in command
+        assert command[-1] == "-"
+
+    def test_build_claude_command_default_uses_print_mode(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("YEET2_CLAUDE_COMMAND", raising=False)
+        monkeypatch.delenv("YEET2_CLAUDE_EXTRA_ARGS", raising=False)
+        monkeypatch.delenv("YEET2_CLAUDE_MODEL", raising=False)
+
+        adapter = OpenHandsAdapter(base_dir=str(tmp_path))
+        record = _make_record(tmp_path)
+
+        command = adapter._build_claude_command(record)
+
+        assert command[0] == "claude"
+        assert "-p" in command
+        assert "--bare" in command
+        assert "--permission-mode" in command
+        assert "acceptEdits" in command
+        assert "--output-format" in command
+        assert "stream-json" in command
+
+    def test_run_coding_harness_pipes_task_file_to_stdin(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("YEET2_EXECUTOR_SANDBOX_MODE", raising=False)
+        monkeypatch.delenv("YEET2_CODEX_TIMEOUT_SECONDS", raising=False)
+        adapter = OpenHandsAdapter(base_dir=str(tmp_path))
+        record = _make_record(tmp_path)
+        task_file = Path(record.workspace_path) / ".yeet2-executor" / "task.txt"
+        task_file.parent.mkdir(parents=True, exist_ok=True)
+        task_file.write_text("do the thing", encoding="utf-8")
+
+        captured_input: list[str | None] = []
+
+        def fake_popen(cmd, *, stdin, cwd, stdout, stderr, text, env, **kwargs):
+            assert cmd[0] == "codex"
+            assert stdin == subprocess.PIPE
+            assert cwd == record.workspace_path
+            mock_proc = MagicMock()
+            mock_proc.communicate.side_effect = lambda input=None, timeout=None: captured_input.append(input)
+            mock_proc.returncode = 0
+            return mock_proc
+
+        with patch("subprocess.Popen", side_effect=fake_popen):
+            exit_code = adapter._run_coding_harness(record, Path(record.workspace_path), task_file, Path(record.log_path), False, "codex")
+
+        assert exit_code == 0
+        assert captured_input == ["do the thing"]
+
+
+# ---------------------------------------------------------------------------
 # _run_openhands — env passes LLM vars
 # ---------------------------------------------------------------------------
 

@@ -3,7 +3,7 @@ export interface PipelineStage {
   label: string;
   goal: string;
   backstory: string;
-  adapter: "openhands" | "passthrough" | "document" | "research" | "shell";
+  adapter: "openhands" | "codex" | "claude" | "passthrough" | "document" | "research" | "shell";
   sortOrder: number;
   enabled: boolean;
 }
