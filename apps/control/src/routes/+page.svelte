@@ -39,14 +39,14 @@
           label: "approval",
           title: approvals[0].blockerTitle || "Human review required",
           subtitle: `${approvals[0].projectName} · ${approvals[0].taskTitle || approvals[0].taskAgentRole || "operator decision"}`,
-          href: "/approvals"
+          href: "/tickets"
         }
       : openBlockers[0]
         ? {
             label: "blocker",
             title: openBlockers[0].blocker.title,
             subtitle: `${openBlockers[0].projectName} · ${openBlockers[0].taskTitle}`,
-            href: "/blockers"
+            href: "/tickets"
           }
         : activeTasks[0]
           ? {
@@ -146,16 +146,16 @@
   <article class="card company-card">
     <div class="card-header">Ticket pressure</div>
     <div class="card-body stack">
-      <a class="pressure-row" href="/approvals">
-        <span>Approvals</span>
+      <a class="pressure-row" href="/tickets">
+        <span>Decision tickets</span>
         <strong>{approvals.length}</strong>
       </a>
-      <a class="pressure-row" href="/blockers">
-        <span>Blockers</span>
+      <a class="pressure-row" href="/tickets">
+        <span>Escalation tickets</span>
         <strong>{openBlockers.length}</strong>
       </a>
-      <a class="pressure-row" href="/tasks">
-        <span>Ready tasks</span>
+      <a class="pressure-row" href="/tickets">
+        <span>Ready tickets</span>
         <strong>{readyTasks.length}</strong>
       </a>
       <a class="pressure-row" href="/jobs">
@@ -164,7 +164,7 @@
       </a>
       <div class="budget-card">
         <div class="metric-kicker">Governance mode</div>
-        <p>Approvals, blockers, and merge gates remain enforced by yeet2 while the UI behaves like an agent company dashboard.</p>
+        <p>Human gates and escalation states remain enforced by yeet2 while the UI behaves like an agent company dashboard.</p>
       </div>
     </div>
   </article>

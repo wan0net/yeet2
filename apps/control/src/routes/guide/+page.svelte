@@ -134,16 +134,15 @@
     <p>
       If a task fails twice in a row, it becomes blocked and the loop stops advancing that task.
       Blocked tasks appear at the top of Tickets, where you can decide whether to resolve, retry,
-      or drill into the focused Blockers page.
+      or dismiss them from the same queue.
     </p>
     <p>
       In Supervised mode and when human-approval gates are configured, PRs and merges wait for
-      explicit sign-off. Review pending items from Tickets first; use Approvals only for focused triage.
+      explicit sign-off. Review pending decision tickets from Tickets; those queues now live in the
+      ticket model.
     </p>
     <div class="token-row">
       <a class="btn" href="/tickets">Open tickets</a>
-      <a class="btn secondary" href="/blockers">Focused blockers</a>
-      <a class="btn secondary" href="/approvals">Focused approvals</a>
     </div>
   </div>
 </section>

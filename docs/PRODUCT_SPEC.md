@@ -678,17 +678,18 @@ Shows:
 - recent job runs
 - result summaries
 
-### Blockers Page
+### Tickets Page
 
 Shows:
 
-- blocker title
+- ticket title
+- ticket lane
 - project
-- task
+- related work item
 - context
 - options
 - recommendation
-- resolution state
+- decision or resolution state
 
 ### Jobs Page
 

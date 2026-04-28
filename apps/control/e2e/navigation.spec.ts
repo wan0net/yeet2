@@ -31,6 +31,12 @@ test("navigating to /projects from nav link lands on the projects page", async (
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
 });
 
+test("tickets page is the canonical queue surface", async ({ page }) => {
+  await page.goto("/tickets");
+  await expect(page.getByRole("heading", { name: "Tickets" })).toBeVisible();
+  await expect(page.getByText("Ticket lanes")).toBeVisible();
+});
+
 test("audit page loads and shows the Audit log heading", async ({ page }) => {
   await page.goto("/audit");
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();

@@ -127,7 +127,7 @@ sequenceDiagram
     API->>GitHub: Optional merge or refresh
 ```
 
-Blockers are the main human escalation surface.
+Tickets are the main human escalation surface.
 
 ## 6. Project Chat Flow
 

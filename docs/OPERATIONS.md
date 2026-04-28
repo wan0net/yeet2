@@ -126,23 +126,14 @@ Use Project Detail to answer:
 - what are the current task lanes
 - what are agents saying in the team chat
 
-### Approvals
-
-Use Approvals for a focused view of human-gated decisions. In normal operation, approvals also appear at the top of Tickets.
-
-### Blockers
-
-Use Blockers for a focused view of open clarification or failure states. In normal operation, open blockers also appear near the top of Tickets.
-
-### Jobs / Tasks / Missions
+### Jobs / Missions
 
 Use these pages as focused drill-down views:
 
 - Jobs: execution logs, artifacts, branches, workers, and PR/compare links
-- Tasks: role-scoped work state and dispatchability
 - Missions: mission objectives and stage breakdowns
 
-Tickets should be the first triage stop; these pages are for deeper investigation.
+Tickets is the model for daily work. Decision gates, escalation states, ready work, and active execution all enter that queue first; Jobs and Missions are deeper investigation views.
 
 ## Chat Operations
 
@@ -178,7 +169,7 @@ docker compose --env-file .env -f docker-compose.release.yml up -d
 If the system is not progressing:
 
 1. check health endpoints
-2. open Tickets for blockers, waiting approvals, failed jobs, and stalled tasks
+2. open Tickets for escalations, waiting decisions, failed jobs, and stalled work
 3. drill into Jobs only when raw logs, artifacts, branches, or worker details are needed
 4. inspect project chat and decision logs for the latest handoff or failure context
 5. verify Brain and Executor credentials are still valid

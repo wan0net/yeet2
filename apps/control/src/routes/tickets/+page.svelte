@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { PageData } from "./$types";
+  import type { ActionData, PageData } from "./$types";
   import Markdown from "$lib/ui/Markdown.svelte";
+  import ErrorBanner from "$lib/ui/ErrorBanner.svelte";
 
-  let { data }: { data: PageData } = $props();
+  let { data, form }: { data: PageData; form: ActionData } = $props();
 
   type TicketTone = "danger" | "warn" | "info" | "success" | "purple" | "";
 
@@ -21,6 +22,7 @@
     createdAt: string | null;
     tone: TicketTone;
     priority: number;
+    blockerId: string | null;
   };
 
   const isRunning = (status: string) => status === "running" || status === "in_progress";
@@ -39,11 +41,12 @@
       owner: String(approval.taskAgentRole || "") || null,
       status: String(approval.blockerStatus || "open"),
       summary: String(approval.blockerRecommendation || approval.blockerContext || "Waiting for an operator decision."),
-      href: "/approvals",
+      href: "/tickets",
       primaryAction: "Review",
       createdAt: String(approval.createdAt || "") || null,
       tone: "purple",
-      priority: 0
+      priority: 0,
+      blockerId
     };
   }
 
@@ -59,11 +62,12 @@
       owner: null,
       status: entry.blocker.status,
       summary: entry.blocker.recommendation || entry.blocker.context || "No blocker context recorded.",
-      href: "/blockers",
+      href: "/tickets",
       primaryAction: open ? "Resolve" : "Open",
       createdAt: entry.blocker.createdAt,
       tone: open ? "danger" : "success",
-      priority: open ? 1 : 6
+      priority: open ? 1 : 6,
+      blockerId: entry.blocker.id
     };
   }
 
@@ -84,7 +88,8 @@
       primaryAction: "Open project",
       createdAt: null,
       tone: status === "blocked" ? "danger" : isRunning(status) ? "info" : dispatchable ? "success" : isDone(status) ? "" : "warn",
-      priority: status === "blocked" ? 2 : isRunning(status) ? 3 : dispatchable ? 4 : isDone(status) ? 8 : 5
+      priority: status === "blocked" ? 2 : isRunning(status) ? 3 : dispatchable ? 4 : isDone(status) ? 8 : 5,
+      blockerId: null
     };
   }
 
@@ -104,7 +109,8 @@
       primaryAction: "View job",
       createdAt: entry.job.startedAt,
       tone: status === "failed" ? "danger" : isRunning(status) ? "info" : isDone(status) ? "success" : "",
-      priority: isRunning(status) ? 3 : status === "failed" ? 2 : 7
+      priority: isRunning(status) ? 3 : status === "failed" ? 2 : 7,
+      blockerId: null
     };
   }
 
@@ -145,17 +151,19 @@
   </div>
 </section>
 
+<ErrorBanner message={form?.actionError} />
+
 <section class="metrics">
   <div class="metric">
     <div class="metric-kicker">Open tickets</div>
     <div class="metric-value">{openTickets.length}</div>
   </div>
   <div class="metric">
-    <div class="metric-kicker">Approvals</div>
+    <div class="metric-kicker">Decision tickets</div>
     <div class="metric-value">{approvalCount}</div>
   </div>
   <div class="metric">
-    <div class="metric-kicker">Blockers</div>
+    <div class="metric-kicker">Escalation tickets</div>
     <div class="metric-value">{blockerCount}</div>
   </div>
   <div class="metric">
@@ -166,24 +174,24 @@
 
 <section class="workbench">
   <aside class="workbench-panel">
-    <div class="card-header">Focused drill-downs</div>
+    <div class="card-header">Ticket lanes</div>
     <div class="card-body stack">
       <a class="filter-chip active" href="/tickets">
         <span>All work</span>
         <strong>{tickets.length}</strong>
       </a>
-      <a class="filter-chip" href="/approvals">
-        <span>Approvals only</span>
+      <div class="filter-chip">
+        <span>Decision lane</span>
         <strong>{approvalTickets.length}</strong>
-      </a>
-      <a class="filter-chip" href="/blockers">
-        <span>Blockers only</span>
+      </div>
+      <div class="filter-chip">
+        <span>Escalation lane</span>
         <strong>{blockerTickets.length}</strong>
-      </a>
-      <a class="filter-chip" href="/tasks">
-        <span>Tasks only</span>
+      </div>
+      <div class="filter-chip">
+        <span>Work lane</span>
         <strong>{taskTickets.length}</strong>
-      </a>
+      </div>
       <a class="filter-chip" href="/jobs">
         <span>Jobs only</span>
         <strong>{activeJobTickets.length}</strong>
@@ -215,7 +223,31 @@
             </div>
           </div>
           <div class="ticket-actions">
-            <a class="btn secondary" href={ticket.href}>{ticket.primaryAction}</a>
+            {#if ticket.kind === "approval" && ticket.status === "open" && ticket.blockerId}
+              <form method="POST" action="?/approve">
+                <input type="hidden" name="projectId" value={ticket.projectId} />
+                <input type="hidden" name="blockerId" value={ticket.blockerId} />
+                <button class="btn primary" type="submit">Approve</button>
+              </form>
+              <form method="POST" action="?/reject">
+                <input type="hidden" name="projectId" value={ticket.projectId} />
+                <input type="hidden" name="blockerId" value={ticket.blockerId} />
+                <button class="btn secondary" type="submit">Reject</button>
+              </form>
+            {:else if ticket.kind === "blocker" && ticket.status === "open" && ticket.blockerId}
+              <form method="POST" action="?/resolve">
+                <input type="hidden" name="projectId" value={ticket.projectId} />
+                <input type="hidden" name="blockerId" value={ticket.blockerId} />
+                <button class="btn primary" type="submit">Resolve</button>
+              </form>
+              <form method="POST" action="?/dismiss">
+                <input type="hidden" name="projectId" value={ticket.projectId} />
+                <input type="hidden" name="blockerId" value={ticket.blockerId} />
+                <button class="btn secondary" type="submit">Dismiss</button>
+              </form>
+            {:else if ticket.kind === "job"}
+              <a class="btn secondary" href={ticket.href}>{ticket.primaryAction}</a>
+            {/if}
             <a class="btn outline" href={`/projects/${ticket.projectId}`}>Project</a>
           </div>
         </article>

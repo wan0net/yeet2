@@ -113,20 +113,20 @@ After all four stages complete successfully, yeet2 creates a pull request. If au
 
 ---
 
-## Step 7: Handle blockers and approvals
+## Step 7: Handle decision and escalation tickets
 
-**Blockers** occur when a task fails twice in a row. The loop stops advancing the affected task and raises a blocker ticket. Open **Tickets** to:
+**Escalation tickets** appear when a task fails twice in a row. The loop stops advancing the affected work item and raises a ticket. Open **Tickets** to:
 
 - Read the failure reason
 - Provide resolution guidance and retry
-- Dismiss the blocker to let the loop skip the task and move on
+- Dismiss the escalation to let the loop skip the work item and move on
 
-**Approvals** are required when:
+**Decision tickets** appear when:
 
 - Autonomy mode is set to Supervised (the initial plan needs approval)
 - Human-approval gates are configured on the project (PRs or merges need sign-off)
 
-Open **Tickets** to review and approve or reject pending items. The focused **Approvals** and **Blockers** pages still exist for drill-down triage, but Tickets is the normal operating surface.
+Open **Tickets** to approve, reject, resolve, or dismiss pending items. Tickets is the operating surface for every queue item.
 
 ---
 
@@ -134,10 +134,10 @@ Open **Tickets** to review and approve or reject pending items. The focused **Ap
 
 Once a project is running, the **Overview** dashboard gives you a top-level view:
 
-- **Current board item** — the most urgent approval, blocker, or active task
+- **Current board item** — the most urgent decision, escalation, or active work ticket
 - **Agent roster** — each enabled specialist, its project, status, and current task
-- **Ticket pressure** — approvals, blockers, ready tasks, and running jobs in one panel
-- **Projects to watch** — projects sorted by blockers and active work
+- **Ticket pressure** — decision, escalation, work, and running-job tickets in one panel
+- **Projects to watch** — projects sorted by escalations and active work
 
 The **Workers** page shows the status and heartbeat of executor processes. If workers go stale or offline, queued jobs will not run until a healthy worker is available.
 
@@ -147,16 +147,16 @@ Every decision the autonomy loop makes is recorded as an entry in the project's 
 
 ## Step 9: Work from Tickets
 
-Use the **Tickets** page as the primary operating queue. It combines the older queue pages into a Paperclip-style command surface:
+Use the **Tickets** page as the primary operating queue. It replaces the older queue pages with a Paperclip-style command surface:
 
-- **Approvals** — human-gated decisions that need review
-- **Blockers** — failed or ambiguous work that needs operator guidance
-- **Tasks** — ready, running, blocked, and completed agent work items
-- **Jobs** — active or failed execution traces with logs and artifacts
+- **Decision lane** — human-gated decisions that need review
+- **Escalation lane** — failed or ambiguous work that needs operator guidance
+- **Work lane** — ready, running, blocked, and completed agent work items
+- **Execution lane** — active or failed execution traces with logs and artifacts
 
-Tickets are sorted by operational urgency: approvals first, then open blockers, failed jobs, running work, ready tasks, and lower-priority completed or waiting items. Each ticket links back to the owning project so you can inspect the full mission, chat, job output, and PR state.
+Tickets are sorted by operational urgency: decision tickets first, then open escalations, failed jobs, running work, ready work, and lower-priority completed or waiting items. Each ticket links back to the owning project so you can inspect the full mission, chat, job output, and PR state.
 
-The focused **Tasks**, **Blockers**, **Approvals**, and **Jobs** pages still exist for deep triage, but the normal workflow is:
+The normal workflow is:
 
 1. Open **Overview** to see the company-level state.
 2. Open **Tickets** to choose the next operator action.
