@@ -133,7 +133,7 @@ describe("POST /integrations/hermes/projects/:projectId/trigger", () => {
       url: `/integrations/hermes/projects/${project.id}/trigger`,
       headers: {
         "content-type": "application/json",
-        authorization: HERMES_AUTH_HEADER
+        authorization: API_AUTH_HEADER
       },
       payload: JSON.stringify({
         content: "Please pick up the next planned task.",
