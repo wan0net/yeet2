@@ -84,9 +84,9 @@ New functions in `github.ts`:
 
 ### Sync Strategy
 
-**GitHub Issues as source of truth**: yeet2 can pull repository issues into a project inbox mission and map them to internal tickets. Open issues become ready or blocked tickets, closed issues become complete tickets, and labels such as `yeet2:implementer`, `role:qa`, `p1`, or `blocked` guide role, priority, and state.
+**GitHub Issues as source of truth**: yeet2 can pull repository issues into a project inbox mission and map them to internal tickets. Open issues become ready or blocked tickets, closed issues become complete tickets, and labels such as `yeet2:planner`, `yeet2:implementer`, `role:qa`, `p1`, or `blocked` guide role, priority, and state.
 
-**Push updates back**: once a Yeet task is linked to a GitHub issue, agent progress, blockers, failures, and completion are posted back to GitHub. GitHub remains the operator-facing ledger; Yeet remains the planner, dispatcher, and worker coordinator.
+**Push updates back**: once a Yeet task is linked to a GitHub issue, agent progress, blockers, failures, delegated child tickets, and completion are posted back to GitHub. GitHub remains the operator-facing ledger; Yeet remains the planner, dispatcher, and worker coordinator.
 
 ### UI Changes
 

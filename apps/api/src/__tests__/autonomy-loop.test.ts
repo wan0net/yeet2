@@ -242,7 +242,7 @@ describe("hasRemainingDispatchableTasks", () => {
     expect(hasRemainingDispatchableTasks(project)).toBe(true);
   });
 
-  it("returns false when only planner tasks are present (not dispatchable roles)", () => {
+  it("returns true when a planner task is ready", () => {
     const project = makeProject({
       missions: [
         {
@@ -254,6 +254,6 @@ describe("hasRemainingDispatchableTasks", () => {
         }
       ]
     } as unknown as Partial<ProjectSummary>);
-    expect(hasRemainingDispatchableTasks(project)).toBe(false);
+    expect(hasRemainingDispatchableTasks(project)).toBe(true);
   });
 });

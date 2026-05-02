@@ -55,10 +55,18 @@ export interface ProjectJobRecord {
   artifactData?: {
     summary: string | null;
     handoffNote: string | null;
-    buildStatus: "pass" | "fail" | "unknown" | null;
-    diffSummary: string[];
-    testOutput: { passed: number; failed: number; total: number } | null;
-  } | null;
+	    buildStatus: "pass" | "fail" | "unknown" | null;
+	    diffSummary: string[];
+	    testOutput: { passed: number; failed: number; total: number } | null;
+	    suggestedTickets?: Array<{
+	      title: string;
+	      description: string;
+	      agentRole: string;
+	      labels: string[];
+	      priority: number;
+	      acceptanceCriteria: string[];
+	    }>;
+	  } | null;
   startedAt: string | null;
   completedAt: string | null;
   githubCompareUrl?: string;

@@ -583,10 +583,11 @@ Implement this exact flow:
 5. Labels map each issue to role, priority, and state.
 6. An implementation-capable agent dispatches the first coding ticket through the execution adapter.
 7. OpenHands, Codex, Claude, or another harness executes the ticket in an isolated workspace or branch.
-8. QA or reviewer stages run when configured by role labels or project policy.
-9. If blocked, a blocker is created and surfaced in UI and GitHub.
-10. Yeet opens or updates a PR, comments progress back to GitHub, and closes completed issues.
-11. All mission, task, job, PR, and issue state remain visible in the UI.
+8. If an agent needs to break down work, it emits delegated ticket suggestions and Yeet creates new linked GitHub issues.
+9. QA or reviewer stages run when configured by role labels or project policy.
+10. If blocked, a blocker is created and surfaced in UI and GitHub.
+11. Yeet opens or updates a PR, comments progress back to GitHub, and closes completed issues.
+12. All mission, task, job, PR, and issue state remain visible in the UI.
 
 ## GitHub Integration Expectations
 

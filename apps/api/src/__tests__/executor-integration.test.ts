@@ -155,7 +155,7 @@ describe("taskStatusFromJobStatus", () => {
   });
 
   it("returns 'complete' when status is complete with a dispatchable role", () => {
-    const dispatchableRoles = ["architect", "implementer", "tester", "coder", "qa", "reviewer"];
+    const dispatchableRoles = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer"];
     for (const role of dispatchableRoles) {
       expect(taskStatusFromJobStatus("complete", 0, role)).toBe("complete");
     }
@@ -177,13 +177,12 @@ describe("taskStatusFromJobStatus", () => {
     expect(taskStatusFromJobStatus("failed", 5, "implementer")).toBe("blocked");
   });
 
-  it("returns 'blocked' when status is complete but role is not dispatchable", () => {
-    // 'planner' is not in DISPATCHABLE_TASK_ROLES
-    expect(taskStatusFromJobStatus("complete", 0, "planner")).toBe("failed");
+  it("returns 'failed' when status is complete but role is not dispatchable", () => {
+    expect(taskStatusFromJobStatus("complete", 0, "visual")).toBe("failed");
   });
 
   it("returns 'blocked' when status is complete, non-dispatchable role, attempts >= MAX", () => {
-    expect(taskStatusFromJobStatus("complete", 2, "planner")).toBe("blocked");
+    expect(taskStatusFromJobStatus("complete", 2, "visual")).toBe("blocked");
   });
 });
 

@@ -70,6 +70,16 @@ interface ArtifactData {
   buildStatus: "pass" | "fail" | "unknown" | null;
   diffSummary: string[];
   testOutput: { passed: number; failed: number; total: number } | null;
+  suggestedTickets: SuggestedDelegationTicket[];
+}
+
+interface SuggestedDelegationTicket {
+  title: string;
+  description: string;
+  agentRole: ProjectRoleKey;
+  labels: string[];
+  priority: number;
+  acceptanceCriteria: string[];
 }
 
 function parseArtifactData(raw: string | null): ArtifactData | null {
@@ -90,7 +100,8 @@ function parseArtifactData(raw: string | null): ArtifactData | null {
             failed: Number(parsed.testOutput.failed) || 0,
             total: Number(parsed.testOutput.total) || 0
           }
-        : null
+        : null,
+      suggestedTickets: parseSuggestedDelegationTickets(parsed)
     };
   } catch {
     return null;
@@ -815,12 +826,12 @@ interface ResolvedProjectRegistration {
   repoUrl: string | null;
 }
 
-const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "tester", "coder", "qa", "reviewer"] as const;
+const DISPATCHABLE_TASK_ROLES = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer"] as const;
 const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 const GITHUB_INBOX_MISSION_TITLE = "GitHub source-of-truth inbox";
-const GITHUB_ISSUE_ROLE_KEYS = ["architect", "implementer", "tester", "coder", "qa", "reviewer"] as const satisfies readonly ProjectRoleKey[];
+const GITHUB_ISSUE_ROLE_KEYS = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer"] as const satisfies readonly ProjectRoleKey[];
 
 import { pickCharacters } from "@yeet2/domain";
 
@@ -1101,6 +1112,16 @@ function normalizeGitHubLabel(label: string): string {
   return label.trim().toLowerCase();
 }
 
+function stringArrayFromUnknown(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
+    : [];
+}
+
+function numberFromUnknown(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : fallback;
+}
+
 function githubIssueRoleFromLabels(labels: string[]): ProjectRoleKey {
   const normalizedLabels = labels.map(normalizeGitHubLabel);
   for (const label of normalizedLabels) {
@@ -1110,6 +1131,40 @@ function githubIssueRoleFromLabels(labels: string[]): ProjectRoleKey {
     }
   }
   return "implementer";
+}
+
+function normalizeSuggestedTicket(value: unknown, fallbackPriority: number): SuggestedDelegationTicket | null {
+  if (typeof value !== "object" || value === null) return null;
+  const raw = value as Record<string, unknown>;
+  const title = typeof raw.title === "string" ? raw.title.trim() : "";
+  const description =
+    typeof raw.description === "string"
+      ? raw.description.trim()
+      : typeof raw.body === "string"
+        ? raw.body.trim()
+        : "";
+  if (!title || !description) return null;
+
+  const labels = stringArrayFromUnknown(raw.labels);
+  const rawRole = typeof raw.agentRole === "string" ? raw.agentRole : typeof raw.role === "string" ? raw.role : "";
+  const agentRole = githubIssueRoleFromLabels(rawRole ? [`role:${rawRole}`, ...labels] : labels);
+  return {
+    title: title.slice(0, 180),
+    description,
+    agentRole,
+    labels,
+    priority: numberFromUnknown(raw.priority, fallbackPriority),
+    acceptanceCriteria: stringArrayFromUnknown(raw.acceptanceCriteria ?? raw.acceptance_criteria)
+  };
+}
+
+function parseSuggestedDelegationTickets(parsed: Record<string, unknown>): SuggestedDelegationTicket[] {
+  const rawTickets = parsed.suggestedTickets ?? parsed.delegatedTickets ?? parsed.tickets;
+  if (!Array.isArray(rawTickets)) return [];
+  return rawTickets
+    .map((ticket, index) => normalizeSuggestedTicket(ticket, 50 + index))
+    .filter((ticket): ticket is SuggestedDelegationTicket => ticket !== null)
+    .slice(0, 10);
 }
 
 function githubIssuePriorityFromLabels(labels: string[]): number {
@@ -2810,6 +2865,34 @@ function guidanceLogDetail(entries: OperatorGuidanceSummary[]): {
   };
 }
 
+function appendTicketDelegationInstructions(
+  brief: TaskStageBriefResult,
+  project: ProjectWithRelations,
+  task: ProjectWithRelations["missions"][number]["tasks"][number]
+): TaskStageBriefResult {
+  if (!project.githubProjectSync || task.githubIssueNumber == null) {
+    return brief;
+  }
+
+  const delegationContract = [
+    "",
+    "Ticket delegation:",
+    "- GitHub issues are the source-of-truth work queue.",
+    "- If this ticket should be split or creates follow-up work, include a `suggestedTickets` array in your final artifact JSON.",
+    "- Each suggested ticket should include: `title`, `description`, optional `agentRole` (`planner`, `architect`, `implementer`, `tester`, `coder`, `qa`, `reviewer`), optional `labels`, optional `priority`, and optional `acceptanceCriteria`.",
+    "- Yeet will create those as delegated GitHub child issues linked back to this parent ticket."
+  ].join("\n");
+
+  return {
+    ...brief,
+    instructions: `${brief.instructions.trim()}\n${delegationContract}`,
+    successSignals: [
+      ...brief.successSignals,
+      "Any necessary follow-up or delegated work is captured in `suggestedTickets` rather than left only in prose."
+    ]
+  };
+}
+
 async function buildTaskStageBrief(
   project: ProjectWithRelations,
   task: ProjectWithRelations["missions"][number]["tasks"][number],
@@ -2817,7 +2900,7 @@ async function buildTaskStageBrief(
   operatorGuidance: OperatorGuidanceSummary[]
 ): Promise<TaskStageBriefResult> {
   const mission = project.missions.find((candidate) => candidate.id === task.missionId) ?? null;
-  return createTaskStageBrief({
+  const brief = await createTaskStageBrief({
     projectId: project.id,
     projectName: project.name,
     missionId: task.missionId,
@@ -2835,6 +2918,7 @@ async function buildTaskStageBrief(
     assignedRoleBackstory: assignedRoleDefinition?.backstory ?? null,
     operatorGuidance
   });
+  return appendTicketDelegationInstructions(brief, project, task);
 }
 
 function toProjectChatMessageSummary(log: ProjectDecisionLogSummary): ProjectChatMessageSummary | null {
@@ -2988,6 +3072,120 @@ async function submitTaskToExecutor(
   };
 }
 
+function delegatedTicketBody(input: {
+  project: ProjectWithRelations;
+  parentTask: ProjectWithRelations["missions"][number]["tasks"][number];
+  ticket: SuggestedDelegationTicket;
+}): string {
+  const parentIssue = input.parentTask.githubIssueNumber != null ? `#${input.parentTask.githubIssueNumber}` : input.parentTask.id;
+  return [
+    input.ticket.description,
+    "",
+    "## Delegation",
+    `- Parent ticket: ${parentIssue}`,
+    `- Parent Yeet task: ${input.parentTask.id}`,
+    `- Project: ${input.project.name}`,
+    "",
+    "## Acceptance criteria",
+    ...(input.ticket.acceptanceCriteria.length > 0 ? input.ticket.acceptanceCriteria.map((criterion) => `- ${criterion}`) : ["- Complete the delegated work described above."])
+  ].join("\n");
+}
+
+async function createDelegatedTicketsFromArtifact(input: {
+  project: ProjectWithRelations;
+  task: ProjectWithRelations["missions"][number]["tasks"][number];
+  jobId: string;
+  artifactSummary: string | null;
+  actor: string;
+}): Promise<void> {
+  if (!input.project.githubProjectSync || !input.project.githubRepoOwner || !input.project.githubRepoName) return;
+  const artifact = parseArtifactData(input.artifactSummary);
+  const tickets = artifact?.suggestedTickets ?? [];
+  if (tickets.length === 0) return;
+
+  const alreadyCreated = await prisma.decisionLog.findFirst({
+    where: {
+      projectId: input.project.id,
+      jobId: input.jobId,
+      kind: "workflow",
+      summary: { startsWith: "Created delegated GitHub tickets" }
+    }
+  });
+  if (alreadyCreated) return;
+
+  const token = await resolveGitHubToken();
+  if (!token) return;
+
+  await ensureGitHubLabels({
+    token,
+    owner: input.project.githubRepoOwner,
+    repo: input.project.githubRepoName,
+    labels: [
+      { name: "yeet2", color: "0075ca" },
+      { name: "yeet2:delegated", color: "5319e7" },
+      ...GITHUB_ISSUE_ROLE_KEYS.map((role) => ({ name: `yeet2:${role}`, color: "0075ca" }))
+    ]
+  });
+
+  const created: Array<{ taskId: string; issueNumber: number; issueUrl: string; title: string; agentRole: ProjectRoleKey }> = [];
+  for (const ticket of tickets) {
+    const roleDefinition = firstEnabledRoleDefinitionForKey(input.project, ticket.agentRole);
+    const labels = [...new Set(["yeet2", "yeet2:delegated", `yeet2:${ticket.agentRole}`, ...ticket.labels])];
+    const issue = await createGitHubTaskIssue({
+      token,
+      owner: input.project.githubRepoOwner,
+      repo: input.project.githubRepoName,
+      title: ticket.title,
+      body: delegatedTicketBody({ project: input.project, parentTask: input.task, ticket }),
+      labels
+    });
+    const createdTask = await prisma.task.create({
+      data: {
+        missionId: input.task.missionId,
+        title: `#${issue.number} ${ticket.title}`,
+        description: [`GitHub issue: ${issue.htmlUrl}`, "", ticket.description].join("\n"),
+        agentRole: ticket.agentRole,
+        assignedRoleDefinitionId: roleDefinition?.id ?? null,
+        assignedRoleDefinitionLabel: roleDefinition?.label ?? null,
+        status: "ready",
+        priority: ticket.priority,
+        acceptanceCriteria: ticket.acceptanceCriteria.length > 0 ? ticket.acceptanceCriteria : ["Complete the delegated ticket."],
+        attempts: 0,
+        blockerReason: null,
+        githubIssueNumber: issue.number,
+        githubIssueNodeId: issue.nodeId
+      }
+    });
+    created.push({ taskId: createdTask.id, issueNumber: issue.number, issueUrl: issue.htmlUrl, title: ticket.title, agentRole: ticket.agentRole });
+  }
+
+  if (created.length === 0) return;
+  if (input.task.githubIssueNumber != null) {
+    await commentOnGitHubIssue({
+      token,
+      owner: input.project.githubRepoOwner,
+      repo: input.project.githubRepoName,
+      issueNumber: input.task.githubIssueNumber,
+      body: `🧩 Created delegated ticket${created.length === 1 ? "" : "s"}:\n${created.map((ticket) => `- #${ticket.issueNumber} ${ticket.title}`).join("\n")}`
+    });
+  }
+
+  await recordDecisionLog({
+    projectId: input.project.id,
+    missionId: input.task.missionId,
+    taskId: input.task.id,
+    jobId: input.jobId,
+    kind: "workflow",
+    actor: input.actor,
+    summary: `Created delegated GitHub tickets from "${input.task.title}"`,
+    detail: {
+      source: "agent_artifact",
+      parentIssueNumber: input.task.githubIssueNumber ?? null,
+      delegatedTickets: created
+    }
+  });
+}
+
 async function updateTaskAfterDispatchFailure(
   task: ProjectWithRelations["missions"][number]["tasks"][number],
   attempts: number,
@@ -3138,6 +3336,22 @@ async function persistDispatchedJob(
       taskId: task.id
     });
   });
+
+  if (taskStatus === "complete") {
+    createDelegatedTicketsFromArtifact({
+      project,
+      task,
+      jobId: createdJob.id,
+      artifactSummary: executorJob.artifact_summary ?? null,
+      actor: assignedRoleDefinition?.label ?? task.agentRole
+    }).catch((error) => {
+      logger.bestEffortFailure("createDelegatedTicketsFromArtifact.persist", error, {
+        projectId: project.id,
+        taskId: task.id,
+        jobId: createdJob.id
+      });
+    });
+  }
 
   return toProjectJobSummary(createdJob);
 }
@@ -3776,6 +3990,19 @@ export async function refreshProjectJob(projectId: string, jobId: string): Promi
   };
   if (taskStatus === "complete") {
     syncGitHubTaskIssue({ project, task, event: "completed", detail: executorJob.artifact_summary || "" }).catch(logSyncFailure("completed"));
+    createDelegatedTicketsFromArtifact({
+      project,
+      task,
+      jobId,
+      artifactSummary: executorJob.artifact_summary ?? null,
+      actor: match.job.assignedRoleDefinitionLabel ?? task.agentRole
+    }).catch((error) => {
+      logger.bestEffortFailure("createDelegatedTicketsFromArtifact.refresh", error, {
+        projectId: project.id,
+        taskId: task.id,
+        jobId
+      });
+    });
   } else if (taskStatus === "blocked") {
     syncGitHubTaskIssue({ project, task, event: "blocked", detail: blockerReason || "" }).catch(logSyncFailure("blocked"));
   } else if (taskStatus === "failed") {

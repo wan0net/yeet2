@@ -30,8 +30,8 @@
   <div class="card-body stack">
 	    <p>
 	      Open the project detail page, enable GitHub sync, then click <strong>Pull GitHub issues</strong>.
-	      A human-created GitHub issue becomes a Yeet ticket, gets assigned to an agent role, and is
-	      closed after the agent ships the work.
+	      Human-created and AI-created GitHub issues become Yeet tickets, get assigned to agent roles,
+	      and are closed after agents ship the work.
 	    </p>
 	    <p>
 	      Reference docs such as <code>VISION.md</code>, <code>SPEC.md</code>, and <code>ARCHITECTURE.md</code>
@@ -93,7 +93,8 @@
 	    </p>
 	    <p>
 	      Use labels such as <code>role:coder</code>, <code>yeet2:implementer</code>, <code>p1</code>,
-	      or <code>blocked</code> to steer ownership, priority, and state.
+	      or <code>blocked</code> to steer ownership, priority, and state. Agents can also emit
+	      delegated tickets when a parent ticket needs to be split.
 	    </p>
     <div class="token-row">
       <a class="btn secondary" href="/missions">View missions</a>

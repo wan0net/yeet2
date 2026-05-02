@@ -23,9 +23,10 @@ The normal intake workflow is:
 1. A human creates a GitHub issue describing the desired outcome
 2. Yeet imports that issue as a ticket
 3. An AI agent picks it up, works in a branch, and opens a PR
-4. Yeet comments progress back on the issue and closes it when complete
+4. If the agent needs to split the work, it can emit delegated tickets and Yeet creates new GitHub issues for them
+5. Yeet comments progress back on the issue and closes it when complete
 
-Labels can steer execution: `yeet2:implementer`, `role:coder`, `role:qa`, `p0`, `p1`, `blocked`. If no role label is present, Yeet treats the issue as implementation work.
+Labels can steer execution: `yeet2:planner`, `yeet2:implementer`, `role:coder`, `role:qa`, `p0`, `p1`, `blocked`. If no role label is present, Yeet treats the issue as implementation work.
 
 ---
 

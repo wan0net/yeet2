@@ -97,7 +97,7 @@ In the UI:
 
 Repo URL registration is the preferred Docker path because API and Executor share the managed `projects_data` volume. If you attach a host checkout by local path, mount that exact path into both API and Executor containers.
 
-GitHub is the work source of truth. After registration, open the project overview, enable **GitHub sync**, then click **Pull GitHub issues**. Yeet imports repository issues into the **GitHub source-of-truth inbox** mission, keeps the GitHub issue number on each ticket, and reports agent progress back to that issue when work runs.
+GitHub is the work source of truth. After registration, open the project overview, enable **GitHub sync**, then click **Pull GitHub issues**. Yeet imports repository issues into the **GitHub source-of-truth inbox** mission, keeps the GitHub issue number on each ticket, and reports agent progress back to that issue when work runs. Agents can also emit delegated ticket suggestions; Yeet turns those into linked GitHub issues and pulls them into the same queue.
 
 ## Fleet Layout
 

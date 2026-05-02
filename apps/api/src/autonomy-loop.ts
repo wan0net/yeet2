@@ -299,7 +299,13 @@ export function hasRemainingDispatchableTasks(project: ProjectSummary): boolean 
   return project.missions.some((mission) =>
     mission.tasks.some(
       (task) =>
-        (task.agentRole === "architect" || task.agentRole === "implementer" || task.agentRole === "tester" || task.agentRole === "coder" || task.agentRole === "qa" || task.agentRole === "reviewer") &&
+        (task.agentRole === "planner" ||
+          task.agentRole === "architect" ||
+          task.agentRole === "implementer" ||
+          task.agentRole === "tester" ||
+          task.agentRole === "coder" ||
+          task.agentRole === "qa" ||
+          task.agentRole === "reviewer") &&
         (task.status === "ready" || task.status === "pending")
     )
   );
