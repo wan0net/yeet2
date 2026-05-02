@@ -436,12 +436,12 @@
             <strong>{blockers[0].title}</strong>
             <div class="muted">Open blocker</div>
           </div>
-        {:else}
-          <div>
-            <strong>No immediate action queued.</strong>
-            <div class="muted">Run planning or wait for the autonomy loop.</div>
-          </div>
-        {/if}
+	        {:else}
+	          <div>
+	            <strong>No immediate action queued.</strong>
+	            <div class="muted">Create a GitHub issue, pull tickets, or wait for the autonomy loop.</div>
+	          </div>
+	        {/if}
       </div>
       <div class="token-row">
         <form method="POST">
@@ -471,8 +471,8 @@
       <div><strong>Repo:</strong> {project.repoUrl || "—"}</div>
       <div style="word-break: break-all;"><strong>Local path:</strong> {project.localPath || "—"}</div>
       <div><strong>Default branch:</strong> {project.defaultBranch || "—"}</div>
-      <div>
-        <strong>Constitution:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}
+	      <div>
+	        <strong>Reference docs:</strong> {formatConstitutionFiles(project.constitution.files ?? undefined)}
         {#if project.constitution.files}
           {@const presentFiles = Object.entries(project.constitution.files).filter(([, present]) => present)}
           {#if presentFiles.length > 0}
@@ -489,9 +489,9 @@
         {#if project.constitution.inspectedAt}
           <div class="muted" style="margin-top: var(--space-1);">Inspected: {formatTimestamp(project.constitution.inspectedAt)}</div>
         {/if}
-        <a class="btn secondary" href={`/projects/${project.id}/constitution`} style="margin-top: var(--space-2); display: inline-block;">Edit constitution</a>
-      </div>
-      <div><strong>Planner source:</strong> {mission ? planningProvenanceLabel(mission.planningProvenance) : "No mission yet"}</div>
+	        <a class="btn secondary" href={`/projects/${project.id}/constitution`} style="margin-top: var(--space-2); display: inline-block;">Edit reference docs</a>
+	      </div>
+	      <div><strong>Work source:</strong> {project.githubProjectSync ? "GitHub issues" : mission ? planningProvenanceLabel(mission.planningProvenance) : "No mission yet"}</div>
     </div>
   </div>
 </section>
@@ -827,9 +827,9 @@
     {#if chatEntries.length === 0}
       <div class="chatroom-empty">
         {#if project.constitutionStatus === "missing"}
-          <p>No constitution files detected. Start the project interview to set up this project — the planner will ask you a few questions and generate the constitution documents.</p>
-        {:else if project.constitutionStatus === "pending"}
-          <p>Interview in progress. Use the <strong>Continue interview</strong> button above to answer the next question and build out your constitution files.</p>
+	          <p>No messages yet. Create a GitHub issue, pull tickets on the project overview, then start AI.</p>
+	        {:else if project.constitutionStatus === "pending"}
+	          <p>No messages yet. Reference docs can help agents, but GitHub issues are the work queue.</p>
         {:else}
           <p>No messages yet. Agents will post updates here as they work.</p>
         {/if}

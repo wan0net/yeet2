@@ -820,7 +820,7 @@ const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 const GITHUB_INBOX_MISSION_TITLE = "GitHub source-of-truth inbox";
-const GITHUB_ISSUE_ROLE_KEYS = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer", "visual"] as const satisfies readonly ProjectRoleKey[];
+const GITHUB_ISSUE_ROLE_KEYS = ["architect", "implementer", "tester", "coder", "qa", "reviewer"] as const satisfies readonly ProjectRoleKey[];
 
 import { pickCharacters } from "@yeet2/domain";
 
@@ -1109,7 +1109,7 @@ function githubIssueRoleFromLabels(labels: string[]): ProjectRoleKey {
       return candidate as ProjectRoleKey;
     }
   }
-  return "planner";
+  return "implementer";
 }
 
 function githubIssuePriorityFromLabels(labels: string[]): number {

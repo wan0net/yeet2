@@ -13,11 +13,10 @@
     <span class="pill">1</span> Register a project
   </div>
   <div class="card-body stack">
-    <p>
-      Add your repository by giving it a name, a repo URL or local path, and a default branch. yeet2
-      clones the repo and scans the <code>docs/</code> directory for constitution files that tell agents
-      how to plan and execute work.
-    </p>
+	    <p>
+	      Add your repository by giving it a name, a GitHub repo URL, and a default branch. yeet2
+	      clones the repo, links it to GitHub issues, and uses those issues as the work queue.
+	    </p>
     <div class="token-row">
       <a class="btn secondary" href="/projects/new">Add project</a>
     </div>
@@ -26,20 +25,18 @@
 
 <section class="card">
   <div class="card-header">
-    <span class="pill">2</span> Check constitution status
+	    <span class="pill">2</span> Connect GitHub tickets
   </div>
   <div class="card-body stack">
-    <p>
-      Open the project detail page and find the Constitution section. Green pills mean the file was
-      detected; grey means it's missing. The three required files are
-      <code>VISION.md</code>, <code>SPEC.md</code>, and <code>ROADMAP.md</code> — without them,
-      planning will not start. Recommended additions are <code>ARCHITECTURE.md</code>,
-      <code>DECISIONS.md</code>, and <code>QUALITY_BAR.md</code>.
-    </p>
-    <p>
-      Use the built-in constitution editor to create or update any of these files directly from the UI.
-      These documents are the primary input agents use when forming plans.
-    </p>
+	    <p>
+	      Open the project detail page, enable GitHub sync, then click <strong>Pull GitHub issues</strong>.
+	      A human-created GitHub issue becomes a Yeet ticket, gets assigned to an agent role, and is
+	      closed after the agent ships the work.
+	    </p>
+	    <p>
+	      Reference docs such as <code>VISION.md</code>, <code>SPEC.md</code>, and <code>ARCHITECTURE.md</code>
+	      still help agents make better choices, but they no longer drive the queue.
+	    </p>
     <div class="token-row">
       <a class="btn secondary" href="/projects">Open projects</a>
     </div>
@@ -52,9 +49,9 @@
   </div>
   <div class="card-body stack">
     <p>
-      Each project uses up to eight specialist roles: Planner, Architect, Implementer, Tester, Coder, QA, Reviewer, and Visual.
-      Each role can be assigned a different LLM model to balance cost and capability. All core
-      roles must be enabled before planning will run.
+	      Each project uses specialist roles such as Architect, Implementer, Tester, Coder, QA, and Reviewer.
+	      Each role can be assigned a different LLM model to balance cost and capability. Keep at least
+	      one implementation-capable role enabled for ticket work.
     </p>
     <p>
       The Implementer plans the concrete code changes (which files, what approach, what to test),
@@ -73,10 +70,10 @@
   </div>
   <div class="card-body stack">
     <p>
-      yeet2 has three autonomy modes. <strong>Manual</strong> — nothing runs automatically; you
-      trigger planning and dispatch by hand. <strong>Supervised</strong> — the loop plans missions
-      automatically but waits for your approval before dispatching tasks. <strong>Autonomous</strong>
-      — full self-driving: the loop plans, dispatches, creates PRs, and merges without intervention.
+	      yeet2 has three autonomy modes. <strong>Manual</strong> — nothing runs automatically; you
+	      pull tickets and dispatch by hand. <strong>Supervised</strong> — the loop pulls GitHub issues
+	      automatically but waits before dispatching tasks. <strong>Autonomous</strong>
+	      — full self-driving: the loop pulls tickets, dispatches, creates PRs, and merges by policy.
     </p>
     <p>
       Start with <strong>Supervised</strong>. It lets you review what the agents intend to do before
@@ -87,18 +84,17 @@
 
 <section class="card">
   <div class="card-header">
-    <span class="pill">5</span> Trigger the first plan
+	    <span class="pill">5</span> Start from a ticket
   </div>
   <div class="card-body stack">
-    <p>
-      Click <strong>Plan</strong> on the project detail page, or switch autonomy to Supervised or
-      Autonomous and wait for the loop to fire. yeet2 reads the constitution, generates a mission, and
-      breaks it into tasks assigned to each specialist role.
-    </p>
-    <p>
-      The Architect validates scope and design, the Implementer plans the changes, the Tester writes
-      test cases, the Coder writes the code, QA verifies correctness, and the Reviewer checks everything before the branch is merged.
-    </p>
+	    <p>
+	      Create a GitHub issue with the outcome you want. Yeet imports it into the
+	      <strong>GitHub source-of-truth inbox</strong>, assigns a role from labels, and runs the agent.
+	    </p>
+	    <p>
+	      Use labels such as <code>role:coder</code>, <code>yeet2:implementer</code>, <code>p1</code>,
+	      or <code>blocked</code> to steer ownership, priority, and state.
+	    </p>
     <div class="token-row">
       <a class="btn secondary" href="/missions">View missions</a>
     </div>

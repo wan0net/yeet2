@@ -266,12 +266,12 @@ All variables live in `.env`. Full defaults are in `.env.example`.
 ## Register Your First Project
 
 1. Open the Control UI → **Projects → Add project**
-2. Enter a name, repo URL or local path, and default branch
-3. Submit — the API clones the repo and scans for constitution files
-4. Open the project detail. The **Constitution** section shows pills for detected files (`VISION.md`, `SPEC.md`, etc.)
-5. Once constitution files are detected the project is ready for planning
+2. Enter a name, GitHub repo URL, and default branch
+3. Submit — the API clones the repo and links GitHub metadata
+4. Open the project detail. Enable **GitHub sync** and click **Pull GitHub issues**
+5. Once issues are imported, the project is ready for ticket-driven execution
 
-Constitution files are read from the `docs/` directory of the registered repo.
+Reference docs are read from the `docs/` directory of the registered repo when present, but GitHub issues are the work queue.
 
 ---
 
@@ -281,8 +281,8 @@ To register yeet2 as its own project on a fresh install:
 
 1. Set `YEET2_PROJECTS_DIR=/var/lib/yeet2/projects` in `.env` (already the default in compose files)
 2. Register via the UI: name `forgeyard`, repo `https://github.com/wan0net/yeet2`, branch `main`
-3. Set autonomy to **Supervised** before the first plan run
-4. Constitution detection should show pills for all docs in `docs/`
+3. Set autonomy to **Supervised** before the first ticket run
+4. Create or choose a GitHub issue, then click **Pull GitHub issues**
 
 ---
 

@@ -109,7 +109,7 @@ For the existing Yeet machines:
 
 Workers register with the API and heartbeat their executor mode/capabilities. Dispatch prefers healthy role-capable workers, falls back to any healthy git-capable worker, then falls back to `YEET2_EXECUTOR_BASE_URL`.
 
-## 6. Make The Constitution Useful
+## 6. Add Reference Context
 
 yeet2 works best when the repo contains:
 
@@ -120,17 +120,17 @@ yeet2 works best when the repo contains:
 - `docs/DECISIONS.md`
 - `docs/QUALITY_BAR.md`
 
-If they do not exist, use the in-app constitution interview and editor to create enough context before turning on autonomy.
+These files are reference context for agents. They are helpful, but they do not drive the queue; GitHub issues do.
 
 ## 7. Run The Project
 
 Recommended first run:
 
 1. Set autonomy to **Supervised**
-2. Click **Plan**
-3. Open **Tickets**
-4. Approve the first decision ticket
-5. Watch **Tickets** for execution, escalation, and decision tickets
+2. Create a GitHub issue describing the desired outcome
+3. Click **Pull GitHub issues**
+4. Open **Tickets**
+5. Watch the imported ticket move through execution, PR creation, and completion
 6. Drill into **Jobs** only when you need raw logs, branches, artifacts, or worker details
 
 When the first full mission succeeds, move to **Autonomous** only after checking:

@@ -8,46 +8,34 @@ This guide walks you through registering your first project, configuring autonom
 
 Go to **Projects → Add project** in the Control UI.
 
-Enter a name, a repo URL (or an absolute local path), and the default branch you want yeet2 to work against. On save, yeet2 clones the repo and scans the `docs/` directory for constitution files.
+Enter a name, a GitHub repo URL, and the default branch you want yeet2 to work against. On save, yeet2 clones the repo and links the project to GitHub issues.
 
 The repo must be accessible to the yeet2 server process. For remote repos, make sure SSH keys or tokens are configured in the environment. For local paths, the path must be readable by the server.
 
 ---
 
-## Step 2: Check constitution status
+## Step 2: Connect GitHub tickets
 
-Open the project detail page. Find the **Constitution** section and look at the file pills.
+Open the project detail page. In **GitHub sync**, enable sync and click **Pull GitHub issues**.
 
-- **Green pill** — the file was detected in `docs/`
-- **Grey pill** — the file is missing
+The normal intake workflow is:
 
-**Required files** (planning will not start without these):
+1. A human creates a GitHub issue describing the desired outcome
+2. Yeet imports that issue as a ticket
+3. An AI agent picks it up, works in a branch, and opens a PR
+4. Yeet comments progress back on the issue and closes it when complete
 
-| File | Purpose |
-|------|---------|
-| `VISION.md` | What the project is trying to achieve and why |
-| `SPEC.md` | Feature and behaviour requirements |
-| `ROADMAP.md` | Prioritised list of work items |
-
-**Recommended files** (improve plan quality significantly):
-
-| File | Purpose |
-|------|---------|
-| `ARCHITECTURE.md` | System structure and key design decisions |
-| `DECISIONS.md` | ADR log — why certain approaches were chosen |
-| `QUALITY_BAR.md` | Acceptance criteria and non-functional requirements |
-
-Use the built-in **constitution editor** in the project detail page to create or edit any of these files directly from the UI. Agents read these documents as their primary context when forming plans.
+Labels can steer execution: `yeet2:implementer`, `role:coder`, `role:qa`, `p0`, `p1`, `blocked`. If no role label is present, Yeet treats the issue as implementation work.
 
 ---
 
 ## Step 3: Configure roles
 
-Each project has five specialist roles that map to stages in the execution pipeline:
+Each project has specialist roles that map to work types:
 
 | Role | Responsibility |
 |------|---------------|
-| Planner | Generates the mission and task breakdown |
+| Planner | Triage and decomposition when explicitly requested |
 | Architect | Validates scope, design, and approach before implementation |
 | Implementer | Writes the code |
 | QA | Verifies correctness and runs checks |
@@ -55,7 +43,7 @@ Each project has five specialist roles that map to stages in the execution pipel
 
 Roles are configured on the project detail page under the **Roles** section. Each role can be assigned a different LLM model — use this to balance cost against capability (e.g. a cheaper model for QA, a more capable model for Architect).
 
-All five core roles must be enabled. If any role is disabled, planning will refuse to start.
+At minimum, keep the implementation role enabled for ticket-driven coding work.
 
 ---
 
@@ -64,33 +52,26 @@ All five core roles must be enabled. If any role is disabled, planning will refu
 Autonomy mode controls how much yeet2 does without waiting for you. There are three options:
 
 **Manual**
-Nothing runs automatically. You trigger planning and task dispatch by hand from the project detail page. Use this if you want full control over every step.
+Nothing runs automatically. You pull GitHub issues and dispatch tasks by hand from the project detail page. Use this if you want full control over every step.
 
 **Supervised**
-The autonomy loop plans missions automatically on a schedule, but pauses before dispatching any tasks. You review the generated plan from **Tickets** and approve it before execution begins. Recommended for new projects.
+The autonomy loop pulls GitHub issues on a schedule, but pauses before dispatching work. Recommended for new projects.
 
 **Autonomous**
-Full self-driving mode. The loop plans, dispatches tasks, creates pull requests, and merges — all without human intervention. Use this only after you trust the constitution files and role configuration.
+Full self-driving mode. The loop pulls GitHub issues, dispatches tasks, creates pull requests, and can merge according to project policy.
 
 Set autonomy mode from the project detail page. You can change it at any time; the change takes effect on the next loop cycle.
 
 ---
 
-## Step 5: Trigger the first plan
+## Step 5: Start from a ticket
 
-With roles configured and constitution files in place, trigger a plan:
+With roles configured, create a GitHub issue and pull it into Yeet:
 
-- **Manual mode**: click **Plan** on the project detail page.
-- **Supervised / Autonomous mode**: wait for the next scheduled loop cycle, or click **Plan** to force one immediately.
+- **Manual mode**: click **Pull GitHub issues**, then dispatch a ticket by hand.
+- **Supervised / Autonomous mode**: wait for the next scheduled loop cycle, or click **Run** to force one immediately.
 
-yeet2 reads the constitution files and generates a **mission** — a structured description of what needs to be done. The mission is then broken into tasks, one per role:
-
-1. Architect task: validate scope and design approach
-2. Implementer task: write the code
-3. QA task: verify and test
-4. Reviewer task: review the final diff
-
-You can see the generated mission and its tasks on the **Missions** page.
+Yeet imports issues into the **GitHub source-of-truth inbox** mission. You can see the imported tickets on the project overview, **Tickets**, and **Missions** pages.
 
 ---
 

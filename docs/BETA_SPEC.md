@@ -157,7 +157,7 @@ Pre-built role sets for common workflows. The operator picks a template at proje
 
 ### Constitution Generalisation
 
-The "constitution" concept (project-level source of truth documents) generalises naturally:
+The "constitution" concept now means project-level reference documents. It generalises naturally:
 
 | Software | Generic | Purpose |
 |---|---|---|

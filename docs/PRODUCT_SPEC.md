@@ -4,7 +4,7 @@
 
 yeet2 is a self-hosted autonomous software-team platform.
 
-It manages software projects from a defined project constitution, continuously plans work from that constitution, dispatches specialist agents to execute tasks, and escalates to humans only when needed.
+It manages software projects from GitHub issues: humans create tickets, Yeet imports them, dispatches specialist agents to execute them, pushes code through PRs, and escalates only when needed.
 
 yeet2 is a new project. It may borrow ideas from Yeet, especially around distributed execution and machine-aware job routing, but it should be implemented as a fresh system with clear internal abstractions.
 
@@ -16,8 +16,8 @@ The operator should not need to micromanage day-to-day work.
 
 The system should:
 
-- understand a project constitution
-- generate and maintain backlog items
+- treat GitHub issues as the source-of-truth backlog
+- use project reference docs to ground implementation choices
 - assign work to specialist agents
 - execute jobs on appropriate workers
 - persist all state and decisions
@@ -29,12 +29,12 @@ A technical operator runs yeet2 on a self-hosted machine and attaches one or mor
 
 For each attached project, yeet2 should:
 
-1. read the project constitution
-2. derive meaningful tasks from the roadmap and current codebase state
-3. assign those tasks to specialist agents
+1. pull human-created GitHub issues
+2. map issue labels to role, priority, and state
+3. assign tickets to specialist agents
 4. execute implementation and validation jobs
-5. produce artifacts, logs, and blockers
-6. continue progressing the project over time
+5. open PRs, produce artifacts, logs, and blockers
+6. comment progress back to GitHub and close completed issues
 
 ## Example Project
 
@@ -75,15 +75,14 @@ yeet2 must be built around the following external tools and responsibilities.
 
 ### OpenSpec
 
-Use **OpenSpec** as the conceptual basis for project constitutions and spec-driven development.
+Use **OpenSpec** as optional reference documentation for durable project intent and spec-driven development.
 
 OpenSpec is responsible for:
 
-- defining the project constitution structure
-- grounding work in durable project documents
-- keeping planning aligned to explicit project intent rather than ephemeral prompts
+- grounding ticket execution in durable project documents
+- keeping implementation aligned to explicit project intent rather than ephemeral prompts
 
-In yeet2, OpenSpec-style project files are the source of truth for project intent.
+In yeet2, OpenSpec-style project files are reference context. GitHub issues are the source of truth for work.
 
 ### CrewAI
 
@@ -131,7 +130,7 @@ Use **GitHub** as the project work ledger and collaboration plane.
 GitHub is responsible for:
 
 - repository hosting
-- issues as durable work items or backlog references
+- issues as durable work items and the source-of-truth backlog
 - pull requests as merge/review artifacts
 - comments as escalation and blocker surfaces
 - traceable history of project changes
@@ -250,7 +249,8 @@ This means:
 - work must be durable and replayable
 - execution backends must be replaceable
 - orchestration must not be tightly coupled to one agent runtime
-- constitutions must remain the source of truth
+- GitHub issues must remain the source of truth for work
+- project reference docs must remain durable context for agents
 
 ## Implementation Defaults
 
@@ -400,7 +400,7 @@ Optional but strongly recommended:
 - `docs/DECISIONS.md`
 - `docs/QUALITY_BAR.md`
 
-The Brain must treat these files as the project constitution and source of truth.
+The Brain should treat these files as durable project context. GitHub issues remain the source of truth for work intake and completion state.
 
 ## Core Domain Objects
 
@@ -523,10 +523,10 @@ Each configured staff member should still declare a primary role, but there may 
 
 Responsibilities:
 
-- read the constitution
-- generate and refine tasks
+- read project reference docs
+- triage and refine GitHub issues when requested
 - prioritize work
-- keep tasks aligned to roadmap and current repo state
+- keep tickets aligned to project reference docs and current repo state
 - create blockers when the spec is unclear
 
 ### Architect
@@ -578,16 +578,15 @@ Implement this exact flow:
 
 1. Operator creates a project in yeet2 Control.
 2. yeet2 clones or attaches the repository locally.
-3. yeet2 reads and indexes the constitution files.
-4. Planner creates an initial mission from the roadmap/spec.
-5. Planner generates at least 3 concrete tasks.
-6. Architect validates the first task.
-7. Implementer dispatches the first coding task through the execution adapter.
-8. OpenHands executes the task in an isolated workspace or branch.
-9. QA runs verification on the result.
-10. Reviewer records outcome.
-11. If blocked, a blocker is created and surfaced in UI.
-12. All mission, task, and job state remain visible in the UI.
+3. A human creates a GitHub issue describing the desired outcome.
+4. yeet2 imports GitHub issues into the source-of-truth inbox mission.
+5. Labels map each issue to role, priority, and state.
+6. An implementation-capable agent dispatches the first coding ticket through the execution adapter.
+7. OpenHands, Codex, Claude, or another harness executes the ticket in an isolated workspace or branch.
+8. QA or reviewer stages run when configured by role labels or project policy.
+9. If blocked, a blocker is created and surfaced in UI and GitHub.
+10. Yeet opens or updates a PR, comments progress back to GitHub, and closes completed issues.
+11. All mission, task, job, PR, and issue state remain visible in the UI.
 
 ## GitHub Integration Expectations
 
@@ -724,7 +723,8 @@ For MVP:
 - Redis may be used for queueing/caching
 - CrewAI is the initial orchestration engine
 - OpenHands is the initial coding worker
-- OpenSpec-style constitutions are the source of truth
+- GitHub issues are the source of truth for work
+- OpenSpec-style docs are reference context
 - GitHub is the primary external work ledger
 - Nomad is the intended long-term execution fabric
 - services should be modular and independently replaceable
@@ -762,11 +762,11 @@ Use a monorepo structure:
 - detect constitution files
 - show constitution status in UI
 
-### Milestone 3: Planning Loop
+### Milestone 3: Ticket Sync Loop
 
-- parse constitution
-- generate mission
-- generate tasks
+- pull GitHub issues
+- create source-of-truth inbox mission
+- map labels to role, priority, and status
 - persist and display tasks
 
 ### Milestone 4: Execution Loop
@@ -785,7 +785,7 @@ Use a monorepo structure:
 ### Milestone 6: End-to-End Demo
 
 - run yeet2 against `forgeyard`
-- generate tasks from constitution
+- import a GitHub issue as a ticket
 - execute one real task
 - display full trail in UI
 
@@ -795,9 +795,9 @@ The MVP is complete when:
 
 1. yeet2 can start on `10.42.10.101`
 2. a repository can be registered as a project
-3. constitution files are detected and parsed
-4. a mission can be created from the constitution
-5. at least 3 tasks can be generated and persisted
+3. GitHub sync can import repository issues
+4. a source-of-truth inbox mission can be created from GitHub issues
+5. imported tickets can be persisted with issue numbers
 6. at least 1 coding task can execute through OpenHands
 7. logs and job states are stored and viewable
 8. blocker creation and resolution are supported

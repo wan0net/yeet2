@@ -13,6 +13,7 @@ import {
   recordProjectAutonomyRun,
   refreshProjectActiveJobs,
   refreshProjectPullRequestState,
+  syncProjectGitHubIssues,
   type ProjectSummary
 } from "./projects";
 import { decideWorkflowAction } from "./planning";
@@ -129,6 +130,9 @@ function hasEnabledRoleDefinitions(project: ProjectSummary): boolean {
 }
 
 function needsInitialPlanning(project: ProjectSummary): boolean {
+  if (project.githubProjectSync) {
+    return false;
+  }
   const firstMission = project.missions[0] ?? null;
   return project.missions.length === 0 || firstMission?.tasks.length === 0;
 }
@@ -153,6 +157,10 @@ function hasQueuedBacklogMission(project: ProjectSummary): boolean {
 }
 
 function needsBacklogPlanning(project: ProjectSummary): boolean {
+  if (project.githubProjectSync) {
+    return false;
+  }
+
   if (hasQueuedBacklogMission(project)) {
     return false;
   }
@@ -657,6 +665,20 @@ export class AutonomyLoopManager {
     }
 
     let currentProject = project;
+    if (currentProject.githubProjectSync) {
+      try {
+        const synced = await syncProjectGitHubIssues(currentProject.id);
+        if (synced.project) {
+          currentProject = synced.project;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "GitHub issue sync failed";
+        this.logger.error({ error, projectId: currentProject.id }, "Autonomy loop GitHub issue sync failed");
+        await this.persistTelemetry(currentProject, "skip", "error", message);
+        return;
+      }
+    }
+
     if (hasInFlightJobs(currentProject)) {
       try {
         const refreshed = await refreshProjectActiveJobs(currentProject.id);

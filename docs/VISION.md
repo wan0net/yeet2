@@ -4,7 +4,7 @@
 
 yeet2 is a self-hosted autonomous software factory.
 
-An operator should be able to define a software project once, attach its repository, and let yeet2 continue planning, implementing, validating, reviewing, and refining that project over time.
+An operator should be able to attach a repository, create human-readable GitHub tickets, and let yeet2 implement, validate, review, and close those tickets over time.
 
 ## Product Intent
 
@@ -12,8 +12,8 @@ yeet2 exists to reduce day-to-day micromanagement for technical operators while 
 
 The system should:
 
-- treat the project constitution as the source of truth
-- continuously derive and maintain meaningful work
+- treat GitHub issues as the source of truth for work
+- use project documents as reference context, not the primary work queue
 - route work to specialist agents and capable workers
 - persist decisions, artifacts, and blockers
 - escalate to humans only when ambiguity, risk, or policy requires it
