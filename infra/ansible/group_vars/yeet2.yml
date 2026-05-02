@@ -26,6 +26,7 @@ yeet2_llm_base_url: ""
 
 yeet2_brain_bearer_token: ""
 yeet2_executor_bearer_token: ""
+yeet2_api_bearer_token: ""
 
 yeet2_codex_model: ""
 yeet2_claude_model: ""
