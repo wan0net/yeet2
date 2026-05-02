@@ -15,18 +15,3 @@ yeet2_brain_planner_backend: auto
 yeet2_brain_crewai_enabled: false
 yeet2_autonomy_loop_enabled: true
 yeet2_local_worker_enabled: false
-
-yeet2_openrouter_api_key: ""
-yeet2_openai_api_key: ""
-yeet2_anthropic_api_key: ""
-yeet2_github_token: ""
-yeet2_llm_api_key: ""
-yeet2_llm_model: ""
-yeet2_llm_base_url: ""
-
-yeet2_brain_bearer_token: ""
-yeet2_executor_bearer_token: ""
-yeet2_api_bearer_token: ""
-
-yeet2_codex_model: ""
-yeet2_claude_model: ""
