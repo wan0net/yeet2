@@ -300,6 +300,9 @@ In the UI:
 - **Project → Constitution** — pills for detected files
 - **Chat tab** — agents post progress messages here as they work
 - **Tickets page** — decision, escalation, work, and execution tickets are the operating queue
+- **Project overview → GitHub sync** — enable sync and click **Pull GitHub issues** to import GitHub issues as Yeet tickets
+
+For GitHub-source-of-truth operation, configure the GitHub PAT in **Settings**, register projects with GitHub repo URLs, and keep work intake in GitHub issues. Yeet imports issues into project tickets, routes work to capable workers, and posts progress back to linked GitHub issues.
 
 ---
 

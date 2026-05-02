@@ -26,6 +26,7 @@ import {
   listProjectApprovals,
   refreshProjectActiveJobs,
   refreshProjectJob,
+  syncProjectGitHubIssues,
   applyProjectBlockerApproval,
   dispatchTask,
   getRegisteredProject,
@@ -906,6 +907,31 @@ export const registerProjectRoutes: FastifyPluginAsync<{ loopManager: AutonomyLo
     } catch (error) {
       app.log.error(error);
       return reply.code(400).send({ error: "update_failed", message: "Unable to update github sync setting" });
+    }
+  });
+
+  app.post("/projects/:projectId/github/issues/sync", async (request, reply) => {
+    const { projectId } = request.params as { projectId?: string };
+    if (!projectId) {
+      return reply.code(400).send({ error: "validation_error", message: "projectId is required" });
+    }
+
+    try {
+      const result = await syncProjectGitHubIssues(projectId);
+      return reply.code(200).send(result);
+    } catch (error) {
+      if (error instanceof ProjectGitHubIssueError) {
+        return reply.code(error.statusCode).send({
+          error: error.code,
+          message: error.message
+        });
+      }
+
+      app.log.error(error);
+      return reply.code(500).send({
+        error: "github_issue_sync_failed",
+        message: "Unable to sync GitHub issues"
+      });
     }
   });
 

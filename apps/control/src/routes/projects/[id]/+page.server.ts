@@ -100,6 +100,17 @@ export const actions: Actions = {
     } catch (err) {
       return fail(400, { actionError: err instanceof Error ? err.message : "Unable to update GitHub sync" });
     }
+    throw redirect(303, projectRedirect(params.id, returnTab));
+  },
+  syncGithubIssues: async ({ params, request }) => {
+    const form = await request.formData();
+    const returnTab = String(form.get("returnTab") || "").trim();
+
+    try {
+      await postJson(`/projects/${params.id}/github/issues/sync`, {});
+    } catch (err) {
+      return fail(400, { actionError: err instanceof Error ? err.message : "Unable to pull GitHub issues" });
+    }
 
     throw redirect(303, projectRedirect(params.id, returnTab));
   },

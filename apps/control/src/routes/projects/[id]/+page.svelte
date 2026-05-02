@@ -44,6 +44,11 @@
     return tab === "agents" || tab === "chat" || tab === "office" ? tab : "overview";
   })());
 
+  function githubIssueUrl(issueNumber: number | null | undefined): string | null {
+    if (!issueNumber || !project.githubRepoOwner || !project.githubRepoName) return null;
+    return `https://github.com/${project.githubRepoOwner}/${project.githubRepoName}/issues/${issueNumber}`;
+  }
+
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
@@ -507,6 +512,11 @@
         {project.githubProjectSync ? "Disable sync" : "Enable sync"}
       </button>
     </form>
+    <form method="POST">
+      <input name="returnTab" type="hidden" value="overview" />
+      <button formaction="?/syncGithubIssues" type="submit">Pull GitHub issues</button>
+    </form>
+    <div class="muted">GitHub is the source of truth; Yeet imports issues as tickets and reports work back there.</div>
   </div>
 </section>
 {/if}
@@ -560,6 +570,9 @@
               {:else}
                 <span class="pipeline-badge">{task.status}</span>
               {/if}
+              {#if githubIssueUrl(task.githubIssueNumber)}
+                <a class="pipeline-badge" href={githubIssueUrl(task.githubIssueNumber) ?? undefined} target="_blank" rel="noreferrer">GH #{task.githubIssueNumber}</a>
+              {/if}
             </div>
             {#if latestJob}
               <div class="pipeline-verify-row">
@@ -602,6 +615,9 @@
                 <div>
                   <strong>{entry.task.title}</strong>
                   <div class="muted">{entry.task.agentRole} · {entry.task.status}</div>
+                  {#if githubIssueUrl(entry.task.githubIssueNumber)}
+                    <a href={githubIssueUrl(entry.task.githubIssueNumber) ?? undefined} target="_blank" rel="noreferrer">GitHub #{entry.task.githubIssueNumber}</a>
+                  {/if}
                 </div>
               {/each}
             {/if}

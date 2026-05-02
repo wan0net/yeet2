@@ -17,6 +17,18 @@ export interface GitHubIssueResult {
   htmlUrl: string;
 }
 
+export interface GitHubIssueListItem {
+  number: number;
+  nodeId: string;
+  title: string;
+  body: string;
+  state: "open" | "closed";
+  htmlUrl: string;
+  labels: string[];
+  updatedAt: string | null;
+  closedAt: string | null;
+}
+
 export interface GitHubPullRequestInput {
   token: string | undefined;
   repository: GitHubRepositoryRef;
@@ -55,7 +67,7 @@ export class GitHubBranchError extends Error {
 
 export class GitHubIssueError extends Error {
   constructor(
-    public readonly code: "missing_token" | "invalid_repository_url" | "issue_create_failed",
+    public readonly code: "missing_token" | "invalid_repository_url" | "issue_create_failed" | "issue_list_failed",
     message: string,
     public readonly statusCode: number
   ) {
@@ -548,6 +560,90 @@ export async function createGitHubIssue(input: GitHubIssueInput & { repository: 
     number: candidate.number,
     htmlUrl: candidate.html_url
   };
+}
+
+export async function listGitHubIssues(input: {
+  token: string | undefined;
+  repository: GitHubRepositoryRef;
+  state?: "open" | "closed" | "all";
+}): Promise<GitHubIssueListItem[]> {
+  if (!input.token) {
+    throw new GitHubIssueError("missing_token", "GITHUB_TOKEN is required to list GitHub issues.", 503);
+  }
+
+  const url = new URL(`${input.repository.apiBaseUrl}/repos/${input.repository.owner}/${input.repository.repo}/issues`);
+  url.searchParams.set("state", input.state ?? "all");
+  url.searchParams.set("per_page", "100");
+  url.searchParams.set("sort", "updated");
+  url.searchParams.set("direction", "desc");
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${input.token}`,
+      "User-Agent": "yeet2",
+      "X-GitHub-Api-Version": "2022-11-28"
+    }
+  });
+
+  const rawText = await response.text();
+  let parsed: unknown = null;
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      throw new GitHubIssueError("issue_list_failed", `GitHub returned invalid JSON (${response.status}).`, 502);
+    }
+  }
+
+  if (!response.ok) {
+    const message = typeof parsed === "object" && parsed !== null && "message" in parsed ? String((parsed as Record<string, unknown>).message) : response.statusText;
+    throw new GitHubIssueError("issue_list_failed", message || "Unable to list GitHub issues.", 502);
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new GitHubIssueError("issue_list_failed", "GitHub returned an invalid issue list payload.", 502);
+  }
+
+  return parsed.flatMap((candidate) => {
+    if (typeof candidate !== "object" || candidate === null) return [];
+    const issue = candidate as Record<string, unknown>;
+    if (typeof issue.pull_request === "object" && issue.pull_request !== null) return [];
+    if (
+      typeof issue.number !== "number" ||
+      typeof issue.node_id !== "string" ||
+      typeof issue.title !== "string" ||
+      typeof issue.html_url !== "string" ||
+      (issue.state !== "open" && issue.state !== "closed")
+    ) {
+      return [];
+    }
+
+    const labels = Array.isArray(issue.labels)
+      ? issue.labels.flatMap((label) => {
+          if (typeof label === "string") return [label];
+          if (typeof label === "object" && label !== null && typeof (label as Record<string, unknown>).name === "string") {
+            return [(label as Record<string, unknown>).name as string];
+          }
+          return [];
+        })
+      : [];
+
+    return [
+      {
+        number: issue.number,
+        nodeId: issue.node_id,
+        title: issue.title,
+        body: typeof issue.body === "string" ? issue.body : "",
+        state: issue.state,
+        htmlUrl: issue.html_url,
+        labels,
+        updatedAt: typeof issue.updated_at === "string" ? issue.updated_at : null,
+        closedAt: typeof issue.closed_at === "string" ? issue.closed_at : null
+      }
+    ];
+  });
 }
 
 export async function commentOnGitHubIssue(input: {

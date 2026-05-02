@@ -50,12 +50,14 @@ import {
   commentOnGitHubIssue,
   closeGitHubIssue,
   ensureGitHubLabels,
+  listGitHubIssues,
   deleteGitHubBranchRef,
   fetchGitHubPullRequest,
   mergeGitHubPullRequest,
   parseGitHubRepositoryUrl,
   GitHubIssueError,
   GitHubPullRequestError,
+  type GitHubIssueListItem,
   type GitHubPullRequestDetails
 } from "./github";
 import { inspectConstitution, type ConstitutionInspection } from "./constitution";
@@ -278,6 +280,8 @@ export interface ProjectTaskSummary {
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason: string | null;
+  githubIssueNumber: number | null;
+  githubIssueUrl: string | null;
   dispatchable: boolean;
   dispatchBlockedReason: string | null;
   jobs: ProjectJobSummary[];
@@ -466,7 +470,12 @@ export class ProjectBlockerError extends Error {
 
 export class ProjectGitHubIssueError extends Error {
   constructor(
-    public readonly code: "project_not_found" | "blocker_not_found" | "invalid_repo_url" | "github_not_configured" | "github_issue_failed",
+    public readonly code:
+      | "project_not_found"
+      | "blocker_not_found"
+      | "invalid_repo_url"
+      | "github_not_configured"
+      | "github_issue_failed",
     message: string,
     public readonly statusCode: number
   ) {
@@ -760,6 +769,25 @@ export interface ProjectDetailResponse {
   project: ProjectSummary | null;
 }
 
+export interface ProjectGitHubIssueSyncSummary {
+  imported: number;
+  updated: number;
+  completed: number;
+  issues: Array<{
+    number: number;
+    title: string;
+    taskId: string;
+    status: ProjectTaskStatus;
+    agentRole: ProjectRoleKey;
+    action: "created" | "updated" | "unchanged";
+    url: string;
+  }>;
+}
+
+export interface ProjectGitHubIssueSyncResponse extends ProjectDetailResponse {
+  sync: ProjectGitHubIssueSyncSummary;
+}
+
 type ProjectWithRelations = DbProject & {
   constitution?: Constitution | null;
   roleDefinitions: Array<{
@@ -791,6 +819,8 @@ const DISPATCHABLE_TASK_ROLES = ["architect", "implementer", "tester", "coder", 
 const DISPATCHABLE_TASK_STATUSES = ["pending", "ready", "failed"] as const;
 const MAX_DISPATCH_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
+const GITHUB_INBOX_MISSION_TITLE = "GitHub source-of-truth inbox";
+const GITHUB_ISSUE_ROLE_KEYS = ["planner", "architect", "implementer", "tester", "coder", "qa", "reviewer", "visual"] as const satisfies readonly ProjectRoleKey[];
 
 import { pickCharacters } from "@yeet2/domain";
 
@@ -1065,6 +1095,45 @@ function executorHeaders(init: Record<string, string> = {}): HeadersInit {
 function normalizeOptionalString(value: string | null | undefined): string | null {
   const normalized = value?.trim();
   return normalized ? normalized : null;
+}
+
+function normalizeGitHubLabel(label: string): string {
+  return label.trim().toLowerCase();
+}
+
+function githubIssueRoleFromLabels(labels: string[]): ProjectRoleKey {
+  const normalizedLabels = labels.map(normalizeGitHubLabel);
+  for (const label of normalizedLabels) {
+    const candidate = label.match(/^(?:yeet2|role)[:/](.+)$/)?.[1] ?? label;
+    if (GITHUB_ISSUE_ROLE_KEYS.some((role) => role === candidate)) {
+      return candidate as ProjectRoleKey;
+    }
+  }
+  return "planner";
+}
+
+function githubIssuePriorityFromLabels(labels: string[]): number {
+  const labelSet = new Set(labels.map(normalizeGitHubLabel));
+  if (labelSet.has("critical") || labelSet.has("p0") || labelSet.has("priority:critical")) return 0;
+  if (labelSet.has("high") || labelSet.has("p1") || labelSet.has("priority:high")) return 10;
+  if (labelSet.has("medium") || labelSet.has("p2") || labelSet.has("priority:medium")) return 50;
+  if (labelSet.has("low") || labelSet.has("p3") || labelSet.has("priority:low")) return 100;
+  return 50;
+}
+
+function githubIssueStatusFromIssue(issue: GitHubIssueListItem): ProjectTaskStatus {
+  if (issue.state === "closed") return "complete";
+  const labelSet = new Set(issue.labels.map(normalizeGitHubLabel));
+  if (labelSet.has("blocked") || labelSet.has("yeet2:blocked")) return "blocked";
+  return "ready";
+}
+
+function githubIssueTaskDescription(issue: GitHubIssueListItem): string {
+  return [`GitHub issue: ${issue.htmlUrl}`, "", issue.body.trim() || "No issue body was provided."].join("\n");
+}
+
+function githubIssueTaskAcceptanceCriteria(issue: GitHubIssueListItem): string[] {
+  return [`Keep GitHub issue #${issue.number} as the source of truth.`, "Post progress, blockers, and completion back to GitHub."];
 }
 
 function projectsBaseDir(): string {
@@ -1651,6 +1720,8 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
     acceptanceCriteria,
     attempts: task.attempts,
     blockerReason: task.blockerReason ?? null,
+    githubIssueNumber: task.githubIssueNumber ?? null,
+    githubIssueUrl: null,
     dispatchable,
     dispatchBlockedReason: dispatchable ? null : dispatchBlockedReasonForTask(task),
     jobs
@@ -4034,6 +4105,150 @@ export async function applyProjectBlockerApproval(
     action,
     ...(mergedJob ? { job: mergedJob } : {})
   };
+}
+
+export async function syncProjectGitHubIssues(projectId: string): Promise<ProjectGitHubIssueSyncResponse> {
+  const project = await getProjectWithRelations(projectId);
+  if (!project) {
+    throw new ProjectGitHubIssueError("project_not_found", "Project not found", 404);
+  }
+
+  if (!project.repoUrl) {
+    throw new ProjectGitHubIssueError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  const repository = parseGitHubRepositoryUrl(project.repoUrl);
+  if (!repository) {
+    throw new ProjectGitHubIssueError("invalid_repo_url", "Project repoUrl must point to a GitHub repository.", 400);
+  }
+
+  const token = await resolveGitHubToken();
+  let issues: GitHubIssueListItem[];
+  try {
+    issues = await listGitHubIssues({ token: token ?? undefined, repository, state: "all" });
+  } catch (error) {
+    if (error instanceof GitHubIssueError) {
+      throw new ProjectGitHubIssueError(
+        error.code === "missing_token" ? "github_not_configured" : error.code === "invalid_repository_url" ? "invalid_repo_url" : "github_issue_failed",
+        error.message,
+        error.statusCode
+      );
+    }
+    throw new ProjectGitHubIssueError("github_issue_failed", error instanceof Error ? error.message : "Unable to sync GitHub issues", 502);
+  }
+
+  const inboxMission =
+    project.missions.find((mission) => mission.createdBy === "github" && mission.title === GITHUB_INBOX_MISSION_TITLE && mission.status !== "complete") ??
+    (await prisma.mission.create({
+      data: {
+        projectId: project.id,
+        title: GITHUB_INBOX_MISSION_TITLE,
+        objective: "Track GitHub issues as the source-of-truth work queue for Yeet agents.",
+        status: "planned",
+        createdBy: "github",
+        startedAt: null
+      }
+    }));
+
+  const existingTasks = new Map<number, ProjectTaskWithRelations>();
+  for (const mission of project.missions) {
+    for (const task of mission.tasks) {
+      if (task.githubIssueNumber != null && !existingTasks.has(task.githubIssueNumber)) {
+        existingTasks.set(task.githubIssueNumber, task);
+      }
+    }
+  }
+
+  const sync: ProjectGitHubIssueSyncSummary = { imported: 0, updated: 0, completed: 0, issues: [] };
+
+  for (const issue of issues) {
+    const agentRole = githubIssueRoleFromLabels(issue.labels);
+    const status = githubIssueStatusFromIssue(issue);
+    const title = `#${issue.number} ${issue.title}`;
+    const assignedDefinition = firstEnabledRoleDefinitionForKey(project, agentRole);
+    const existingTask = existingTasks.get(issue.number) ?? null;
+    const taskData = {
+      title,
+      description: githubIssueTaskDescription(issue),
+      agentRole,
+      assignedRoleDefinitionId: assignedDefinition?.id ?? null,
+      assignedRoleDefinitionLabel: assignedDefinition?.label ?? null,
+      status,
+      priority: githubIssuePriorityFromLabels(issue.labels),
+      acceptanceCriteria: githubIssueTaskAcceptanceCriteria(issue),
+      blockerReason: status === "blocked" ? "Blocked in GitHub." : null,
+      githubIssueNumber: issue.number,
+      githubIssueNodeId: issue.nodeId
+    };
+
+    if (!existingTask) {
+      const createdTask = await prisma.task.create({
+        data: {
+          missionId: inboxMission.id,
+          ...taskData,
+          attempts: 0
+        }
+      });
+      sync.imported += 1;
+      if (status === "complete") sync.completed += 1;
+      sync.issues.push({ number: issue.number, title: issue.title, taskId: createdTask.id, status, agentRole, action: "created", url: issue.htmlUrl });
+      continue;
+    }
+
+    const nextStatus = existingTask.status === "running" && status === "ready" ? "running" : status;
+    const changed =
+      existingTask.title !== taskData.title ||
+      existingTask.description !== taskData.description ||
+      existingTask.agentRole !== taskData.agentRole ||
+      existingTask.status !== nextStatus ||
+      existingTask.priority !== taskData.priority ||
+      existingTask.githubIssueNodeId !== taskData.githubIssueNodeId;
+
+    if (changed) {
+      await prisma.task.update({
+        where: { id: existingTask.id },
+        data: {
+          ...taskData,
+          status: nextStatus
+        }
+      });
+      sync.updated += 1;
+    }
+    if (nextStatus === "complete") sync.completed += 1;
+    sync.issues.push({
+      number: issue.number,
+      title: issue.title,
+      taskId: existingTask.id,
+      status: nextStatus,
+      agentRole,
+      action: changed ? "updated" : "unchanged",
+      url: issue.htmlUrl
+    });
+  }
+
+  await prisma.project.update({ where: { id: project.id }, data: { githubProjectSync: true } });
+  await recordDecisionLog({
+    projectId: project.id,
+    missionId: inboxMission.id,
+    kind: "planning",
+    actor: "github",
+    summary: `Synced ${issues.length} GitHub issue${issues.length === 1 ? "" : "s"} into Yeet tickets`,
+    detail: {
+      source: "github",
+      repository: `${repository.owner}/${repository.repo}`,
+      imported: sync.imported,
+      updated: sync.updated,
+      completed: sync.completed,
+      issueNumbers: sync.issues.map((issue) => issue.number)
+    }
+  });
+
+  const refreshedProject = await loadProjectById(projectId);
+  if (!refreshedProject) {
+    throw new ProjectGitHubIssueError("project_not_found", "Project not found after GitHub issue sync", 404);
+  }
+
+  return { project: refreshedProject, sync };
 }
 
 export async function createProjectBlockerGitHubIssue(projectId: string, blockerId: string): Promise<ProjectDetailResponse> {

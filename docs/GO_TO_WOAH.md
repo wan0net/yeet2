@@ -97,6 +97,8 @@ In the UI:
 
 Repo URL registration is the preferred Docker path because API and Executor share the managed `projects_data` volume. If you attach a host checkout by local path, mount that exact path into both API and Executor containers.
 
+GitHub is the work source of truth. After registration, open the project overview, enable **GitHub sync**, then click **Pull GitHub issues**. Yeet imports repository issues into the **GitHub source-of-truth inbox** mission, keeps the GitHub issue number on each ticket, and reports agent progress back to that issue when work runs.
+
 ## Fleet Layout
 
 For the existing Yeet machines:
@@ -143,11 +145,11 @@ When the first full mission succeeds, move to **Autonomous** only after checking
 
 Daily loop:
 
-1. Open **Overview** for company health
-2. Work **Tickets** from top to bottom
-3. Read project **Chat** for handoffs and decision history
-4. Use **Jobs** for failed execution traces
-5. Use **Workers** if the queue is not moving
+1. Triage backlog, bugs, security findings, and follow-up work in GitHub issues
+2. Open the Yeet project overview and click **Pull GitHub issues**
+3. Work **Tickets** from top to bottom as Yeet turns imported issues into agent tasks
+4. Read project **Chat** for planner handoffs and decision history
+5. Use **Jobs** for failed execution traces and **Workers** if the queue is not moving
 
 Recovery loop:
 

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildGitHubCompareUrl,
   buildGitHubIssueBody,
   buildGitHubPullRequestBody,
   buildGitHubRepositoryUrl,
+  listGitHubIssues,
   parseGitHubRepositoryUrl,
   type GitHubRepositoryRef
 } from "../github.js";
@@ -23,6 +24,10 @@ function makeRef(overrides: Partial<GitHubRepositoryRef> = {}): GitHubRepository
     ...overrides
   };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // ---------------------------------------------------------------------------
 // parseGitHubRepositoryUrl
@@ -314,5 +319,56 @@ describe("buildGitHubPullRequestBody", () => {
     expect(body).toContain("- Job: job-1");
     expect(body).toContain("- Executor type: claude");
     expect(body).toContain("- Branch: feature/my-feature");
+  });
+});
+
+describe("listGitHubIssues", () => {
+  it("lists issues and skips pull requests", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify([
+          {
+            number: 7,
+            node_id: "I_kwDO",
+            title: "Fix deploy",
+            body: "Ship the fix",
+            state: "open",
+            html_url: "https://github.com/acme/rocket/issues/7",
+            updated_at: "2026-05-01T00:00:00Z",
+            closed_at: null,
+            labels: [{ name: "yeet2:implementer" }, "p1"]
+          },
+          {
+            number: 8,
+            node_id: "PR_kwDO",
+            title: "A pull request",
+            state: "open",
+            html_url: "https://github.com/acme/rocket/pull/8",
+            pull_request: {}
+          }
+        ]),
+        { status: 200 }
+      )
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const issues = await listGitHubIssues({ token: "ghp_test", repository: makeRef(), state: "all" });
+
+    const firstFetchCall = fetchMock.mock.calls[0] as unknown[] | undefined;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(firstFetchCall?.[0])).toContain("/repos/acme/rocket/issues?state=all");
+    expect(issues).toEqual([
+      {
+        number: 7,
+        nodeId: "I_kwDO",
+        title: "Fix deploy",
+        body: "Ship the fix",
+        state: "open",
+        htmlUrl: "https://github.com/acme/rocket/issues/7",
+        labels: ["yeet2:implementer", "p1"],
+        updatedAt: "2026-05-01T00:00:00Z",
+        closedAt: null
+      }
+    ]);
   });
 });

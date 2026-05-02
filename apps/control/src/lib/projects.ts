@@ -32,6 +32,8 @@ export interface ProjectTaskRecord {
   acceptanceCriteria: string[];
   attempts: number;
   blockerReason: string | null;
+  githubIssueNumber?: number | null;
+  githubIssueUrl?: string | null;
   dispatchable?: boolean;
   dispatchBlockedReason?: string | null;
   jobs: ProjectJobRecord[];
@@ -1037,6 +1039,8 @@ function normalizeTaskRecord(value: unknown): ProjectTaskRecord | null {
     acceptanceCriteria: stringArrayValue(raw.acceptanceCriteria ?? raw.acceptance_criteria),
     attempts: numberValue(raw.attempts) ?? 0,
     blockerReason: stringValue(raw.blockerReason, raw.blocker_reason) || null,
+    githubIssueNumber: numberValue(raw.githubIssueNumber, raw.github_issue_number) ?? null,
+    githubIssueUrl: stringValue(raw.githubIssueUrl, raw.github_issue_url) || null,
     dispatchable:
       typeof raw.dispatchable === "boolean"
         ? raw.dispatchable
