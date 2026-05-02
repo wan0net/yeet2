@@ -293,6 +293,8 @@ export interface ProjectTaskSummary {
   blockerReason: string | null;
   githubIssueNumber: number | null;
   githubIssueUrl: string | null;
+  githubParentIssueNumber: number | null;
+  delegatedFromTaskId: string | null;
   dispatchable: boolean;
   dispatchBlockedReason: string | null;
   jobs: ProjectJobSummary[];
@@ -1191,6 +1193,15 @@ function githubIssueTaskAcceptanceCriteria(issue: GitHubIssueListItem): string[]
   return [`Keep GitHub issue #${issue.number} as the source of truth.`, "Post progress, blockers, and completion back to GitHub."];
 }
 
+function parseDelegatedTaskRelationship(description: string): { githubParentIssueNumber: number | null; delegatedFromTaskId: string | null } {
+  const parentIssueMatch = description.match(/Parent ticket:\s*#(\d+)/i);
+  const parentTaskMatch = description.match(/Parent Yeet task:\s*([a-z0-9_-]+)/i);
+  return {
+    githubParentIssueNumber: parentIssueMatch ? Number(parentIssueMatch[1]) : null,
+    delegatedFromTaskId: parentTaskMatch?.[1] ?? null
+  };
+}
+
 function projectsBaseDir(): string {
   return resolve(process.env.YEET2_PROJECTS_DIR ?? "/tmp/yeet2-projects");
 }
@@ -1761,6 +1772,7 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
     : [];
   const jobs = [...task.jobs].sort((left, right) => jobSortKey(right) - jobSortKey(left)).map(toProjectJobSummary);
   const dispatchable = isTaskDispatchable(task);
+  const relationship = parseDelegatedTaskRelationship(task.description);
 
   return {
     id: task.id,
@@ -1777,6 +1789,8 @@ function toProjectTaskSummary(task: ProjectWithRelations["missions"][number]["ta
     blockerReason: task.blockerReason ?? null,
     githubIssueNumber: task.githubIssueNumber ?? null,
     githubIssueUrl: null,
+    githubParentIssueNumber: relationship.githubParentIssueNumber,
+    delegatedFromTaskId: relationship.delegatedFromTaskId,
     dispatchable,
     dispatchBlockedReason: dispatchable ? null : dispatchBlockedReasonForTask(task),
     jobs
@@ -3143,7 +3157,15 @@ async function createDelegatedTicketsFromArtifact(input: {
       data: {
         missionId: input.task.missionId,
         title: `#${issue.number} ${ticket.title}`,
-        description: [`GitHub issue: ${issue.htmlUrl}`, "", ticket.description].join("\n"),
+        description: [
+          `GitHub issue: ${issue.htmlUrl}`,
+          "",
+          ticket.description,
+          "",
+          "## Delegation",
+          `Parent ticket: ${input.task.githubIssueNumber != null ? `#${input.task.githubIssueNumber}` : input.task.id}`,
+          `Parent Yeet task: ${input.task.id}`
+        ].join("\n"),
         agentRole: ticket.agentRole,
         assignedRoleDefinitionId: roleDefinition?.id ?? null,
         assignedRoleDefinitionLabel: roleDefinition?.label ?? null,

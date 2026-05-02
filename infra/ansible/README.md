@@ -10,12 +10,14 @@ It does **not** bring back the old Nomad/raw-exec fabric yet. Yeet2 still treats
 - Checks out the Yeet2 repository on the target host.
 - Renders a host-local `.env` from Ansible variables.
 - Starts either `docker-compose.release.yml` or `docker-compose.deploy.yml`.
+- Starts remote executor-only workers with `worker-playbook.yml` and `docker-compose.worker.yml`.
 - Supports Executor modes including `openhands`, `codex`, `claude`, and `local`.
 - Disables the API's local fake worker entry by default so the Workers page reflects real executors.
 
 ## Files
 
 - `playbook.yml` provisions and starts the host.
+- `worker-playbook.yml` provisions and starts executor-only worker hosts.
 - `inventory.ini.example` is a starter inventory for `10.42.10.101`.
 - `group_vars/yeet2.yml` contains non-secret defaults.
 - `templates/yeet2.env.j2` renders the compose `.env`.
@@ -45,6 +47,31 @@ For Codex/Claude inside the Docker executor image, set:
 yeet2_install_code_harnesses=true
 yeet2_executor_mode=codex
 ```
+
+## Split workers
+
+Keep `10.42.10.100` for Hermes. Run the control plane on `10.42.10.101`, then add a blank worker node such as `10.42.10.102` to `[yeet2_workers]` in `inventory.ini`.
+
+Worker variables should point back at the control-plane API and advertise the worker endpoint:
+
+```ini
+[yeet2_workers]
+yeet2-worker-01 ansible_host=10.42.10.102
+
+[yeet2_workers:vars]
+yeet2_api_base_url=http://10.42.10.101:3001
+yeet2_executor_worker_endpoint=http://10.42.10.102:8021
+yeet2_executor_mode=claude
+yeet2_executor_worker_capabilities=git,claude,codex,implementer,tester,coder,qa,reviewer
+```
+
+Deploy or update workers with:
+
+```bash
+ansible-playbook worker-playbook.yml --limit yeet2_workers
+```
+
+The worker registers with the API, heartbeats into the Workers page, and receives role-capable jobs through GitHub-backed tickets.
 
 ## Security notes
 

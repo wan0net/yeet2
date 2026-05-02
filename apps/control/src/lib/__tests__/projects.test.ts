@@ -427,6 +427,35 @@ describe("normalizeProjectRecord", () => {
     const result = normalizeProjectRecord({ name: "No ID" }, 3);
     expect(result?.id).toMatch(/3/);
   });
+  it("normalizes delegated GitHub ticket relationship fields", () => {
+    const result = normalizeProjectRecord({
+      id: "proj-1",
+      name: "Test",
+      localPath: "/tmp/test",
+      missions: [
+        {
+          id: "mission-1",
+          title: "Mission",
+          objective: "Do it",
+          tasks: [
+            {
+              id: "task-1",
+              title: "Child",
+              description: "Delegated work",
+              agentRole: "implementer",
+              github_issue_number: 44,
+              github_parent_issue_number: 41,
+              delegated_from_task_id: "parent-task"
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(result?.missions[0]?.tasks[0]?.githubIssueNumber).toBe(44);
+    expect(result?.missions[0]?.tasks[0]?.githubParentIssueNumber).toBe(41);
+    expect(result?.missions[0]?.tasks[0]?.delegatedFromTaskId).toBe("parent-task");
+  });
 });
 
 // ─── normalizeProjectList ─────────────────────────────────────────────────────

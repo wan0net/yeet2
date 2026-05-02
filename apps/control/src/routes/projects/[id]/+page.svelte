@@ -573,6 +573,9 @@
               {#if githubIssueUrl(task.githubIssueNumber)}
                 <a class="pipeline-badge" href={githubIssueUrl(task.githubIssueNumber) ?? undefined} target="_blank" rel="noreferrer">GH #{task.githubIssueNumber}</a>
               {/if}
+              {#if githubIssueUrl(task.githubParentIssueNumber)}
+                <a class="pipeline-badge" href={githubIssueUrl(task.githubParentIssueNumber) ?? undefined} target="_blank" rel="noreferrer">from #{task.githubParentIssueNumber}</a>
+              {/if}
             </div>
             {#if latestJob}
               <div class="pipeline-verify-row">
@@ -617,6 +620,9 @@
                   <div class="muted">{entry.task.agentRole} · {entry.task.status}</div>
                   {#if githubIssueUrl(entry.task.githubIssueNumber)}
                     <a href={githubIssueUrl(entry.task.githubIssueNumber) ?? undefined} target="_blank" rel="noreferrer">GitHub #{entry.task.githubIssueNumber}</a>
+                  {/if}
+                  {#if githubIssueUrl(entry.task.githubParentIssueNumber)}
+                    <span class="muted"> · delegated from </span><a href={githubIssueUrl(entry.task.githubParentIssueNumber) ?? undefined} target="_blank" rel="noreferrer">#{entry.task.githubParentIssueNumber}</a>
                   {/if}
                 </div>
               {/each}

@@ -34,6 +34,8 @@ export interface ProjectTaskRecord {
   blockerReason: string | null;
   githubIssueNumber?: number | null;
   githubIssueUrl?: string | null;
+  githubParentIssueNumber?: number | null;
+  delegatedFromTaskId?: string | null;
   dispatchable?: boolean;
   dispatchBlockedReason?: string | null;
   jobs: ProjectJobRecord[];
@@ -1049,6 +1051,8 @@ function normalizeTaskRecord(value: unknown): ProjectTaskRecord | null {
     blockerReason: stringValue(raw.blockerReason, raw.blocker_reason) || null,
     githubIssueNumber: numberValue(raw.githubIssueNumber, raw.github_issue_number) ?? null,
     githubIssueUrl: stringValue(raw.githubIssueUrl, raw.github_issue_url) || null,
+    githubParentIssueNumber: numberValue(raw.githubParentIssueNumber, raw.github_parent_issue_number) ?? null,
+    delegatedFromTaskId: stringValue(raw.delegatedFromTaskId, raw.delegated_from_task_id) || null,
     dispatchable:
       typeof raw.dispatchable === "boolean"
         ? raw.dispatchable

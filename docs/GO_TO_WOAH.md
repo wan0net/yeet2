@@ -109,6 +109,8 @@ For the existing Yeet machines:
 
 Workers register with the API and heartbeat their executor mode/capabilities. Dispatch prefers healthy role-capable workers, falls back to any healthy git-capable worker, then falls back to `YEET2_EXECUTOR_BASE_URL`.
 
+Use `infra/ansible/playbook.yml` for the control plane and `infra/ansible/worker-playbook.yml` for executor-only hosts. Keep `10.42.10.100` out of the Yeet2 inventory while Hermes owns it.
+
 ## 6. Add Reference Context
 
 yeet2 works best when the repo contains:

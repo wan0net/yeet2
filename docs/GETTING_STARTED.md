@@ -26,6 +26,8 @@ The normal intake workflow is:
 4. If the agent needs to split the work, it can emit delegated tickets and Yeet creates new GitHub issues for them
 5. Yeet comments progress back on the issue and closes it when complete
 
+Delegated tickets keep a parent pointer in Yeet and GitHub. The project pipeline and task lanes show the child issue and its `delegated from #parent` relationship so operators can follow decomposed work without leaving the ticket-first flow.
+
 Labels can steer execution: `yeet2:planner`, `yeet2:implementer`, `role:coder`, `role:qa`, `p0`, `p1`, `blocked`. If no role label is present, Yeet treats the issue as implementation work.
 
 ---
