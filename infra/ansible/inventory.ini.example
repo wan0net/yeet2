@@ -21,5 +21,5 @@ yeet2_deploy_dir=/opt/yeet2
 yeet2_compose_file=docker-compose.worker.yml
 yeet2_api_base_url=http://10.42.10.101:3001
 yeet2_executor_worker_endpoint=http://10.42.10.102:8021
-yeet2_executor_mode=claude
-yeet2_executor_worker_capabilities=git,claude,codex,implementer,tester,coder,qa,reviewer
+yeet2_executor_mode=openhands
+yeet2_executor_worker_capabilities=git,openhands,implementer,tester,coder,qa,reviewer

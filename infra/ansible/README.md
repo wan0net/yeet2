@@ -61,8 +61,8 @@ yeet2-worker-01 ansible_host=10.42.10.102
 [yeet2_workers:vars]
 yeet2_api_base_url=http://10.42.10.101:3001
 yeet2_executor_worker_endpoint=http://10.42.10.102:8021
-yeet2_executor_mode=claude
-yeet2_executor_worker_capabilities=git,claude,codex,implementer,tester,coder,qa,reviewer
+yeet2_executor_mode=openhands
+yeet2_executor_worker_capabilities=git,openhands,implementer,tester,coder,qa,reviewer
 ```
 
 Deploy or update workers with:
@@ -71,7 +71,7 @@ Deploy or update workers with:
 ansible-playbook worker-playbook.yml --limit yeet2_workers
 ```
 
-The worker registers with the API, heartbeats into the Workers page, and receives role-capable jobs through GitHub-backed tickets.
+The worker registers with the API, heartbeats into the Workers page, and receives role-capable jobs through GitHub-backed tickets. The release executor image is OpenHands-first; use a build-on-host or custom executor image before advertising `codex` or `claude` capabilities.
 
 ## Security notes
 

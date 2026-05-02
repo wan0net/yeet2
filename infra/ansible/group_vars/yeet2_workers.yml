@@ -1,0 +1,12 @@
+---
+yeet2_api_bearer_token: "{{ hostvars['yeet2-01']['yeet2_api_bearer_token'] | default('') }}"
+yeet2_executor_bearer_token: "{{ hostvars['yeet2-01']['yeet2_executor_bearer_token'] | default('') }}"
+yeet2_github_token: "{{ hostvars['yeet2-01']['yeet2_github_token'] | default('') }}"
+yeet2_openrouter_api_key: "{{ hostvars['yeet2-01']['yeet2_openrouter_api_key'] | default('') }}"
+yeet2_openai_api_key: "{{ hostvars['yeet2-01']['yeet2_openai_api_key'] | default('') }}"
+yeet2_anthropic_api_key: "{{ hostvars['yeet2-01']['yeet2_anthropic_api_key'] | default('') }}"
+yeet2_llm_api_key: "{{ hostvars['yeet2-01']['yeet2_llm_api_key'] | default('') }}"
+yeet2_llm_model: "{{ hostvars['yeet2-01']['yeet2_llm_model'] | default('') }}"
+yeet2_llm_base_url: "{{ hostvars['yeet2-01']['yeet2_llm_base_url'] | default('') }}"
+yeet2_codex_model: "{{ hostvars['yeet2-01']['yeet2_codex_model'] | default('') }}"
+yeet2_claude_model: "{{ hostvars['yeet2-01']['yeet2_claude_model'] | default('') }}"
