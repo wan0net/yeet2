@@ -13,8 +13,10 @@ from yeet2_executor.adapters import (
     JobRecord,
     OpenHandsAdapter,
     _build_task_file,
+    _clone_url_with_credentials,
     _filter_allowed_domains,
     _is_dangerous_allowed_host,
+    _is_safe_git_clone_url,
     _make_openai_client,
     _mandatory_deny_read_paths,
     _slugify,
@@ -197,6 +199,35 @@ def test_build_task_file_includes_operator_guidance(tmp_path):
     }
     content = _build_task_file(tmp_path, payload).read_text(encoding="utf-8")
     assert "Be careful with prod" in content
+
+
+def test_build_task_file_mentions_commit_and_push(tmp_path):
+    payload = {
+        "task_id": "t-4",
+        "task_title": "Title",
+        "task_description": "Desc",
+    }
+    content = _build_task_file(tmp_path, payload).read_text(encoding="utf-8")
+    assert "Commit your changes and push the prepared branch" in content
+
+
+def test_is_safe_git_clone_url_rejects_ext_transport():
+    assert _is_safe_git_clone_url("ext::sh -c evil") is False
+
+
+def test_is_safe_git_clone_url_accepts_github_https():
+    assert _is_safe_git_clone_url("https://github.com/wan0net/yeet2.git") is True
+
+
+def test_clone_url_with_credentials_injects_github_token(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_abcdefghijklmnopqrstuvwxyz")
+    url = _clone_url_with_credentials("https://github.com/wan0net/yeet2.git")
+    assert url.startswith("https://x-access-token:ghp_abcdefghijklmnopqrstuvwxyz@github.com/")
+
+
+def test_clone_url_with_credentials_leaves_non_github_urls(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_abcdefghijklmnopqrstuvwxyz")
+    assert _clone_url_with_credentials("https://git.example.com/org/repo.git") == "https://git.example.com/org/repo.git"
 
 
 # ---------------------------------------------------------------------------

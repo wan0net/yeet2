@@ -9,6 +9,7 @@ docs/.vitepress/dist
 *.tsbuildinfo
 .env
 .env.*
+infra/ansible/inventory.ini
 *.log
 .DS_Store
 __pycache__/

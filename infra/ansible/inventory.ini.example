@@ -1,0 +1,10 @@
+[yeet2]
+yeet2-01 ansible_host=10.42.10.101
+
+[yeet2:vars]
+ansible_user=icd
+yeet2_repo_url=https://github.com/OWNER/yeet2.git
+yeet2_repo_version=main
+yeet2_deploy_dir=/opt/yeet2
+yeet2_compose_file=docker-compose.release.yml
+yeet2_install_code_harnesses=false

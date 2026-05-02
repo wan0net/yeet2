@@ -101,6 +101,7 @@ packages/db       Prisma schema (PostgreSQL)
 packages/domain   Shared types, model defaults, agent themes
 packages/constitution  Constitution file discovery and parsing
 infra/docker      Dockerfiles and deployment scripts
+infra/ansible     Docker-host provisioning playbook
 docs/             Product specs, architecture, operations
 ```
 
@@ -122,6 +123,7 @@ docker compose --env-file .env -f docker-compose.release.yml up -d
 Open `http://localhost:3000` → follow the Getting Started guide.
 
 See [docs/INSTALL.md](./docs/INSTALL.md) for full setup instructions.
+See [infra/ansible/README.md](./infra/ansible/README.md) for provisioning a remote Docker host.
 
 ## Documentation
 

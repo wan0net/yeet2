@@ -6,13 +6,14 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse, urlunparse
 from uuid import uuid4
 
 
@@ -35,6 +36,32 @@ def _run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedPr
     )
 
 
+def _is_safe_git_clone_url(value: str) -> bool:
+    text = cleanText(value)
+    if not text or text.startswith("-") or "::" in text:
+        return False
+    if text.startswith("git@"):
+        return bool(re.match(r"^git@[A-Za-z0-9.\-]+:[A-Za-z0-9._\-/]+$", text))
+    try:
+        parsed = urlparse(text)
+    except ValueError:
+        return False
+    return parsed.scheme in {"https", "http", "git", "ssh"} and bool(parsed.netloc)
+
+
+def _clone_url_with_credentials(value: str) -> str:
+    token = cleanText(os.getenv("GITHUB_TOKEN"))
+    if not token:
+        return value
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or parsed.hostname not in {"github.com", "www.github.com"}:
+        return value
+    if parsed.username or parsed.password:
+        return value
+    netloc = f"x-access-token:{quote(token, safe='')}@{parsed.netloc}"
+    return urlunparse((parsed.scheme, netloc, parsed.path, parsed.params, parsed.query, parsed.fragment))
+
+
 def _write_log(path: Path, lines: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -46,7 +73,8 @@ def _append_log(path: Path, line: str) -> None:
 
 
 def _format_git_error(exc: subprocess.CalledProcessError) -> str:
-    details = [f"command: {' '.join(exc.cmd)}", f"exit_code: {exc.returncode}"]
+    command = exc.cmd if isinstance(exc.cmd, list) else [str(exc.cmd)]
+    details = [f"command: {_redact_command(command)}", f"exit_code: {exc.returncode}"]
     if exc.stdout:
         details.append(f"stdout: {exc.stdout.strip()}")
     if exc.stderr:
@@ -482,6 +510,7 @@ def _build_task_file(workspace_path: Path, payload: dict[str, Any]) -> Path:
             "- Work only inside the current workspace checkout.",
             "- Keep changes on the prepared yeet2 branch.",
             "- Run any local verification needed for the task when practical.",
+            "- Commit your changes and push the prepared branch when credentials are available.",
         ]
     )
 
@@ -724,37 +753,54 @@ class OpenHandsAdapter:
         workspace_path = Path(record.workspace_path)
 
         try:
-            repo_path = Path(str(record.payload["repo_path"])).expanduser().resolve()
+            raw_repo_path = cleanText(record.payload.get("repo_path"))
+            repo_path = Path(raw_repo_path).expanduser().resolve() if raw_repo_path else None
+            repo_url = cleanText(record.payload.get("repo_url"))
             # Validate base_branch as a git ref before passing to git CLI.
             # Without this, an attacker controlling the payload could pass
             # `--upload-pack=evil` and confuse git's option parser.
             base_branch = _validate_git_ref(str(record.payload["base_branch"]), "base_branch")
-            if not repo_path.exists():
-                raise FileNotFoundError(f"repo_path does not exist: {repo_path}")
 
             workspace_path.mkdir(parents=True, exist_ok=True)
-            _append_log(log_path, "verifying git repository and creating isolated worktree")
-            _run_git(["git", "-C", str(repo_path), "rev-parse", "--is-inside-work-tree"])
-            result = _run_git(
-                [
-                    "git",
-                    "-C",
-                    str(repo_path),
-                    "worktree",
-                    "add",
-                    "-b",
-                    record.branch_name,
-                    str(workspace_path),
-                    base_branch,
-                ]
-            )
-            if result.stdout.strip():
-                _append_log(log_path, result.stdout.strip())
-            if result.stderr.strip():
-                _append_log(log_path, result.stderr.strip())
-            _append_log(log_path, "git worktree add completed")
+            if repo_path and repo_path.exists():
+                _append_log(log_path, "verifying git repository and creating isolated worktree")
+                _run_git(["git", "-C", str(repo_path), "rev-parse", "--is-inside-work-tree"])
+                result = _run_git(
+                    [
+                        "git",
+                        "-C",
+                        str(repo_path),
+                        "worktree",
+                        "add",
+                        "-b",
+                        record.branch_name,
+                        str(workspace_path),
+                        base_branch,
+                    ]
+                )
+                if result.stdout.strip():
+                    _append_log(log_path, result.stdout.strip())
+                if result.stderr.strip():
+                    _append_log(log_path, result.stderr.strip())
+                _append_log(log_path, "git worktree add completed")
+                record.payload["repo_path"] = str(repo_path)
+                record.payload["workspace_source"] = "worktree"
+            elif repo_url:
+                if not _is_safe_git_clone_url(repo_url):
+                    raise ValueError("repo_url is not safe for git clone")
+                _append_log(log_path, "repo_path unavailable; cloning repository for remote worker")
+                result = _run_git(["git", "clone", "--branch", base_branch, "--", _clone_url_with_credentials(repo_url), str(workspace_path)])
+                if result.stdout.strip():
+                    _append_log(log_path, result.stdout.strip())
+                if result.stderr.strip():
+                    _append_log(log_path, result.stderr.strip())
+                _run_git(["git", "-C", str(workspace_path), "checkout", "-b", record.branch_name])
+                _append_log(log_path, "git clone and branch checkout completed")
+                record.payload["repo_path"] = str(workspace_path)
+                record.payload["workspace_source"] = "clone"
+            else:
+                raise FileNotFoundError(f"repo_path does not exist: {repo_path}")
 
-            record.payload["repo_path"] = str(repo_path)
             record.payload["base_branch"] = base_branch
 
             task_file = _build_task_file(workspace_path, record.payload)
@@ -850,8 +896,12 @@ class OpenHandsAdapter:
             return
 
         try:
-            _run_git(["git", "-C", str(repo_path), "worktree", "remove", "--force", str(workspace_path)])
-            _append_log(Path(record.log_path), f"[{_utc_now()}] worktree removed: {workspace_path}")
+            if record.payload.get("workspace_source") == "clone":
+                shutil.rmtree(workspace_path, ignore_errors=True)
+                _append_log(Path(record.log_path), f"[{_utc_now()}] cloned workspace removed: {workspace_path}")
+            else:
+                _run_git(["git", "-C", str(repo_path), "worktree", "remove", "--force", str(workspace_path)])
+                _append_log(Path(record.log_path), f"[{_utc_now()}] worktree removed: {workspace_path}")
         except Exception:  # noqa: BLE001
             _append_log(Path(record.log_path), f"[{_utc_now()}] worktree cleanup skipped (non-fatal)")
 

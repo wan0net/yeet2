@@ -97,6 +97,16 @@ In the UI:
 
 Repo URL registration is the preferred Docker path because API and Executor share the managed `projects_data` volume. If you attach a host checkout by local path, mount that exact path into both API and Executor containers.
 
+## Fleet Layout
+
+For the existing Yeet machines:
+
+- `10.42.10.100` stays dedicated to Hermes.
+- `10.42.10.101` runs the Yeet2 control plane and can also run the first executor.
+- A later worker, for example `10.42.10.102`, runs `docker-compose.worker.yml` and advertises `YEET2_EXECUTOR_WORKER_ENDPOINT=http://10.42.10.102:8021`.
+
+Workers register with the API and heartbeat their executor mode/capabilities. Dispatch prefers healthy role-capable workers, falls back to any healthy git-capable worker, then falls back to `YEET2_EXECUTOR_BASE_URL`.
+
 ## 6. Make The Constitution Useful
 
 yeet2 works best when the repo contains:
@@ -146,4 +156,3 @@ docker compose --env-file .env -f docker-compose.deploy.yml logs -f executor
 docker compose --env-file .env -f docker-compose.deploy.yml logs -f api
 docker compose --env-file .env -f docker-compose.deploy.yml restart executor
 ```
-

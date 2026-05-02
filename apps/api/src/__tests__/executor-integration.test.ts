@@ -7,9 +7,21 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const workerMatchMock = vi.hoisted(() => ({
+  workers: [] as Array<Record<string, unknown>>,
+  matchWorkers: vi.fn()
+}));
+
+workerMatchMock.matchWorkers.mockImplementation(async () => workerMatchMock.workers);
+
+vi.mock("../workers", () => ({
+  matchWorkers: workerMatchMock.matchWorkers
+}));
+
 import {
   executorBaseUrl,
   mapExecutorJobStatus,
+  resolveExecutorDispatchBaseUrl,
   taskStatusFromJobStatus,
 } from "../projects.js";
 
@@ -20,6 +32,8 @@ import {
 describe("executorBaseUrl", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+    workerMatchMock.workers = [];
+    workerMatchMock.matchWorkers.mockClear();
   });
 
   it("defaults to http://127.0.0.1:8021 when no env vars are set", () => {
@@ -46,6 +60,42 @@ describe("executorBaseUrl", () => {
     vi.stubEnv("YEET2_EXECUTOR_BASE_URL", "http://executor:8021///");
 
     expect(executorBaseUrl()).toBe("http://executor:8021");
+  });
+});
+
+describe("resolveExecutorDispatchBaseUrl", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    workerMatchMock.workers = [];
+    workerMatchMock.matchWorkers.mockClear();
+  });
+
+  it("uses the first available worker endpoint", async () => {
+    workerMatchMock.workers = [
+      { endpoint: "http://worker-1:8021/" },
+      { endpoint: "http://worker-2:8021" }
+    ];
+
+    await expect(resolveExecutorDispatchBaseUrl({ capabilities: ["git", "coder"] })).resolves.toBe(
+      "http://worker-1:8021"
+    );
+  });
+
+  it("falls back to git-capable workers when no role-specific endpoint exists", async () => {
+    workerMatchMock.matchWorkers
+      .mockResolvedValueOnce([{ endpoint: null }])
+      .mockResolvedValueOnce([{ endpoint: "http://git-worker:8021" }]);
+
+    await expect(resolveExecutorDispatchBaseUrl({ capabilities: ["git", "qa"] })).resolves.toBe(
+      "http://git-worker:8021"
+    );
+  });
+
+  it("falls back to configured executor URL when no worker endpoint is available", async () => {
+    vi.stubEnv("YEET2_EXECUTOR_BASE_URL", "http://executor:8021");
+    workerMatchMock.workers = [{ endpoint: "" }];
+
+    await expect(resolveExecutorDispatchBaseUrl()).resolves.toBe("http://executor:8021");
   });
 });
 

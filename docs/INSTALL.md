@@ -129,6 +129,69 @@ docker compose --env-file .env -f docker-compose.release.yml pull
 docker compose --env-file .env -f docker-compose.release.yml up -d
 ```
 
+---
+
+## Ansible Docker Host
+
+Yeet2 also includes a Docker-first Ansible path for provisioning a remote host:
+
+```bash
+cd infra/ansible
+cp inventory.ini.example inventory.ini
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook playbook.yml
+```
+
+The playbook installs Docker, checks out Yeet2, renders `.env`, and starts either `docker-compose.release.yml` or `docker-compose.deploy.yml`.
+
+Useful variables:
+
+```ini
+yeet2_repo_url=https://github.com/wan0net/yeet2.git
+yeet2_repo_version=main
+yeet2_deploy_dir=/opt/yeet2
+yeet2_compose_file=docker-compose.release.yml
+yeet2_executor_mode=claude
+yeet2_install_code_harnesses=true
+```
+
+Keep real API keys in Ansible Vault or pass them via your secret manager; do not commit `inventory.ini`.
+
+For the current Yeet fleet, use `10.42.10.101` as the first control-plane host and leave `10.42.10.100` for Hermes.
+
+---
+
+## Remote Worker Node
+
+After the control plane is running, a second Docker host can run only the Executor:
+
+```bash
+cp .env.example .env.worker
+```
+
+Set at minimum:
+
+```dotenv
+YEET2_API_BASE_URL=http://10.42.10.101:3001
+YEET2_EXECUTOR_WORKER_ID=yeet-worker-01
+YEET2_EXECUTOR_WORKER_NAME=yeet-worker-01
+YEET2_EXECUTOR_WORKER_ENDPOINT=http://10.42.10.102:8021
+YEET2_EXECUTOR_MODE=claude
+YEET2_API_BEARER_TOKEN=<same token as API>
+YEET2_EXECUTOR_BEARER_TOKEN=<executor token>
+ANTHROPIC_API_KEY=sk-ant-...
+GITHUB_TOKEN=ghp_...
+```
+
+Then start the worker:
+
+```bash
+docker compose --env-file .env.worker -f docker-compose.worker.yml pull
+docker compose --env-file .env.worker -f docker-compose.worker.yml up -d
+```
+
+The API dispatches to healthy registered worker endpoints when they are available. If a remote worker cannot see the API host's `localPath`, the Executor falls back to cloning `repo_url` into its own workspace. For private GitHub repos, set `GITHUB_TOKEN` on the worker or use SSH deploy keys.
+
 Set image overrides in `.env` if you want a specific version:
 
 ```dotenv

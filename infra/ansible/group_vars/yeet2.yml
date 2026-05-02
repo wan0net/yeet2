@@ -1,0 +1,31 @@
+---
+yeet2_postgres_user: yeet2
+yeet2_postgres_password: yeet2
+yeet2_postgres_db: yeet2
+
+yeet2_api_port: 3001
+yeet2_control_port: 3000
+yeet2_control_origin: "http://{{ ansible_host | default(inventory_hostname) }}:{{ yeet2_control_port }}"
+
+yeet2_executor_mode: openhands
+yeet2_install_code_harnesses: false
+yeet2_harness_timeout_seconds: 1800
+
+yeet2_brain_planner_backend: auto
+yeet2_brain_crewai_enabled: false
+yeet2_autonomy_loop_enabled: true
+yeet2_local_worker_enabled: false
+
+yeet2_openrouter_api_key: ""
+yeet2_openai_api_key: ""
+yeet2_anthropic_api_key: ""
+yeet2_github_token: ""
+yeet2_llm_api_key: ""
+yeet2_llm_model: ""
+yeet2_llm_base_url: ""
+
+yeet2_brain_bearer_token: ""
+yeet2_executor_bearer_token: ""
+
+yeet2_codex_model: ""
+yeet2_claude_model: ""

@@ -1,0 +1,63 @@
+services:
+  executor:
+    image: ${YEET2_EXECUTOR_IMAGE:-ghcr.io/wan0net/yeet2-executor:latest}
+    restart: unless-stopped
+    environment:
+      YEET2_HOST: 0.0.0.0
+      EXECUTOR_PORT: 8021
+      YEET2_EXECUTOR_API_BASE_URL: ${YEET2_API_BASE_URL:-http://10.42.10.101:3001}
+      YEET2_PROJECTS_DIR: /var/lib/yeet2/projects
+      YEET2_EXECUTOR_BASE_DIR: /var/lib/yeet2/executor
+      YEET2_EXECUTOR_MODE: ${YEET2_EXECUTOR_MODE:-claude}
+      YEET2_EXECUTOR_WORKER_ID: ${YEET2_EXECUTOR_WORKER_ID:-}
+      YEET2_EXECUTOR_WORKER_NAME: ${YEET2_EXECUTOR_WORKER_NAME:-}
+      YEET2_EXECUTOR_WORKER_HOST: ${YEET2_EXECUTOR_WORKER_HOST:-}
+      YEET2_EXECUTOR_WORKER_ENDPOINT: ${YEET2_EXECUTOR_WORKER_ENDPOINT:-http://10.42.10.102:8021}
+      YEET2_EXECUTOR_WORKER_EXECUTOR_TYPE: ${YEET2_EXECUTOR_WORKER_EXECUTOR_TYPE:-}
+      YEET2_EXECUTOR_WORKER_CAPABILITIES: ${YEET2_EXECUTOR_WORKER_CAPABILITIES:-git,claude,codex,implementer,tester,coder,qa,reviewer}
+      YEET2_HARNESS_TIMEOUT_SECONDS: ${YEET2_HARNESS_TIMEOUT_SECONDS:-1800}
+      YEET2_EXECUTOR_BEARER_TOKEN: ${YEET2_EXECUTOR_BEARER_TOKEN:-}
+      YEET2_API_BEARER_TOKEN: ${YEET2_API_BEARER_TOKEN:-}
+      YEET2_EXECUTOR_SANDBOX_MODE: ${YEET2_EXECUTOR_SANDBOX_MODE:-off}
+      YEET2_EXECUTOR_SANDBOX_BIN: ${YEET2_EXECUTOR_SANDBOX_BIN:-srt}
+      YEET2_OPENHANDS_COMMAND: ${YEET2_OPENHANDS_COMMAND:-}
+      YEET2_OPENHANDS_EXTRA_ARGS: ${YEET2_OPENHANDS_EXTRA_ARGS:-}
+      YEET2_OPENHANDS_PYTHON: ${YEET2_OPENHANDS_PYTHON:-3.12}
+      YEET2_OPENHANDS_PACKAGE: ${YEET2_OPENHANDS_PACKAGE:-openhands}
+      YEET2_OPENHANDS_BIN: ${YEET2_OPENHANDS_BIN:-openhands}
+      YEET2_CODEX_COMMAND: ${YEET2_CODEX_COMMAND:-}
+      YEET2_CODEX_EXTRA_ARGS: ${YEET2_CODEX_EXTRA_ARGS:-}
+      YEET2_CODEX_MODEL: ${YEET2_CODEX_MODEL:-}
+      YEET2_CODEX_TIMEOUT_SECONDS: ${YEET2_CODEX_TIMEOUT_SECONDS:-}
+      YEET2_CODEX_USE_TASK_MODEL: ${YEET2_CODEX_USE_TASK_MODEL:-false}
+      YEET2_CLAUDE_COMMAND: ${YEET2_CLAUDE_COMMAND:-}
+      YEET2_CLAUDE_EXTRA_ARGS: ${YEET2_CLAUDE_EXTRA_ARGS:-}
+      YEET2_CLAUDE_MODEL: ${YEET2_CLAUDE_MODEL:-}
+      YEET2_CLAUDE_TIMEOUT_SECONDS: ${YEET2_CLAUDE_TIMEOUT_SECONDS:-}
+      YEET2_CLAUDE_USE_TASK_MODEL: ${YEET2_CLAUDE_USE_TASK_MODEL:-false}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CODEX_HOME: /var/lib/yeet2/codex
+      CLAUDE_CONFIG_DIR: /var/lib/yeet2/claude
+    ports:
+      - "${EXECUTOR_PORT:-8021}:8021"
+    volumes:
+      - executor_data:/var/lib/yeet2/executor
+      - projects_data:/var/lib/yeet2/projects
+      - codex_data:/var/lib/yeet2/codex
+      - claude_data:/var/lib/yeet2/claude
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8021/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  executor_data:
+  projects_data:
+  codex_data:
+  claude_data:

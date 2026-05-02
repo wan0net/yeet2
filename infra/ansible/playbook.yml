@@ -1,0 +1,110 @@
+---
+- name: Provision Yeet2 Docker host
+  hosts: yeet2
+  become: true
+  vars:
+    yeet2_deploy_dir: /opt/yeet2
+    yeet2_repo_version: main
+    yeet2_compose_file: docker-compose.release.yml
+  tasks:
+    - name: Select Docker apt architecture
+      ansible.builtin.set_fact:
+        yeet2_docker_apt_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(ansible_architecture, ansible_architecture) }}"
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - git
+          - gnupg
+          - python3-docker
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker apt key directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install Docker apt key
+      ansible.builtin.get_url:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+
+    - name: Configure Docker apt repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ yeet2_docker_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        filename: docker
+        state: present
+
+    - name: Install Docker Engine
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Enable Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Add operator to docker group
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Create deploy directory
+      ansible.builtin.file:
+        path: "{{ yeet2_deploy_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Checkout Yeet2 repository
+      ansible.builtin.git:
+        repo: "{{ yeet2_repo_url }}"
+        dest: "{{ yeet2_deploy_dir }}"
+        version: "{{ yeet2_repo_version }}"
+        update: true
+      become_user: "{{ ansible_user }}"
+
+    - name: Render Yeet2 environment
+      ansible.builtin.template:
+        src: yeet2.env.j2
+        dest: "{{ yeet2_deploy_dir }}/.env"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0600"
+
+    - name: Start Yeet2 stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ yeet2_deploy_dir }}"
+        files:
+          - "{{ yeet2_compose_file }}"
+        env_files:
+          - .env
+        build: "{{ 'always' if yeet2_compose_file == 'docker-compose.deploy.yml' else 'never' }}"
+        pull: "{{ 'always' if yeet2_compose_file == 'docker-compose.release.yml' else 'policy' }}"
+        state: present
+
+    - name: Show service status
+      ansible.builtin.command:
+        cmd: "docker compose --env-file .env -f {{ yeet2_compose_file }} ps"
+        chdir: "{{ yeet2_deploy_dir }}"
+      changed_when: false
+      register: yeet2_compose_ps
+
+    - name: Print service status
+      ansible.builtin.debug:
+        var: yeet2_compose_ps.stdout_lines

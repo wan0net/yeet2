@@ -31,13 +31,15 @@ import {
   type ProjectMergeApprovalMode,
   type ProjectPullRequestDraftMode,
   type ProjectPullRequestMode,
-  type ProjectRoleKey
+  type ProjectRoleKey,
+  type WorkerSummary
 } from "@yeet2/domain";
 
 import { prisma } from "./db";
 import { listProjectDecisionLogs, loadRecentActionableGuidance, loadRecentDecisionLogs, loadRecentOperatorGuidance, recordDecisionLog } from "./decision-logs";
 import { logger } from "./logger";
 import { getGitHubToken } from "./settings";
+import { matchWorkers } from "./workers";
 import {
   buildGitHubCompareUrl,
   buildGitHubPullRequestBody,
@@ -998,6 +1000,57 @@ function dispatchBlockedReasonForTask(task: Pick<DbTask, "id" | "agentRole" | "s
 
 export function executorBaseUrl(): string {
   return (process.env.YEET2_EXECUTOR_BASE_URL ?? process.env.EXECUTOR_BASE_URL ?? "http://127.0.0.1:8021").replace(/\/+$/, "");
+}
+
+function normalizeExecutorEndpoint(value: string | null | undefined): string | null {
+  const trimmed = value?.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    if (parsed.username || parsed.password || !parsed.host) {
+      return null;
+    }
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function selectWorkerEndpoint(workers: WorkerSummary[]): string | null {
+  for (const worker of workers) {
+    const endpoint = normalizeExecutorEndpoint(worker.endpoint);
+    if (endpoint) return endpoint;
+  }
+  return null;
+}
+
+export async function resolveExecutorDispatchBaseUrl(input: {
+  executorType?: string | null;
+  capabilities?: string[];
+} = {}): Promise<string> {
+  const requiredCapabilities = input.capabilities?.length ? input.capabilities : ["git"];
+  const candidates = await matchWorkers({
+    executorType: input.executorType ?? null,
+    capabilities: requiredCapabilities,
+    includeBusy: false
+  });
+  const endpoint = selectWorkerEndpoint(candidates);
+  if (endpoint) return endpoint;
+
+  if (requiredCapabilities.length > 1) {
+    const fallbackCandidates = await matchWorkers({
+      executorType: input.executorType ?? null,
+      capabilities: ["git"],
+      includeBusy: false
+    });
+    const fallbackEndpoint = selectWorkerEndpoint(fallbackCandidates);
+    if (fallbackEndpoint) return fallbackEndpoint;
+  }
+
+  return executorBaseUrl();
 }
 
 function executorHeaders(init: Record<string, string> = {}): HeadersInit {
@@ -2359,6 +2412,7 @@ async function readExecutorJob(jobId: string): Promise<ExecutorJobRecord> {
 
 interface ExecutorDispatchPayload {
   repo_path: string;
+  repo_url?: string;
   base_branch: string;
   task_title: string;
   task_description: string;
@@ -2762,13 +2816,17 @@ async function submitTaskToExecutor(
   const assignedRoleDefinition = assignedRoleDefinitionForTask(project, task);
   const assignedRoleModel = assignedRoleDefinition?.model?.trim() || recommendedRoleModel(assignedRoleDefinition?.roleKey ?? (task.agentRole as ProjectRoleKey)) || null;
   const operatorGuidance = guidanceForTask(task, assignedRoleDefinition, await loadRecentActionableGuidance(project.id, 8)).slice(0, 4);
-  const response = await fetch(`${executorBaseUrl()}/jobs`, {
+  const executorUrl = await resolveExecutorDispatchBaseUrl({
+    capabilities: ["git", task.agentRole]
+  });
+  const response = await fetch(`${executorUrl}/jobs`, {
     method: "POST",
     headers: executorHeaders({
       "Content-Type": "application/json"
     }),
     body: JSON.stringify({
       repo_path: project.localPath,
+      ...(project.repoUrl || project.githubRepoUrl ? { repo_url: project.repoUrl ?? project.githubRepoUrl ?? undefined } : {}),
       base_branch: project.defaultBranch,
       task_title: task.title,
       task_description: stageBrief.instructions,
